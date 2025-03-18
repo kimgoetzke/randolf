@@ -1,8 +1,20 @@
+use std::mem;
 use winapi::shared::windef::{HWND, RECT};
-use winapi::um::winuser::{GetForegroundWindow, GetMonitorInfoW, MonitorFromWindow, ShowWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST, SW_MAXIMIZE};
+use winapi::um::winuser::{
+  GetForegroundWindow, GetMonitorInfoW, GetWindowPlacement, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
+  SW_MAXIMIZE, SendMessageW, SetWindowPlacement, ShowWindow, WINDOWPLACEMENT, WM_PAINT,
+};
+use windows::Win32::Foundation::{LPARAM, WPARAM};
 
-pub fn get_foreground_window() -> HWND {
-  unsafe { GetForegroundWindow() }
+// TODO: Stop returning a window when no window is active
+pub fn get_foreground_window() -> Option<HWND> {
+  let window = unsafe { GetForegroundWindow() };
+  if window.is_null() {
+    debug!("There is no active window...");
+    return None;
+  }
+
+  Some(window)
 }
 
 pub fn get_monitor_info(window: HWND) -> Option<MONITORINFO> {
@@ -26,7 +38,7 @@ pub fn get_monitor_info(window: HWND) -> Option<MONITORINFO> {
   unsafe {
     let monitor = MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
     if GetMonitorInfoW(monitor, &mut monitor_info) == 0 {
-      error!("Failed to get monitor info");
+      warn!("Failed to get monitor info");
       return None;
     }
   }
@@ -37,5 +49,26 @@ pub fn get_monitor_info(window: HWND) -> Option<MONITORINFO> {
 pub fn maximise_window(window: HWND) {
   unsafe {
     ShowWindow(window, SW_MAXIMIZE);
+  }
+}
+
+pub fn get_window_placement(window: HWND) -> Option<WINDOWPLACEMENT> {
+  let mut placement: WINDOWPLACEMENT = unsafe { mem::zeroed() };
+  placement.length = size_of::<WINDOWPLACEMENT>() as u32;
+
+  unsafe {
+    if GetWindowPlacement(window, &mut placement) == 0 {
+      warn!("Failed to get window placement for window: {:?}", window);
+      return None;
+    }
+  }
+
+  Some(placement)
+}
+
+pub fn restore_window_placement(window: HWND, previous_placement: &WINDOWPLACEMENT) {
+  unsafe {
+    SetWindowPlacement(window, previous_placement);
+    SendMessageW(window, WM_PAINT, WPARAM(0).0, LPARAM(0).0);
   }
 }
