@@ -19,7 +19,7 @@ impl WindowManager {
   }
 
   pub fn near_maximise_active_window(&mut self) {
-    info!("Hotkey has been pressed...");
+    info!("Hotkey pressed - action: near-maximise window");
     let Some(window) = native_api::get_foreground_window() else {
       return;
     };
@@ -37,6 +37,10 @@ impl WindowManager {
         near_maximize_window(window, 30);
       }
     }
+  }
+
+  pub fn something_else(&mut self) {
+    info!("Hotkey pressed - action: do something else");
   }
 }
 
