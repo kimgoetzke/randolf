@@ -9,9 +9,10 @@ use crate::window_manager::WindowManager;
 use hotkey::Listener;
 use simplelog::*;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
-use tray_icon::menu::{Menu, MenuItem};
-use tray_icon::{Icon, TrayIconBuilder};
+use tray_icon::menu::{Menu, MenuEvent, MenuId, MenuItem};
+use tray_icon::{Icon, TrayIconBuilder, TrayIconEvent};
 use winapi::um::winuser::{MOD_NOREPEAT, MOD_WIN};
 
 const F11: u32 = 0x7A;
@@ -30,19 +31,31 @@ fn main() {
 
   // Initialise tray icon
   let icon = Icon::from_path("assets/icon.ico", Some((32, 32))).expect("Failed to load icon");
+  let (menu, menu_items) = new_tray_menu();
   let _tray = TrayIconBuilder::new()
-    // .with_menu(Box::new(new_tray_menu()))
+    .with_menu(Box::new(menu))
     .with_tooltip("Randolf")
     .with_icon(icon)
     .with_menu_on_left_click(true)
     .build()
     .expect("Failed to build tray icon");
 
+  std::thread::spawn({
+    move || {
+      if let Ok(event) = MenuEvent::receiver().try_recv() {
+        debug!("Received tray icon menu event: {:?}", event);
+        if event.id == menu_items.get_key_value("Exit").expect("Exit menu item not found").1.0 {
+          std::process::exit(0);
+        }
+      }
+    }
+  });
+
   // Create window manager and register hotkeys
   let wm = Rc::new(RefCell::new(WindowManager::new()));
   let mut listener = Listener::new();
   register_hotkey(&mut listener, &wm, F11, |wm| wm.borrow_mut().near_maximise_active_window());
-  register_hotkey(&mut listener, &wm, F13, |wm| wm.borrow_mut().near_maximise_active_window());
+  // register_hotkey(&mut listener, &wm, F13, |wm| wm.borrow_mut().near_maximise_active_window());
   register_hotkey(&mut listener, &wm, F12, |wm| wm.borrow_mut().something_else());
   listener.listen();
 }
@@ -62,12 +75,14 @@ where
   info!("Listener #{listener_id} has been registered...");
 }
 
-fn new_tray_menu() -> Menu {
+fn new_tray_menu() -> (Menu, HashMap<String, MenuId>) {
+  let mut menu_item_ids = HashMap::new();
   let menu = Menu::new();
   let exit = MenuItem::new("Exit", true, None);
+  menu_item_ids.insert("Exit".to_owned(), exit.id().clone());
   if let Err(err) = menu.append(&exit) {
     error!("{err:?}");
   }
 
-  menu
+  (menu, menu_item_ids)
 }
