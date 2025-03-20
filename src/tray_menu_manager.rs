@@ -10,6 +10,7 @@ impl TrayMenuManager {
   }
 }
 
+// TODO: Allow closing the application from the tray menu
 fn tray_icon() {
   std::thread::spawn(move || {
     debug!("Creating tray icon...");

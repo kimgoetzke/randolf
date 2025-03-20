@@ -1,16 +1,22 @@
 use crate::native_api;
+use crate::native_api::update_window_placement_and_force_repaint;
 use std::collections::HashMap;
 use winapi::shared::windef::{HWND, POINT, RECT};
-use winapi::um::winuser::{MONITORINFO, SW_SHOWNORMAL, SendMessageW, SetWindowPlacement, WINDOWPLACEMENT, WM_PAINT};
-use windows::Win32::Foundation::{LPARAM, WPARAM};
+use winapi::um::winuser::{MONITORINFO, SW_SHOWNORMAL, WINDOWPLACEMENT};
 use windows::Win32::UI::WindowsAndMessaging::WINDOWPLACEMENT_FLAGS;
 
-const EXTRA_Y_PADDING: i32 = 10;
 const TOLERANCE_IN_PX: i32 = 4;
 const DEFAULT_MARGIN: i32 = 25;
 
 pub(crate) struct WindowManager {
   known_windows: HashMap<String, WINDOWPLACEMENT>,
+}
+
+struct Sizing {
+  x: i32,
+  y: i32,
+  width: i32,
+  height: i32,
 }
 
 impl WindowManager {
@@ -20,30 +26,100 @@ impl WindowManager {
     }
   }
 
-  pub fn near_maximise_active_window(&mut self) {
+  pub fn near_maximise_or_restore(&mut self) {
     info!("Hotkey pressed - action: near-maximise window");
-    let Some(window) = native_api::get_foreground_window() else {
-      return;
-    };
-    let Some(placement) = native_api::get_window_placement(window) else {
-      return;
-    };
-    let Some(monitor_info) = native_api::get_monitor_info(window) else {
-      return;
+    let (window, placement, monitor_info) = match get_window_and_monitor_info() {
+      Some(value) => value,
+      None => return,
     };
 
     match is_near_maximized(&placement, window, monitor_info) {
       true => restore_previous_placement(&self.known_windows, window),
       false => {
         add_or_update_previous_placement(&mut self.known_windows, window, placement);
-        near_maximize_window(window, DEFAULT_MARGIN);
+        near_maximize_window(window, monitor_info, DEFAULT_MARGIN);
       }
     }
   }
 
-  pub fn something_else(&mut self) {
-    info!("Hotkey pressed - action: do something else");
+  pub fn move_to_right_half_of_screen(&mut self) {
+    info!("Hotkey pressed - action: move window to right half of screen");
+    let (window, _, monitor_info) = match get_window_and_monitor_info() {
+      Some(value) => value,
+      None => return,
+    };
+
+    // Resize the window to the expected size
+    let work_area = monitor_info.rcWork;
+    let sizing = Sizing {
+      x: work_area.left + (work_area.right - work_area.left) / 2 + DEFAULT_MARGIN / 2,
+      y: work_area.top + DEFAULT_MARGIN,
+      width: (work_area.right - work_area.left) / 2 - DEFAULT_MARGIN - DEFAULT_MARGIN / 2,
+      height: work_area.bottom - work_area.top - DEFAULT_MARGIN * 2,
+    };
+    execute_window_resizing(window, sizing);
   }
+
+  pub fn move_to_top_half_of_screen(&mut self) {
+    info!("Hotkey pressed - action: move window to top half of screen");
+    let (window, _, monitor_info) = match get_window_and_monitor_info() {
+      Some(value) => value,
+      None => return,
+    };
+
+    // Resize the window to the expected size
+    let work_area = monitor_info.rcWork;
+    let sizing = Sizing {
+      x: work_area.left + DEFAULT_MARGIN,
+      y: work_area.top + DEFAULT_MARGIN,
+      width: work_area.right - work_area.left - DEFAULT_MARGIN * 2,
+      height: (work_area.bottom - work_area.top) / 2 - DEFAULT_MARGIN - DEFAULT_MARGIN / 2,
+    };
+    execute_window_resizing(window, sizing);
+  }
+
+  pub fn move_to_bottom_half_of_screen(&mut self) {
+    info!("Hotkey pressed - action: move window to bottom half of screen");
+    let (window, _, monitor_info) = match get_window_and_monitor_info() {
+      Some(value) => value,
+      None => return,
+    };
+
+    // Resize the window to the expected size
+    let work_area = monitor_info.rcWork;
+    let sizing = Sizing {
+      x: work_area.left + DEFAULT_MARGIN,
+      y: work_area.top + (work_area.bottom - work_area.top) / 2 + DEFAULT_MARGIN / 2,
+      width: work_area.right - work_area.left - DEFAULT_MARGIN * 2,
+      height: (work_area.bottom - work_area.top) / 2 - DEFAULT_MARGIN - DEFAULT_MARGIN / 2,
+    };
+    execute_window_resizing(window, sizing);
+  }
+
+  pub fn move_to_left_half_of_screen(&mut self) {
+    info!("Hotkey pressed - action: move window to left half of screen");
+    let (window, _, monitor_info) = match get_window_and_monitor_info() {
+      Some(value) => value,
+      None => return,
+    };
+
+    // Resize the window to the expected size
+    let work_area = monitor_info.rcWork;
+    let sizing = Sizing {
+      x: work_area.left + DEFAULT_MARGIN,
+      y: work_area.top + DEFAULT_MARGIN,
+      width: (work_area.right - work_area.left) / 2 - DEFAULT_MARGIN - DEFAULT_MARGIN / 2,
+      height: work_area.bottom - work_area.top - DEFAULT_MARGIN * 2,
+    };
+    execute_window_resizing(window, sizing);
+  }
+}
+
+fn get_window_and_monitor_info() -> Option<(HWND, WINDOWPLACEMENT, MONITORINFO)> {
+  let window = native_api::get_foreground_window()?;
+  let placement = native_api::get_window_placement(window)?;
+  let monitor_info = native_api::get_monitor_info(window)?;
+  Some((window, placement, monitor_info))
 }
 
 fn restore_previous_placement(known_windows: &HashMap<String, WINDOWPLACEMENT>, window: HWND) {
@@ -74,56 +150,29 @@ fn add_or_update_previous_placement(
   debug!("Adding/updating previous placement for window #{}", window_id);
 }
 
-fn near_maximize_window(window: HWND, margin: i32) {
+fn near_maximize_window(window: HWND, monitor_info: MONITORINFO, margin: i32) {
   info!("Near-maximizing #{:?}", window);
-  // Get the monitor working area for the window
-  let monitor_info = match native_api::get_monitor_info(window) {
-    Some(value) => value,
-    None => return,
-  };
-  let work_area = monitor_info.rcWork;
 
-  // Maximize first to get animation effect
+  // Maximize first to get the animation effect
   native_api::maximise_window(window);
 
-  // Calculate new window size with padding
-  let new_x = work_area.left + margin;
-  let new_y = work_area.top + margin + EXTRA_Y_PADDING;
-  let new_width = work_area.right - work_area.left - margin * 2;
-  let new_height = work_area.bottom - work_area.top - margin * 2 - EXTRA_Y_PADDING;
-
-  // Define the new window placement
-  let placement = WINDOWPLACEMENT {
-    length: size_of::<WINDOWPLACEMENT>() as u32,
-    flags: WINDOWPLACEMENT_FLAGS(0).0,
-    showCmd: SW_SHOWNORMAL as u32,
-    ptMaxPosition: POINT { x: 0, y: 0 },
-    ptMinPosition: POINT { x: -1, y: -1 },
-    rcNormalPosition: RECT {
-      left: new_x,
-      top: new_y,
-      right: new_x + new_width,
-      bottom: new_y + new_height,
-    },
+  // Resize the window to the expected size
+  let work_area = monitor_info.rcWork;
+  let sizing = Sizing {
+    x: work_area.left + margin,
+    y: work_area.top + margin,
+    width: work_area.right - work_area.left - margin * 2,
+    height: work_area.bottom - work_area.top - margin * 2,
   };
-
-  // Update window placement
-  unsafe {
-    if SetWindowPlacement(window, &placement) == 0 {
-      warn!("Failed to set window placement for #{:?}", window);
-    }
-
-    // Force a repaint
-    SendMessageW(window, WM_PAINT, WPARAM(0).0, LPARAM(0).0);
-  }
+  execute_window_resizing(window, sizing);
 }
 
 fn is_near_maximized(placement: &WINDOWPLACEMENT, window: HWND, monitor_info: MONITORINFO) -> bool {
   let work_area = monitor_info.rcWork;
   let expected_x = work_area.left + 30;
-  let expected_y = work_area.top + 30 + EXTRA_Y_PADDING;
+  let expected_y = work_area.top + 30;
   let expected_width = work_area.right - work_area.left - 30 * 2;
-  let expected_height = work_area.bottom - work_area.top - 30 * 2 - EXTRA_Y_PADDING;
+  let expected_height = work_area.bottom - work_area.top - 30 * 2;
   let rc = placement.rcNormalPosition;
   let result = (rc.left - expected_x).abs() <= TOLERANCE_IN_PX
     && (rc.top - expected_y).abs() <= TOLERANCE_IN_PX
@@ -150,4 +199,21 @@ fn is_near_maximized(placement: &WINDOWPLACEMENT, window: HWND, monitor_info: MO
   );
 
   result
+}
+
+fn execute_window_resizing(window: HWND, sizing: Sizing) {
+  let placement = WINDOWPLACEMENT {
+    length: size_of::<WINDOWPLACEMENT>() as u32,
+    flags: WINDOWPLACEMENT_FLAGS(0).0,
+    showCmd: SW_SHOWNORMAL as u32,
+    ptMaxPosition: POINT { x: 0, y: 0 },
+    ptMinPosition: POINT { x: -1, y: -1 },
+    rcNormalPosition: RECT {
+      left: sizing.x,
+      top: sizing.y,
+      right: sizing.x + sizing.width,
+      bottom: sizing.y + sizing.height,
+    },
+  };
+  update_window_placement_and_force_repaint(window, &placement);
 }

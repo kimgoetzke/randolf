@@ -46,6 +46,17 @@ pub fn get_monitor_info(window: HWND) -> Option<MONITORINFO> {
   Some(monitor_info)
 }
 
+pub fn update_window_placement_and_force_repaint(window: HWND, placement: &WINDOWPLACEMENT) {
+  unsafe {
+    if SetWindowPlacement(window, placement) == 0 {
+      warn!("Failed to set window placement for #{:?}", window);
+    }
+
+    // Force a repaint
+    SendMessageW(window, WM_PAINT, WPARAM(0).0, LPARAM(0).0);
+  }
+}
+
 pub fn maximise_window(window: HWND) {
   unsafe {
     ShowWindow(window, SW_MAXIMIZE);
