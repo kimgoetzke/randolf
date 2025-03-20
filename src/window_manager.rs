@@ -1,11 +1,13 @@
-use crate::{EXTRA_Y_PADDING, native_api};
+use crate::native_api;
 use std::collections::HashMap;
 use winapi::shared::windef::{HWND, POINT, RECT};
 use winapi::um::winuser::{MONITORINFO, SW_SHOWNORMAL, SendMessageW, SetWindowPlacement, WINDOWPLACEMENT, WM_PAINT};
 use windows::Win32::Foundation::{LPARAM, WPARAM};
 use windows::Win32::UI::WindowsAndMessaging::WINDOWPLACEMENT_FLAGS;
 
+const EXTRA_Y_PADDING: i32 = 10;
 const TOLERANCE_IN_PX: i32 = 4;
+const DEFAULT_MARGIN: i32 = 25;
 
 pub(crate) struct WindowManager {
   known_windows: HashMap<String, WINDOWPLACEMENT>,
@@ -34,7 +36,7 @@ impl WindowManager {
       true => restore_previous_placement(&self.known_windows, window),
       false => {
         add_or_update_previous_placement(&mut self.known_windows, window, placement);
-        near_maximize_window(window, 30);
+        near_maximize_window(window, DEFAULT_MARGIN);
       }
     }
   }

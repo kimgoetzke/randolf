@@ -14,9 +14,9 @@ use tray_icon::menu::{Menu, MenuItem};
 use tray_icon::{Icon, TrayIconBuilder};
 use winapi::um::winuser::{MOD_NOREPEAT, MOD_WIN};
 
+const F11: u32 = 0x7A;
 const F12: u32 = 0x7B;
 const F13: u32 = 0x7C;
-const EXTRA_Y_PADDING: i32 = 10;
 
 fn main() {
   // Initialise logger
@@ -38,24 +38,19 @@ fn main() {
     .build()
     .expect("Failed to build tray icon");
 
+  // Create window manager and register hotkeys
   let wm = Rc::new(RefCell::new(WindowManager::new()));
-
-  // Register hotkeys
-  let mut listeners: Vec<Listener> = Vec::new();
-  listeners.push(register_listener(&wm, F13, |wm| {
-    wm.borrow_mut().near_maximise_active_window()
-  }));
-  listeners.push(register_listener(&wm, F12, |wm| wm.borrow_mut().something_else()));
-  for listener in listeners {
-    listener.listen();
-  }
+  let mut listener = Listener::new();
+  register_hotkey(&mut listener, &wm, F11, |wm| wm.borrow_mut().near_maximise_active_window());
+  register_hotkey(&mut listener, &wm, F13, |wm| wm.borrow_mut().near_maximise_active_window());
+  register_hotkey(&mut listener, &wm, F12, |wm| wm.borrow_mut().something_else());
+  listener.listen();
 }
 
-fn register_listener<F>(wm: &Rc<RefCell<WindowManager>>, hotkey: u32, action: F) -> Listener
+fn register_hotkey<F>(listener: &mut Listener, wm: &Rc<RefCell<WindowManager>>, hotkey: u32, action: F)
 where
   F: Fn(&Rc<RefCell<WindowManager>>) + 'static,
 {
-  let mut listener = Listener::new();
   let listener_id = listener
     .register_hotkey(MOD_WIN as u32 | MOD_NOREPEAT as u32, hotkey, {
       let wm = Rc::clone(&wm);
@@ -65,8 +60,6 @@ where
     })
     .expect("Failed to register hotkey");
   info!("Listener #{listener_id} has been registered...");
-
-  listener
 }
 
 fn new_tray_menu() -> Menu {
