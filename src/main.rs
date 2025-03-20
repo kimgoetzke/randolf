@@ -13,12 +13,15 @@ use simplelog::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 use winapi::um::winuser::{MOD_NOREPEAT, MOD_WIN};
+// use winapi::um::winuser::{VK_DOWN, VK_LEFT, VK_RIGHT, VK_UP};
+
 
 const F9: u32 = 0x78;
 const F10: u32 = 0x79;
 const F11: u32 = 0x7A;
 const F12: u32 = 0x7B;
 const F13: u32 = 0x7C;
+// const BACKSLASH: u32 = 0xDC;
 
 fn main() {
   // Initialise logger
@@ -50,7 +53,7 @@ where
 {
   let listener_id = listener
     .register_hotkey(MOD_WIN as u32 | MOD_NOREPEAT as u32, hotkey, {
-      let wm = Rc::clone(&wm);
+      let wm = Rc::clone(wm);
       move || {
         action(&wm);
       }
