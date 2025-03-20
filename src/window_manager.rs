@@ -19,6 +19,8 @@ struct Sizing {
   height: i32,
 }
 
+// TODO: Add feature where pressing hotkey to move window to any side twice will move it to the next monitor in that
+//  direction, if available
 impl WindowManager {
   pub fn new() -> Self {
     Self {
