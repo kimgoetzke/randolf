@@ -53,7 +53,7 @@ pub fn update_window_placement_and_force_repaint(window: HWND, placement: &WINDO
     }
 
     // Force a repaint
-    SendMessageW(window, WM_PAINT, WPARAM(0).0, LPARAM(0).0);
+    SendMessageW(window, WM_PAINT, 0, 0);
   }
 }
 
@@ -80,6 +80,15 @@ pub fn get_window_placement(window: HWND) -> Option<WINDOWPLACEMENT> {
 pub fn restore_window_placement(window: HWND, previous_placement: &WINDOWPLACEMENT) {
   unsafe {
     SetWindowPlacement(window, previous_placement);
-    SendMessageW(window, WM_PAINT, WPARAM(0).0, LPARAM(0).0);
+    SendMessageW(window, WM_PAINT, 0, 0);
+  }
+}
+
+pub fn close(window: HWND) {
+  unsafe {
+    use winapi::um::winuser::PostMessageW;
+    use winapi::um::winuser::WM_CLOSE;
+
+    PostMessageW(window, WM_CLOSE, 0, 0);
   }
 }

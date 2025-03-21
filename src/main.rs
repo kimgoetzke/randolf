@@ -16,6 +16,7 @@ use winapi::um::winuser::{MOD_NOREPEAT, MOD_WIN};
 // use winapi::um::winuser::{VK_DOWN, VK_LEFT, VK_RIGHT, VK_UP};
 
 
+const F8: u32 = 0x77;
 const F9: u32 = 0x78;
 const F10: u32 = 0x79;
 const F11: u32 = 0x7A;
@@ -39,6 +40,7 @@ fn main() {
   // Create window manager and register hotkeys
   let wm = Rc::new(RefCell::new(WindowManager::new()));
   let mut listener = Listener::new();
+  register_hotkey(&mut listener, &wm, F8, |wm| wm.borrow_mut().close());
   register_hotkey(&mut listener, &wm, F9, |wm| wm.borrow_mut().move_to_top_half_of_screen());
   register_hotkey(&mut listener, &wm, F10, |wm| wm.borrow_mut().move_to_bottom_half_of_screen() );
   register_hotkey(&mut listener, &wm, F11, |wm| wm.borrow_mut().move_to_left_half_of_screen());
