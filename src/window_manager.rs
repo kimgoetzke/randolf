@@ -6,7 +6,7 @@ use winapi::um::winuser::{MONITORINFO, SW_SHOWNORMAL, WINDOWPLACEMENT};
 use windows::Win32::UI::WindowsAndMessaging::WINDOWPLACEMENT_FLAGS;
 
 const TOLERANCE_IN_PX: i32 = 4;
-const DEFAULT_MARGIN: i32 = 25;
+const DEFAULT_MARGIN: i32 = 20;
 
 pub(crate) struct WindowManager {
   known_windows: HashMap<String, WINDOWPLACEMENT>,
@@ -19,7 +19,6 @@ struct Sizing {
   height: i32,
 }
 
-// TODO: Add hotkey to close the active window/application
 // TODO: Add feature where pressing hotkey to move window to any side twice will move it to the next monitor in that
 //  direction, if available
 impl WindowManager {

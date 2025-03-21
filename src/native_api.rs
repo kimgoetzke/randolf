@@ -4,7 +4,6 @@ use winapi::um::winuser::{
   GetForegroundWindow, GetMonitorInfoW, GetWindowPlacement, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
   SW_MAXIMIZE, SendMessageW, SetWindowPlacement, ShowWindow, WINDOWPLACEMENT, WM_PAINT,
 };
-use windows::Win32::Foundation::{LPARAM, WPARAM};
 
 // TODO: Stop returning a window when no window is active
 pub fn get_foreground_window() -> Option<HWND> {
