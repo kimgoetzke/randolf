@@ -1,7 +1,9 @@
-use crate::sizing::Sizing;
+use crate::direction::Direction;
 use crate::native_api;
 use crate::point::Point;
 use crate::rect::Rect;
+use crate::sizing::Sizing;
+use crate::utils::truncated_str;
 use crate::window::{Window, WindowId};
 use std::collections::HashMap;
 use windows::Win32::Foundation::{HWND, POINT, RECT};
@@ -15,14 +17,6 @@ const DEFAULT_MARGIN: i32 = 20;
 pub(crate) struct WindowManager {
   known_windows: HashMap<String, WINDOWPLACEMENT>,
   virtual_desktop_manager: IVirtualDesktopManager,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum Direction {
-  Left,
-  Right,
-  Up,
-  Down,
 }
 
 // TODO: Add feature where pressing hotkey to move window to any side twice will move it to the next monitor in that
@@ -75,10 +69,6 @@ impl WindowManager {
   }
 
   pub fn move_cursor_to_window(&mut self, direction: Direction) {
-    info!(
-      "Hotkey pressed - action: move cursor to window in direction [{:?}]",
-      direction
-    );
     let windows = native_api::get_all_visible_windows();
     let cursor_position = native_api::get_cursor_position();
     let target_point = match find_window_at_cursor(&cursor_position, &windows) {
@@ -94,10 +84,12 @@ impl WindowManager {
     };
     let target_point = Point::from_center_of_rect(&target_window.rect);
     native_api::set_cursor_position(&target_point);
-    native_api::set_foreground_window(WindowId::from(target_window.clone()));
+    native_api::set_foreground_window(WindowId::from(target_window));
     info!(
-      "Moved cursor in direction [{:?}] to #{:?} at {target_point}",
-      direction, target_window.hwnd
+      "Moved cursor in direction [{:?}] to {} \"{}\" at {target_point}",
+      direction,
+      target_window.id,
+      truncated_str(&target_window.title)
     );
   }
 }
@@ -222,11 +214,12 @@ fn find_window_at_cursor<'a>(point: &Point, windows: &'a [Window]) -> Option<&'a
     if let Some(foreground_window) = native_api::get_foreground_window() {
       if let Some(window_info) = windows_under_cursor
         .iter()
-        .find(|window_info| window_info.window == foreground_window)
+        .find(|window_info| window_info.id == foreground_window)
       {
         debug!(
-          "Cursor is currently over foreground window #{:?} \"{}\" at {point}",
-          window_info.hwnd, window_info.title
+          "Cursor is currently over foreground window {} \"{}\" at {point}",
+          window_info.id,
+          truncated_str(&window_info.title)
         );
         return Some(window_info);
       }
@@ -246,9 +239,9 @@ fn find_window_at_cursor<'a>(point: &Point, windows: &'a [Window]) -> Option<&'a
     }
     let closest_window = closest_window.expect("Failed to get the closest window");
     debug!(
-      "Cursor is currently over window #{:?} \"{}\" at {point} with a distance of {}",
-      closest_window.hwnd,
-      closest_window.title,
+      "Cursor is currently over window {} \"{}\" at {point} with a distance of {}",
+      closest_window.id,
+      truncated_str(&closest_window.title),
       min_distance.trunc()
     );
     return Some(closest_window);
@@ -266,14 +259,14 @@ fn find_closest_window_in_direction<'a>(
   let mut closest_window = None;
   let mut closest_score = f64::MAX;
 
-  for window_info in windows {
+  for window in windows {
     // Skip windows that are not on the current desktop
-    if !native_api::is_window_on_current_desktop(virtual_desktop_manager, window_info)? {
+    if !native_api::is_window_on_current_desktop(virtual_desktop_manager, window)? {
       continue;
     }
 
-    let target_center_x = window_info.rect.left + (window_info.rect.right - window_info.rect.left) / 2;
-    let target_center_y = window_info.rect.top + (window_info.rect.bottom - window_info.rect.top) / 2;
+    let target_center_x = window.rect.left + (window.rect.right - window.rect.left) / 2;
+    let target_center_y = window.rect.top + (window.rect.bottom - window.rect.top) / 2;
     let dx = target_center_x - reference_point.x();
     let dy = target_center_y - reference_point.y();
 
@@ -298,16 +291,16 @@ fn find_closest_window_in_direction<'a>(
 
     // Calculate a score based on the distance and angle and select the closest window
     let score = distance + angle;
-    debug!(
-      "Score for #{:?} is [{}] (i.e. normalised_angle={}, distance={})",
-      window_info.hwnd,
+    trace!(
+      "Score for {} is [{}] (i.e. normalised_angle={}, distance={})",
+      window.id,
       score.trunc(),
       angle,
       distance,
     );
     if score < closest_score {
       closest_score = score;
-      closest_window = Some(window_info);
+      closest_window = Some(window);
     }
   }
 

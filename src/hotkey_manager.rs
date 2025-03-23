@@ -1,5 +1,5 @@
-use crate::ControlFlow;
-use crate::window_manager::Direction;
+use crate::Command;
+use crate::direction::Direction;
 use crossbeam_channel::{Receiver, unbounded};
 use std::thread;
 use win_hotkeys::{InterruptHandle, VKey};
@@ -7,7 +7,7 @@ use win_hotkeys::{InterruptHandle, VKey};
 const BACKSLASH: u32 = 0xDC;
 
 pub struct HotkeyManager {
-  _hkm: win_hotkeys::HotkeyManager<ControlFlow>,
+  _hkm: win_hotkeys::HotkeyManager<Command>,
 }
 
 // TODO: Try to make MOD_NOREPEAT work again
@@ -16,13 +16,13 @@ impl HotkeyManager {
     let mut hkm = win_hotkeys::HotkeyManager::new();
 
     hkm
-      .register_hotkey(VKey::Q, &[VKey::LWin, VKey::Shift], || ControlFlow::CloseWindow)
-      .unwrap_or_else(|_| panic!("Failed to register hotkey for {:?}", ControlFlow::CloseWindow));
+      .register_hotkey(VKey::Q, &[VKey::LWin, VKey::Shift], || Command::CloseWindow)
+      .unwrap_or_else(|_| panic!("Failed to register hotkey for {:?}", Command::CloseWindow));
     hkm
       .register_hotkey(VKey::CustomKeyCode(BACKSLASH as u16), &[VKey::LWin], || {
-        ControlFlow::NearMaximiseWindow
+        Command::NearMaximiseWindow
       })
-      .unwrap_or_else(|_| panic!("Failed to register hotkey for {:?}", ControlFlow::NearMaximiseWindow));
+      .unwrap_or_else(|_| panic!("Failed to register hotkey for {:?}", Command::NearMaximiseWindow));
 
     register_move_cursor_hotkey(&mut hkm, Direction::Left, VKey::Left);
     register_move_cursor_hotkey(&mut hkm, Direction::Down, VKey::Down);
@@ -40,7 +40,7 @@ impl HotkeyManager {
     Self { _hkm: hkm }
   }
 
-  pub fn initialise<'a>(mut self) -> (Receiver<ControlFlow>, InterruptHandle) {
+  pub fn initialise<'a>(mut self) -> (Receiver<Command>, InterruptHandle) {
     let (tx, rx) = unbounded();
     self._hkm.register_channel(tx);
     let handle = self._hkm.interrupt_handle();
@@ -52,26 +52,26 @@ impl HotkeyManager {
   }
 }
 
-fn register_move_cursor_hotkey(hkm: &mut win_hotkeys::HotkeyManager<ControlFlow>, direction: Direction, key: VKey) {
+fn register_move_cursor_hotkey(hkm: &mut win_hotkeys::HotkeyManager<Command>, direction: Direction, key: VKey) {
   hkm
     .register_hotkey(key, &[VKey::LWin], move || {
-      ControlFlow::MoveCursorToWindowInDirection(direction)
+      Command::MoveCursorToWindowInDirection(direction)
     })
     .unwrap_or_else(|err| {
       panic!(
         "Failed to register hotkey for {:?}: {err}",
-        ControlFlow::MoveCursorToWindowInDirection(direction)
+        Command::MoveCursorToWindowInDirection(direction)
       )
     });
 }
 
-fn register_move_window_hotkey(hkm: &mut win_hotkeys::HotkeyManager<ControlFlow>, direction: Direction, key: VKey) {
+fn register_move_window_hotkey(hkm: &mut win_hotkeys::HotkeyManager<Command>, direction: Direction, key: VKey) {
   hkm
-    .register_hotkey(key, &[VKey::LWin, VKey::Shift], move || ControlFlow::MoveWindow(direction))
+    .register_hotkey(key, &[VKey::LWin, VKey::Shift], move || Command::MoveWindow(direction))
     .unwrap_or_else(|err| {
       panic!(
         "Failed to register hotkey for {:?}: {err}",
-        ControlFlow::MoveWindow(direction)
+        Command::MoveWindow(direction)
       )
     });
 }

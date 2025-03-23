@@ -1,32 +1,26 @@
+mod command;
+mod direction;
 mod hotkey_manager;
 mod native_api;
 mod point;
 mod rect;
+mod sizing;
 mod tray_menu_manager;
+mod utils;
 mod window;
 mod window_manager;
-mod sizing;
 
 #[macro_use]
 extern crate log;
 extern crate simplelog;
 
+use crate::command::Command;
+use crate::hotkey_manager::HotkeyManager;
 use crate::tray_menu_manager::TrayMenuManager;
-use crate::window_manager::{Direction, WindowManager};
+use crate::window_manager::WindowManager;
 use simplelog::*;
 use std::cell::RefCell;
 use std::rc::Rc;
-
-use crate::hotkey_manager::HotkeyManager;
-
-#[derive(Debug)]
-enum ControlFlow {
-  CloseWindow,
-  NearMaximiseWindow,
-  MoveWindow(Direction),
-  MoveCursorToWindowInDirection(Direction),
-  Exit,
-}
 
 // TODO: Make window resizing work with arrow keys (in addition to, or instead of, h/j/k/l)
 fn main() {
@@ -47,15 +41,16 @@ fn main() {
   let hkm = HotkeyManager::default();
   let (receiver, interrupt_handle) = hkm.initialise();
 
+  // Run event loop
   loop {
     let command = receiver.recv().unwrap();
-    info!("Hotkey pressed: {:?}", command);
+    info!("Hotkey pressed: {}", command);
     match command {
-      ControlFlow::NearMaximiseWindow => wm.borrow_mut().near_maximise_or_restore(),
-      ControlFlow::MoveWindow(direction) => wm.borrow_mut().move_window(direction),
-      ControlFlow::MoveCursorToWindowInDirection(direction) => wm.borrow_mut().move_cursor_to_window(direction),
-      ControlFlow::CloseWindow => wm.borrow_mut().close(),
-      ControlFlow::Exit => interrupt_handle.interrupt(),
+      Command::NearMaximiseWindow => wm.borrow_mut().near_maximise_or_restore(),
+      Command::MoveWindow(direction) => wm.borrow_mut().move_window(direction),
+      Command::MoveCursorToWindowInDirection(direction) => wm.borrow_mut().move_cursor_to_window(direction),
+      Command::CloseWindow => wm.borrow_mut().close(),
+      Command::Exit => interrupt_handle.interrupt(),
     }
   }
 }

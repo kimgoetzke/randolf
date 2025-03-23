@@ -1,5 +1,6 @@
 use crate::point::Point;
 use crate::rect::Rect;
+use crate::utils::truncated_str;
 use crate::window::{Window, WindowId};
 use std::{mem, ptr};
 use windows::Win32::Foundation::{HWND, LPARAM, POINT, RECT, WPARAM};
@@ -148,24 +149,28 @@ pub fn get_all_visible_windows() -> Vec<Window> {
     }
   }
 
-  debug!("┌| Found the following windows:");
+  trace!("┌| Found the following windows:");
   let mut i: usize = 1;
-  windows.retain(|window_info| {
-    if IGNORED_WINDOWS.contains(&window_info.title.as_str()) {
+  windows.retain(|window| {
+    if IGNORED_WINDOWS.contains(&window.title.as_str()) {
       false
     } else {
-      let window_area =
-        ((window_info.rect.right - window_info.rect.left) * (window_info.rect.bottom - window_info.rect.top)) / 1000;
-      debug!(
-        "├> {}. #{:?} at ({}, {}) with a size of {}k sq px and title \"{}\"",
-        i, window_info.hwnd, window_info.rect.left, window_info.rect.top, window_area, window_info.title
+      let window_area = ((window.rect.right - window.rect.left) * (window.rect.bottom - window.rect.top)) / 1000;
+      trace!(
+        "├> {}. {:?} at ({}, {}) with a size of {}k sq px and title \"{}\"",
+        i,
+        window.id,
+        window.rect.left,
+        window.rect.top,
+        window_area,
+        truncated_str(&window.title)
       );
       i += 1;
 
       true
     }
   });
-  debug!("└─| Identified [{:?}] windows", windows.len());
+  trace!("└─| Identified [{:?}] windows", windows.len());
 
   windows
 }
@@ -273,14 +278,15 @@ pub fn get_virtual_desktop_manager() -> Option<IVirtualDesktopManager> {
   }
 }
 
-pub fn is_window_on_current_desktop(vdm: &IVirtualDesktopManager, window_info: &Window) -> Option<bool> {
+pub fn is_window_on_current_desktop(vdm: &IVirtualDesktopManager, window: &Window) -> Option<bool> {
   unsafe {
-    match vdm.IsWindowOnCurrentVirtualDesktop(window_info.window.into()) {
+    match vdm.IsWindowOnCurrentVirtualDesktop(window.id.into()) {
       Ok(is_on_current_desktop) => {
         let is_on_current_desktop = is_on_current_desktop.as_bool();
         trace!(
-          "Skipping window #{:?} \"{}\" - it is not on current desktop",
-          window_info.hwnd, window_info.title
+          "Skipping window {:?} \"{}\" - it is not on current desktop",
+          window.id,
+          truncated_str(&window.title)
         );
         Some(is_on_current_desktop)
       }

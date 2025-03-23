@@ -12,7 +12,7 @@ impl WindowId {
   pub fn new(hwnd: isize) -> Self {
     Self { hwnd }
   }
-  
+
   pub fn as_hwnd(&self) -> HWND {
     HWND(self.hwnd as *mut core::ffi::c_void)
   }
@@ -26,7 +26,13 @@ impl From<HWND> for WindowId {
 
 impl From<Window> for WindowId {
   fn from(value: Window) -> Self {
-    Self { hwnd: value.hwnd }
+    Self { hwnd: value.id.hwnd }
+  }
+}
+
+impl From<&Window> for WindowId {
+  fn from(value: &Window) -> Self {
+    Self { hwnd: value.id.hwnd }
   }
 }
 
@@ -48,8 +54,7 @@ pub(crate) struct Window {
   pub title: String,
   pub rect: Rect,
   pub center: Point,
-  pub hwnd: isize,
-  pub window: WindowId,
+  pub id: WindowId,
 }
 
 impl Window {
@@ -58,14 +63,13 @@ impl Window {
       title,
       center: Point::from_center_of_rect(&rect),
       rect,
-      hwnd: hwnd.0 as isize,
-      window: WindowId::from(hwnd),
+      id: WindowId::from(hwnd),
     }
   }
 }
 
 impl PartialEq for Window {
   fn eq(&self, other: &Self) -> bool {
-    self.hwnd == other.hwnd && self.title == other.title && self.rect == other.rect
+    self.id == other.id
   }
 }
