@@ -22,7 +22,6 @@ use simplelog::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-// TODO: Make window resizing work with arrow keys (in addition to, or instead of, h/j/k/l)
 fn main() {
   // Initialise logger
   CombinedLogger::init(vec![TermLogger::new(

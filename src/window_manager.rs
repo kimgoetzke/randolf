@@ -19,8 +19,6 @@ pub(crate) struct WindowManager {
   virtual_desktop_manager: IVirtualDesktopManager,
 }
 
-// TODO: Add feature where pressing hotkey to move window to any side twice will move it to the next monitor in that
-//  direction, if available
 impl WindowManager {
   pub fn new() -> Self {
     Self {
@@ -44,6 +42,8 @@ impl WindowManager {
     }
   }
 
+  // TODO: Add feature where pressing hotkey to move window to any side twice will move it to the next monitor in that
+  //  direction, if available
   pub fn move_window(&mut self, direction: Direction) {
     let (window, _, monitor_info) = match get_window_and_monitor_info() {
       Some(value) => value,
@@ -148,10 +148,10 @@ fn near_maximize_window(window: HWND, monitor_info: MONITORINFO, margin: i32) {
 
 fn is_near_maximized(placement: &WINDOWPLACEMENT, window: HWND, monitor_info: MONITORINFO) -> bool {
   let work_area = monitor_info.rcWork;
-  let expected_x = work_area.left + 30;
-  let expected_y = work_area.top + 30;
-  let expected_width = work_area.right - work_area.left - 30 * 2;
-  let expected_height = work_area.bottom - work_area.top - 30 * 2;
+  let expected_x = work_area.left + DEFAULT_MARGIN;
+  let expected_y = work_area.top + DEFAULT_MARGIN;
+  let expected_width = work_area.right - work_area.left - DEFAULT_MARGIN * 2;
+  let expected_height = work_area.bottom - work_area.top - DEFAULT_MARGIN * 2;
   let rc = placement.rcNormalPosition;
   let result = (rc.left - expected_x).abs() <= TOLERANCE_IN_PX
     && (rc.top - expected_y).abs() <= TOLERANCE_IN_PX
