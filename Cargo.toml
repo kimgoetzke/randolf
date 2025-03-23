@@ -1,11 +1,11 @@
 [package]
 name = "randolf"
+description = "A partial window manager for Windows 11"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-windows = { version = "0.61.0", features = ["Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi"] }
-winapi = { version = "0.3.9", features = ["winuser", "windef"] }
+windows = { version = "0.61.1", features = ["Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_UI_Input", "Win32_UI_Input_KeyboardAndMouse"] }
 hotkey = "0.3.1"
 tray-icon = "0.20.0"
 log = "0.4.26"

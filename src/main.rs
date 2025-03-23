@@ -1,18 +1,21 @@
 mod native_api;
+mod point;
 mod tray_menu_manager;
 mod window_manager;
+mod window;
+mod rect;
 
 #[macro_use]
 extern crate log;
 extern crate simplelog;
 
 use crate::tray_menu_manager::TrayMenuManager;
-use crate::window_manager::WindowManager;
+use crate::window_manager::{Direction, WindowManager};
 use hotkey::Listener;
 use simplelog::*;
 use std::cell::RefCell;
 use std::rc::Rc;
-use winapi::um::winuser::{MOD_NOREPEAT, MOD_SHIFT, MOD_WIN};
+use windows::Win32::UI::Input::KeyboardAndMouse::{MOD_NOREPEAT, MOD_SHIFT, MOD_WIN};
 
 #[allow(dead_code)]
 const ARROW_UP: u32 = 0x26;
@@ -31,9 +34,10 @@ const F11: u32 = 0x7A;
 const F12: u32 = 0x7B;
 const F13: u32 = 0x7C;
 const BACKSLASH: u32 = 0xDC;
-const MAIN_MOD: u32 = MOD_WIN as u32;
-const SHIFT: u32 = MOD_SHIFT as u32;
+const MAIN_MOD: u32 = MOD_WIN.0;
+const SHIFT: u32 = MOD_SHIFT.0;
 
+// TODO: Make window resizing work with arrow keys (in addition to, or instead of, h/j/k/l)
 fn main() {
   // Initialise logger
   CombinedLogger::init(vec![TermLogger::new(
@@ -51,14 +55,26 @@ fn main() {
   let wm = Rc::new(RefCell::new(WindowManager::new()));
   let mut listener = Listener::new();
   register_hotkey(&mut listener, &wm, MAIN_MOD | SHIFT, Q, |wm| wm.borrow_mut().close());
-  register_hotkey(&mut listener, &wm, MAIN_MOD | SHIFT, K, |wm| {
-    wm.borrow_mut().move_to_top_half_of_screen()
+  register_hotkey(&mut listener, &wm, MAIN_MOD, F9, |wm| {
+    wm.borrow_mut().move_cursor_to_window_in_direction(Direction::Left)
+  });
+  register_hotkey(&mut listener, &wm, MAIN_MOD, F10, |wm| {
+    wm.borrow_mut().move_cursor_to_window_in_direction(Direction::Down)
+  });
+  register_hotkey(&mut listener, &wm, MAIN_MOD, F11, |wm| {
+    wm.borrow_mut().move_cursor_to_window_in_direction(Direction::Left)
+  });
+  register_hotkey(&mut listener, &wm, MAIN_MOD, F12, |wm| {
+    wm.borrow_mut().move_cursor_to_window_in_direction(Direction::Right)
+  });
+  register_hotkey(&mut listener, &wm, MAIN_MOD | SHIFT, H, |wm| {
+    wm.borrow_mut().move_to_left_half_of_screen()
   });
   register_hotkey(&mut listener, &wm, MAIN_MOD | SHIFT, J, |wm| {
     wm.borrow_mut().move_to_bottom_half_of_screen()
   });
-  register_hotkey(&mut listener, &wm, MAIN_MOD | SHIFT, H, |wm| {
-    wm.borrow_mut().move_to_left_half_of_screen()
+  register_hotkey(&mut listener, &wm, MAIN_MOD | SHIFT, K, |wm| {
+    wm.borrow_mut().move_to_top_half_of_screen()
   });
   register_hotkey(&mut listener, &wm, MAIN_MOD | SHIFT, L, |wm| {
     wm.borrow_mut().move_to_right_half_of_screen()
@@ -74,7 +90,7 @@ where
   F: Fn(&Rc<RefCell<WindowManager>>) + 'static,
 {
   let listener_id = listener
-    .register_hotkey(mods | MOD_NOREPEAT as u32, hotkey, {
+    .register_hotkey(mods | MOD_NOREPEAT.0, hotkey, {
       let wm = Rc::clone(wm);
       move || {
         action(&wm);

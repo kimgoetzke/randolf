@@ -10,3 +10,7 @@ additional features that I wanted.
 ### Prerequisites
 
 You'll need the C++ tools from the Build Tools for Visual Studio installed.
+
+Useful links:
+
+- [Programming reference for the Win32 API](https://learn.microsoft.com/en-us/windows/win32/api/)
