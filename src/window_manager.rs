@@ -1,5 +1,7 @@
+use crate::sizing::Sizing;
 use crate::native_api;
 use crate::point::Point;
+use crate::rect::Rect;
 use crate::window::{Window, WindowId};
 use std::collections::HashMap;
 use windows::Win32::Foundation::{HWND, POINT, RECT};
@@ -13,13 +15,6 @@ const DEFAULT_MARGIN: i32 = 20;
 pub(crate) struct WindowManager {
   known_windows: HashMap<String, WINDOWPLACEMENT>,
   virtual_desktop_manager: IVirtualDesktopManager,
-}
-
-struct Sizing {
-  x: i32,
-  y: i32,
-  width: i32,
-  height: i32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -41,7 +36,6 @@ impl WindowManager {
   }
 
   pub fn near_maximise_or_restore(&mut self) {
-    info!("Hotkey pressed - action: near-maximise window");
     let (window, placement, monitor_info) = match get_window_and_monitor_info() {
       Some(value) => value,
       None => return,
@@ -56,80 +50,23 @@ impl WindowManager {
     }
   }
 
-  pub fn move_to_right_half_of_screen(&mut self) {
-    info!("Hotkey pressed - action: move window to right half of screen");
+  pub fn move_window(&mut self, direction: Direction) {
     let (window, _, monitor_info) = match get_window_and_monitor_info() {
       Some(value) => value,
       None => return,
     };
-
-    // Resize the window to the expected size
-    let work_area = monitor_info.rcWork;
-    let sizing = Sizing {
-      x: work_area.left + (work_area.right - work_area.left) / 2 + DEFAULT_MARGIN / 2,
-      y: work_area.top + DEFAULT_MARGIN,
-      width: (work_area.right - work_area.left) / 2 - DEFAULT_MARGIN - DEFAULT_MARGIN / 2,
-      height: work_area.bottom - work_area.top - DEFAULT_MARGIN * 2,
-    };
-    execute_window_resizing(window, sizing);
-  }
-
-  pub fn move_to_top_half_of_screen(&mut self) {
-    info!("Hotkey pressed - action: move window to top half of screen");
-    let (window, _, monitor_info) = match get_window_and_monitor_info() {
-      Some(value) => value,
-      None => return,
+    let work_area = Rect::from(monitor_info.rcWork);
+    let sizing = match direction {
+      Direction::Left => Sizing::left_half_of_screen(work_area, DEFAULT_MARGIN),
+      Direction::Right => Sizing::right_half_of_screen(work_area, DEFAULT_MARGIN),
+      Direction::Up => Sizing::top_half_of_screen(work_area, DEFAULT_MARGIN),
+      Direction::Down => Sizing::bottom_half_of_screen(work_area, DEFAULT_MARGIN),
     };
 
-    // Resize the window to the expected size
-    let work_area = monitor_info.rcWork;
-    let sizing = Sizing {
-      x: work_area.left + DEFAULT_MARGIN,
-      y: work_area.top + DEFAULT_MARGIN,
-      width: work_area.right - work_area.left - DEFAULT_MARGIN * 2,
-      height: (work_area.bottom - work_area.top) / 2 - DEFAULT_MARGIN - DEFAULT_MARGIN / 2,
-    };
-    execute_window_resizing(window, sizing);
-  }
-
-  pub fn move_to_bottom_half_of_screen(&mut self) {
-    info!("Hotkey pressed - action: move window to bottom half of screen");
-    let (window, _, monitor_info) = match get_window_and_monitor_info() {
-      Some(value) => value,
-      None => return,
-    };
-
-    // Resize the window to the expected size
-    let work_area = monitor_info.rcWork;
-    let sizing = Sizing {
-      x: work_area.left + DEFAULT_MARGIN,
-      y: work_area.top + (work_area.bottom - work_area.top) / 2 + DEFAULT_MARGIN / 2,
-      width: work_area.right - work_area.left - DEFAULT_MARGIN * 2,
-      height: (work_area.bottom - work_area.top) / 2 - DEFAULT_MARGIN - DEFAULT_MARGIN / 2,
-    };
-    execute_window_resizing(window, sizing);
-  }
-
-  pub fn move_to_left_half_of_screen(&mut self) {
-    info!("Hotkey pressed - action: move window to left half of screen");
-    let (window, _, monitor_info) = match get_window_and_monitor_info() {
-      Some(value) => value,
-      None => return,
-    };
-
-    // Resize the window to the expected size
-    let work_area = monitor_info.rcWork;
-    let sizing = Sizing {
-      x: work_area.left + DEFAULT_MARGIN,
-      y: work_area.top + DEFAULT_MARGIN,
-      width: (work_area.right - work_area.left) / 2 - DEFAULT_MARGIN - DEFAULT_MARGIN / 2,
-      height: work_area.bottom - work_area.top - DEFAULT_MARGIN * 2,
-    };
     execute_window_resizing(window, sizing);
   }
 
   pub fn close(&mut self) {
-    info!("Hotkey pressed - action: close window");
     let Some(window) = native_api::get_foreground_window() else {
       return;
     };
@@ -137,7 +74,7 @@ impl WindowManager {
     native_api::close(window);
   }
 
-  pub fn move_cursor_to_window_in_direction(&mut self, direction: Direction) {
+  pub fn move_cursor_to_window(&mut self, direction: Direction) {
     info!(
       "Hotkey pressed - action: move cursor to window in direction [{:?}]",
       direction
@@ -231,11 +168,11 @@ fn is_near_maximized(placement: &WINDOWPLACEMENT, window: HWND, monitor_info: MO
 
   trace!(
     "Expected size of #{:?}: ({},{})x({},{})",
-    window, expected_x, expected_y, expected_width, expected_height
+    window.0, expected_x, expected_y, expected_width, expected_height
   );
   trace!(
     "Actual size of #{:?}: ({},{})x({},{})",
-    window,
+    window.0,
     rc.left,
     rc.top,
     rc.right - rc.left,
@@ -243,7 +180,7 @@ fn is_near_maximized(placement: &WINDOWPLACEMENT, window: HWND, monitor_info: MO
   );
   debug!(
     "#{:?} {} near-maximized (tolerance: {})",
-    window,
+    window.0,
     if result { "is currently" } else { "is currently NOT" },
     TOLERANCE_IN_PX
   );

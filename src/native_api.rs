@@ -18,7 +18,6 @@ use windows::core::BOOL;
 
 const IGNORED_WINDOWS: [&str; 4] = ["Program Manager", "Windows Input Experience", "Settings", ""];
 
-// TODO: Stop returning a window when no window is active
 pub fn get_foreground_window_as_hwnd() -> Option<HWND> {
   let hwnd = unsafe { GetForegroundWindow() };
 
