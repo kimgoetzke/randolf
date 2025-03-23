@@ -1,6 +1,7 @@
 use std::fmt::Formatter;
 use crate::rect::Rect;
 
+#[derive(Clone, Debug)]
 pub(crate) struct Point {
   x: i32,
   y: i32,

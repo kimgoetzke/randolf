@@ -62,7 +62,7 @@ fn main() {
     wm.borrow_mut().move_cursor_to_window_in_direction(Direction::Down)
   });
   register_hotkey(&mut listener, &wm, MAIN_MOD, F11, |wm| {
-    wm.borrow_mut().move_cursor_to_window_in_direction(Direction::Left)
+    wm.borrow_mut().move_cursor_to_window_in_direction(Direction::Up)
   });
   register_hotkey(&mut listener, &wm, MAIN_MOD, F12, |wm| {
     wm.borrow_mut().move_cursor_to_window_in_direction(Direction::Right)
