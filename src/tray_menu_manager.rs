@@ -1,48 +1,75 @@
-use tray_icon::menu::{Menu, MenuEvent, MenuItem};
-use tray_icon::{Icon, TrayIconBuilder, TrayIconEvent};
+use crossbeam_channel::{Receiver, Sender, unbounded};
+use std::thread;
+use trayicon::*;
 
 pub(crate) struct TrayMenuManager;
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+enum Event {
+  RightClickTrayIcon,
+  LeftClickTrayIcon,
+  DoubleClickTrayIcon,
+  Exit,
+  DisabledItem,
+}
+
 impl TrayMenuManager {
   pub fn new() -> Self {
-    tray_icon();
-    Self
-  }
-}
-
-// TODO: Allow closing the application from the tray menu
-fn tray_icon() {
-  std::thread::spawn(move || {
     debug!("Creating tray icon...");
-    let icon = Icon::from_path("assets/icon.ico", Some((32, 32))).expect("Failed to load icon");
-    let menu = create_tray_menu();
-    let _tray = TrayIconBuilder::new()
-      .with_menu(Box::new(menu))
-      .with_tooltip("Randolf")
-      .with_icon(icon)
-      .with_menu_on_left_click(true)
-      .build()
-      .expect("Failed to build tray icon");
+    let (tx, rx) = unbounded();
+    let tray_icon = Self::create_tray_icon(tx);
+    Self::initialise(rx, tray_icon);
 
-    loop {
-      if let Ok(event) = MenuEvent::receiver().try_recv() {
-        debug!("Received tray menu event: {:?}", event);
-      }
-      std::thread::sleep(std::time::Duration::from_millis(100));
-      if let Ok(event) = TrayIconEvent::receiver().try_recv() {
-        println!("Received tray icon event: {:?}", event);
-      }
-      std::thread::sleep(std::time::Duration::from_millis(100));
-    }
-  });
-}
-
-fn create_tray_menu() -> Menu {
-  let menu = Menu::new();
-  let exit = MenuItem::new("Exit", true, None);
-  if let Err(err) = menu.append(&exit) {
-    error!("Error during menu creation: {err:?}");
+    Self {}
   }
 
-  menu
+  fn create_tray_icon(tx: Sender<Event>) -> TrayIcon<Event> {
+    let icon_bytes = include_bytes!("../assets/icon.ico");
+
+    TrayIconBuilder::new()
+      .sender(move |e| {
+        let _ = tx.send(*e);
+      })
+      .icon_from_buffer(icon_bytes)
+      .tooltip("Randolf")
+      .on_right_click(Event::RightClickTrayIcon)
+      .on_click(Event::LeftClickTrayIcon)
+      .on_double_click(Event::DoubleClickTrayIcon)
+      .menu(
+        MenuBuilder::new()
+          .with(MenuItem::Item {
+            name: "Randolf".into(),
+            disabled: true,
+            id: Event::DisabledItem,
+            icon: None,
+          })
+          .separator()
+          .item("Exit  👋", Event::Exit),
+      )
+      .build()
+      .expect("Failed to build tray icon")
+  }
+
+  fn initialise(rx: Receiver<Event>, mut tray_icon: TrayIcon<Event>) {
+    thread::spawn(move || {
+      rx.iter().for_each(|m| match m {
+        Event::RightClickTrayIcon => {
+          tray_icon.show_menu().expect("Failed to open tray menu");
+        }
+        Event::DoubleClickTrayIcon => {
+          debug!("Double clicking tray icon is not implemented");
+        }
+        Event::LeftClickTrayIcon => {
+          tray_icon.show_menu().expect("Failed to open tray menu");
+        }
+        Event::Exit => {
+          info!("Exit application...");
+          std::process::exit(0);
+        }
+        e => {
+          debug!("Received unhandled tray menu event: {:?}", e);
+        }
+      })
+    });
+  }
 }

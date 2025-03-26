@@ -68,6 +68,7 @@ impl WindowManager {
     native_api::close(window);
   }
 
+  // TODO: Allow moving cursor to center of desktop if there's an empty monitor/desktop
   pub fn move_cursor_to_window(&mut self, direction: Direction) {
     let windows = native_api::get_all_visible_windows();
     let cursor_position = native_api::get_cursor_position();
@@ -146,7 +147,7 @@ fn near_maximize_window(window: HWND, monitor_info: MONITORINFO, margin: i32) {
   execute_window_resizing(window, sizing);
 }
 
-fn is_near_maximized(placement: &WINDOWPLACEMENT, window: HWND, monitor_info: MONITORINFO) -> bool {
+fn is_near_maximized(placement: &WINDOWPLACEMENT, hwnd: HWND, monitor_info: MONITORINFO) -> bool {
   let work_area = monitor_info.rcWork;
   let expected_x = work_area.left + DEFAULT_MARGIN;
   let expected_y = work_area.top + DEFAULT_MARGIN;
@@ -157,6 +158,40 @@ fn is_near_maximized(placement: &WINDOWPLACEMENT, window: HWND, monitor_info: MO
     && (rc.top - expected_y).abs() <= TOLERANCE_IN_PX
     && (rc.right - rc.left - expected_width).abs() <= TOLERANCE_IN_PX
     && (rc.bottom - rc.top - expected_height).abs() <= TOLERANCE_IN_PX;
+  log_actual_vs_expected(hwnd, expected_x, expected_y, expected_width, expected_height, rc);
+  debug!(
+    "#{:?} {} near-maximized (tolerance: {})",
+    hwnd.0,
+    if result { "is currently" } else { "is currently NOT" },
+    TOLERANCE_IN_PX
+  );
+
+  result
+}
+
+fn is_of_expected_size(hwnd: HWND, placement: &WINDOWPLACEMENT, sizing: &Sizing) -> bool {
+  let rc = placement.rcNormalPosition;
+  let result =
+    rc.left == sizing.x && rc.top == sizing.y && rc.right - rc.left == sizing.width && rc.bottom - rc.top == sizing.height;
+
+  log_actual_vs_expected(hwnd, sizing.x, sizing.y, sizing.width, sizing.height, rc);
+  debug!(
+    "Expected size of window: ({},{})x({},{})",
+    sizing.x, sizing.y, sizing.width, sizing.height
+  );
+  debug!(
+    "Actual size of window: ({},{})x({},{})",
+    rc.left,
+    rc.top,
+    rc.right - rc.left,
+    rc.bottom - rc.top
+  );
+  debug!(
+    "#{:?} {} of expected size (tolerance: {})",
+    hwnd,
+    if result { "is currently" } else { "is currently NOT" },
+    TOLERANCE_IN_PX
+  );
 
   trace!(
     "Expected size of #{:?}: ({},{})x({},{})",

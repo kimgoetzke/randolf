@@ -2,6 +2,7 @@ use crate::point::Point;
 use crate::rect::Rect;
 use crate::utils::truncated_str;
 use crate::window::{Window, WindowId};
+use std::mem::MaybeUninit;
 use std::{mem, ptr};
 use windows::Win32::Foundation::{HWND, LPARAM, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
@@ -11,9 +12,9 @@ use windows::Win32::Graphics::Gdi::{
 use windows::Win32::System::Com::{CLSCTX_ALL, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx};
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
 use windows::Win32::UI::WindowsAndMessaging::{
-  EnumWindows, GetCursorPos, GetForegroundWindow, GetWindowInfo, GetWindowPlacement, GetWindowTextW, PostMessageW,
-  SW_MAXIMIZE, SendMessageW, SetCursorPos, SetForegroundWindow, SetWindowPlacement, ShowWindow, WINDOWINFO, WINDOWPLACEMENT,
-  WM_CLOSE, WM_PAINT, WS_VISIBLE,
+  DispatchMessageA, EnumWindows, GetCursorPos, GetForegroundWindow, GetWindowInfo, GetWindowPlacement, GetWindowTextW, MSG,
+  PM_REMOVE, PeekMessageA, PostMessageW, SW_MAXIMIZE, SendMessageW, SetCursorPos, SetForegroundWindow, SetWindowPlacement,
+  ShowWindow, TranslateMessage, WINDOWINFO, WINDOWPLACEMENT, WM_CLOSE, WM_PAINT, WS_VISIBLE,
 };
 use windows::core::BOOL;
 
@@ -295,6 +296,16 @@ pub fn is_window_on_current_desktop(vdm: &IVirtualDesktopManager, window: &Windo
 
         None
       }
+    }
+  }
+}
+
+pub fn process_windows_messages() {
+  let mut msg = MaybeUninit::<MSG>::uninit();
+  unsafe {
+    if PeekMessageA(msg.as_mut_ptr(), Option::from(HWND(ptr::null_mut())), 0, 0, PM_REMOVE).into() {
+      let _ = TranslateMessage(msg.as_ptr());
+      DispatchMessageA(msg.as_ptr());
     }
   }
 }
