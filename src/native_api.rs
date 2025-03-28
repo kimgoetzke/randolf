@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use crate::utils::{MonitorInfo, Point, Rect, Window, WindowHandle, WindowPlacement};
+use crate::utils::{Monitor, MonitorInfo, Point, Rect, Window, WindowHandle, WindowPlacement};
 use std::mem::MaybeUninit;
 use std::{mem, ptr};
 use windows::Win32::Foundation::{HWND, LPARAM, POINT, RECT, WPARAM};
@@ -206,48 +206,56 @@ fn get_window_info_safe(hwnd: HWND) -> Result<WINDOWINFO, &'static str> {
   }
 }
 
-pub fn get_all_monitors() -> Vec<MONITORINFO> {
-  let mut monitors: Vec<MONITORINFO> = Vec::new();
-  unsafe {
-    if EnumDisplayMonitors(
-      None,
-      Some(ptr::null_mut()),
-      Some(enum_monitors),
-      LPARAM(&mut monitors as *mut _ as isize),
-    )
-    .as_bool()
-    {
-      warn!("Failed to enumerate monitors");
-    }
-  }
-
-  info!("Found [{}] monitors", monitors.len());
-  let mut i: usize = 1;
-  for monitor in &monitors {
-    info!(
-      "{i}. Monitor: size={}, monitor[{}, {}, {}, {}], work[{}, {}, {}, {}]",
-      monitor.cbSize,
-      monitor.rcMonitor.right,
-      monitor.rcMonitor.left,
-      monitor.rcMonitor.top,
-      monitor.rcMonitor.bottom,
-      monitor.rcWork.right,
-      monitor.rcWork.left,
-      monitor.rcWork.top,
-      monitor.rcWork.bottom
-    );
-    i += 1;
-  }
-
-  monitors
-}
-
 extern "system" fn enum_monitors(handle: HMONITOR, _: HDC, _: *mut RECT, data: LPARAM) -> BOOL {
   unsafe {
     let monitors = &mut *(data.0 as *mut Vec<HMONITOR>);
     monitors.push(handle);
     true.into()
   }
+}
+
+unsafe extern "system" fn enum_monitors_proc(monitor: HMONITOR, _dc: HDC, _rect: *mut RECT, data: LPARAM) -> BOOL {
+  let monitors = data.0 as *mut Vec<Monitor>;
+
+  let mut monitor_info = MONITORINFO::default();
+  monitor_info.cbSize = size_of::<MONITORINFO>() as u32;
+
+  if GetMonitorInfoW(monitor.into(), &mut monitor_info).as_bool() {
+    (*monitors).push(Monitor::new(monitor, monitor_info));
+  }
+
+  true.into() // Continue enumeration
+}
+
+pub fn list_monitors() -> Vec<Monitor> {
+  let mut monitors: Vec<Monitor> = Vec::new();
+
+  unsafe {
+    let _ = EnumDisplayMonitors(
+      None,
+      Some(ptr::null_mut()),
+      Some(enum_monitors_proc),
+      LPARAM(&mut monitors as *mut Vec<Monitor> as isize),
+    );
+  }
+
+  for monitor in &monitors {
+    info!(
+      "Monitor: handle={}, work_area[{}, {}, {}, {}], monitor_area[{}, {}, {}, {}], is_primary={}",
+      monitor.handle,
+      monitor.work_area.left,
+      monitor.work_area.top,
+      monitor.work_area.right,
+      monitor.work_area.bottom,
+      monitor.monitor_area.left,
+      monitor.monitor_area.top,
+      monitor.monitor_area.right,
+      monitor.monitor_area.bottom,
+      monitor.is_primary
+    );
+  }
+
+  monitors
 }
 
 pub fn get_monitor_for_window(window: isize) -> isize {

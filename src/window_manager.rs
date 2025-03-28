@@ -52,7 +52,7 @@ impl WindowManager {
     match is_of_expected_size(handle, &placement, &sizing) {
       true => {
         info!("Checking if window can be moved to a different screen");
-        let monitor_info = native_api::get_all_monitors();
+        let monitor_info = native_api::list_monitors();
       }
       false => execute_window_resizing(handle, sizing),
     }
