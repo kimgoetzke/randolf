@@ -8,6 +8,10 @@ pub struct Sizing {
 }
 
 impl Sizing {
+  pub fn new(x: i32, y: i32, width: i32, height: i32) -> Self {
+    Sizing { x, y, width, height }
+  }
+
   pub fn right_half_of_screen(work_area: Rect, margin: i32) -> Self {
     Self {
       x: work_area.left + (work_area.right - work_area.left) / 2 + margin / 2,

@@ -145,11 +145,14 @@ fn is_near_maximized(placement: &WindowPlacement, handle: &WindowHandle, monitor
   let expected_y = work_area.top + DEFAULT_MARGIN;
   let expected_width = work_area.right - work_area.left - DEFAULT_MARGIN * 2;
   let expected_height = work_area.bottom - work_area.top - DEFAULT_MARGIN * 2;
-  let rc = placement.normal_position;
-  let result = (rc.left - expected_x).abs() <= TOLERANCE_IN_PX
-    && (rc.top - expected_y).abs() <= TOLERANCE_IN_PX
-    && (rc.right - rc.left - expected_width).abs() <= TOLERANCE_IN_PX
-    && (rc.bottom - rc.top - expected_height).abs() <= TOLERANCE_IN_PX;
+  let rect = placement.normal_position;
+  let result = (rect.left - expected_x).abs() <= TOLERANCE_IN_PX
+    && (rect.top - expected_y).abs() <= TOLERANCE_IN_PX
+    && (rect.right - rect.left - expected_width).abs() <= TOLERANCE_IN_PX
+    && (rect.bottom - rect.top - expected_height).abs() <= TOLERANCE_IN_PX;
+
+  let sizing = Sizing::new(expected_x, expected_y, expected_width, expected_height);
+  log_actual_vs_expected(handle, &sizing, rect);
   debug!(
     "{} {} near-maximized (tolerance: {})",
     handle,
@@ -161,22 +164,13 @@ fn is_near_maximized(placement: &WindowPlacement, handle: &WindowHandle, monitor
 }
 
 fn is_of_expected_size(handle: WindowHandle, placement: &WindowPlacement, sizing: &Sizing) -> bool {
-  let rc = placement.normal_position;
-  let result =
-    rc.left == sizing.x && rc.top == sizing.y && rc.right - rc.left == sizing.width && rc.bottom - rc.top == sizing.height;
+  let rect = placement.normal_position;
+  let result = rect.left == sizing.x
+    && rect.top == sizing.y
+    && rect.right - rect.left == sizing.width
+    && rect.bottom - rect.top == sizing.height;
 
-  trace!(
-    "Expected size of {}: ({},{})x({},{})",
-    handle, sizing.x, sizing.y, sizing.width, sizing.height
-  );
-  trace!(
-    "Actual size of {}: ({},{})x({},{})",
-    handle,
-    rc.left,
-    rc.top,
-    rc.right - rc.left,
-    rc.bottom - rc.top
-  );
+  log_actual_vs_expected(&handle, sizing, rect);
   debug!(
     "{} {} of expected size (tolerance: {})",
     handle,
@@ -300,4 +294,19 @@ fn find_closest_window_in_direction<'a>(
   }
 
   closest_window
+}
+
+fn log_actual_vs_expected(handle: &WindowHandle, sizing: &Sizing, rc: Rect) {
+  trace!(
+    "Expected size of {}: ({},{})x({},{})",
+    handle, sizing.x, sizing.y, sizing.width, sizing.height
+  );
+  trace!(
+    "Actual size of {}: ({},{})x({},{})",
+    handle,
+    rc.left,
+    rc.top,
+    rc.right - rc.left,
+    rc.bottom - rc.top
+  );
 }
