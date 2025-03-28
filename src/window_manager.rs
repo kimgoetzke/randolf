@@ -37,7 +37,7 @@ impl WindowManager {
   // TODO: Add feature where pressing hotkey to move window to any side twice will move it to the next monitor in that
   //  direction, if available
   pub fn move_window(&mut self, direction: Direction) {
-    let (window, _, monitor_info) = match get_window_and_monitor_info() {
+    let (handle, placement, monitor_info) = match get_window_and_monitor_info() {
       Some(value) => value,
       None => return,
     };
@@ -49,7 +49,13 @@ impl WindowManager {
       Direction::Down => Sizing::bottom_half_of_screen(work_area, DEFAULT_MARGIN),
     };
 
-    execute_window_resizing(window, sizing);
+    match is_of_expected_size(handle, &placement, &sizing) {
+      true => {
+        info!("Checking if window can be moved to a different screen");
+        let monitor_info = native_api::get_all_monitors();
+      }
+      false => execute_window_resizing(handle, sizing),
+    }
   }
 
   pub fn close(&mut self) {
@@ -61,6 +67,7 @@ impl WindowManager {
   }
 
   // TODO: Allow moving cursor to center of desktop if there's an empty monitor/desktop
+  // TODO: Allow cycling through windows that have the same center point
   pub fn move_cursor_to_window(&mut self, direction: Direction) {
     let windows = native_api::get_all_visible_windows();
     let cursor_position = native_api::get_cursor_position();

@@ -222,6 +222,23 @@ pub fn get_all_monitors() -> Vec<MONITORINFO> {
   }
 
   info!("Found [{}] monitors", monitors.len());
+  let mut i: usize = 1;
+  for monitor in &monitors {
+    info!(
+      "{i}. Monitor: size={}, monitor[{}, {}, {}, {}], work[{}, {}, {}, {}]",
+      monitor.cbSize,
+      monitor.rcMonitor.right,
+      monitor.rcMonitor.left,
+      monitor.rcMonitor.top,
+      monitor.rcMonitor.bottom,
+      monitor.rcWork.right,
+      monitor.rcWork.left,
+      monitor.rcWork.top,
+      monitor.rcWork.bottom
+    );
+    i += 1;
+  }
+
   monitors
 }
 
