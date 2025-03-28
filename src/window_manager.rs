@@ -1,21 +1,13 @@
-use crate::direction::Direction;
 use crate::native_api;
-use crate::point::Point;
-use crate::rect::Rect;
-use crate::sizing::Sizing;
-use crate::utils::truncated_str;
-use crate::window::{Window, WindowId};
+use crate::utils::{Direction, MonitorInfo, Point, Rect, Sizing, Window, WindowHandle, WindowPlacement};
 use std::collections::HashMap;
-use windows::Win32::Foundation::{HWND, POINT, RECT};
-use windows::Win32::Graphics::Gdi::MONITORINFO;
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
-use windows::Win32::UI::WindowsAndMessaging::{SW_SHOWNORMAL, WINDOWPLACEMENT, WINDOWPLACEMENT_FLAGS};
 
 const TOLERANCE_IN_PX: i32 = 4;
 const DEFAULT_MARGIN: i32 = 20;
 
 pub(crate) struct WindowManager {
-  known_windows: HashMap<String, WINDOWPLACEMENT>,
+  known_windows: HashMap<String, WindowPlacement>,
   virtual_desktop_manager: IVirtualDesktopManager,
 }
 
@@ -28,16 +20,16 @@ impl WindowManager {
   }
 
   pub fn near_maximise_or_restore(&mut self) {
-    let (window, placement, monitor_info) = match get_window_and_monitor_info() {
+    let (handle, placement, monitor_info) = match get_window_and_monitor_info() {
       Some(value) => value,
       None => return,
     };
 
-    match is_near_maximized(&placement, window, monitor_info) {
-      true => restore_previous_placement(&self.known_windows, window),
+    match is_near_maximized(&placement, &handle, &monitor_info) {
+      true => restore_previous_placement(&self.known_windows, handle),
       false => {
-        add_or_update_previous_placement(&mut self.known_windows, window, placement);
-        near_maximize_window(window, monitor_info, DEFAULT_MARGIN);
+        add_or_update_previous_placement(&mut self.known_windows, handle, placement);
+        near_maximize_window(handle, monitor_info, DEFAULT_MARGIN);
       }
     }
   }
@@ -49,7 +41,7 @@ impl WindowManager {
       Some(value) => value,
       None => return,
     };
-    let work_area = Rect::from(monitor_info.rcWork);
+    let work_area = Rect::from(monitor_info.work_area);
     let sizing = match direction {
       Direction::Left => Sizing::left_half_of_screen(work_area, DEFAULT_MARGIN),
       Direction::Right => Sizing::right_half_of_screen(work_area, DEFAULT_MARGIN),
@@ -85,83 +77,82 @@ impl WindowManager {
     };
     let target_point = Point::from_center_of_rect(&target_window.rect);
     native_api::set_cursor_position(&target_point);
-    native_api::set_foreground_window(WindowId::from(target_window));
+    native_api::set_foreground_window(WindowHandle::from(target_window));
     info!(
       "Moved cursor in direction [{:?}] to {} \"{}\" at {target_point}",
       direction,
-      target_window.id,
-      truncated_str(&target_window.title)
+      target_window.handle,
+      target_window.title_trunc()
     );
   }
 }
 
-fn get_window_and_monitor_info() -> Option<(HWND, WINDOWPLACEMENT, MONITORINFO)> {
-  let window = native_api::get_foreground_window_as_hwnd()?;
+fn get_window_and_monitor_info() -> Option<(WindowHandle, WindowPlacement, MonitorInfo)> {
+  let window = native_api::get_foreground_window()?;
   let placement = native_api::get_window_placement(window)?;
   let monitor_info = native_api::get_monitor_info(window)?;
   Some((window, placement, monitor_info))
 }
 
-fn restore_previous_placement(known_windows: &HashMap<String, WINDOWPLACEMENT>, window: HWND) {
-  let window_id = format!("{:?}", window);
+fn restore_previous_placement(known_windows: &HashMap<String, WindowPlacement>, handle: WindowHandle) {
+  let window_id = format!("{:?}", handle.hwnd);
   if let Some(previous_placement) = known_windows.get(&window_id) {
-    info!("Restoring previous placement for #{}", window_id);
-    native_api::restore_window_placement(window, previous_placement);
+    info!("Restoring previous placement for {}", window_id);
+    native_api::restore_window_placement(handle, previous_placement.clone());
   } else {
-    warn!("No previous placement found for #{}", window_id);
+    warn!("No previous placement found for {}", window_id);
   }
 }
 
 fn add_or_update_previous_placement(
-  known_windows: &mut HashMap<String, WINDOWPLACEMENT>,
-  window: HWND,
-  placement: WINDOWPLACEMENT,
+  known_windows: &mut HashMap<String, WindowPlacement>,
+  handle: WindowHandle,
+  placement: WindowPlacement,
 ) {
-  let window_id = format!("{:?}", window);
+  let window_id = format!("{:?}", handle.hwnd);
   if known_windows.contains_key(&window_id) {
     known_windows.remove(&window_id);
     trace!(
-      "Removing previous placement for window #{} so that a new value can be added",
-      window_id
+      "Removing previous placement for window {} so that a new value can be added",
+      handle
     );
   }
 
   known_windows.insert(window_id.clone(), placement);
-  trace!("Adding/updating previous placement for window #{}", window_id);
+  trace!("Adding/updating previous placement for window {}", handle);
 }
 
-fn near_maximize_window(window: HWND, monitor_info: MONITORINFO, margin: i32) {
-  info!("Near-maximizing #{:?}", window.0);
+fn near_maximize_window(handle: WindowHandle, monitor_info: MonitorInfo, margin: i32) {
+  info!("Near-maximizing {}", handle);
 
   // Maximize first to get the animation effect
-  native_api::maximise_window(window);
+  native_api::maximise_window(handle);
 
   // Resize the window to the expected size
-  let work_area = monitor_info.rcWork;
+  let work_area = monitor_info.work_area;
   let sizing = Sizing {
     x: work_area.left + margin,
     y: work_area.top + margin,
     width: work_area.right - work_area.left - margin * 2,
     height: work_area.bottom - work_area.top - margin * 2,
   };
-  execute_window_resizing(window, sizing);
+  execute_window_resizing(handle, sizing);
 }
 
-fn is_near_maximized(placement: &WINDOWPLACEMENT, hwnd: HWND, monitor_info: MONITORINFO) -> bool {
-  let work_area = monitor_info.rcWork;
+fn is_near_maximized(placement: &WindowPlacement, handle: &WindowHandle, monitor_info: &MonitorInfo) -> bool {
+  let work_area = monitor_info.work_area;
   let expected_x = work_area.left + DEFAULT_MARGIN;
   let expected_y = work_area.top + DEFAULT_MARGIN;
   let expected_width = work_area.right - work_area.left - DEFAULT_MARGIN * 2;
   let expected_height = work_area.bottom - work_area.top - DEFAULT_MARGIN * 2;
-  let rc = placement.rcNormalPosition;
+  let rc = placement.normal_position;
   let result = (rc.left - expected_x).abs() <= TOLERANCE_IN_PX
     && (rc.top - expected_y).abs() <= TOLERANCE_IN_PX
     && (rc.right - rc.left - expected_width).abs() <= TOLERANCE_IN_PX
     && (rc.bottom - rc.top - expected_height).abs() <= TOLERANCE_IN_PX;
-  log_actual_vs_expected(hwnd, expected_x, expected_y, expected_width, expected_height, rc);
   debug!(
-    "#{:?} {} near-maximized (tolerance: {})",
-    hwnd.0,
+    "{} {} near-maximized (tolerance: {})",
+    handle,
     if result { "is currently" } else { "is currently NOT" },
     TOLERANCE_IN_PX
   );
@@ -169,45 +160,26 @@ fn is_near_maximized(placement: &WINDOWPLACEMENT, hwnd: HWND, monitor_info: MONI
   result
 }
 
-fn is_of_expected_size(hwnd: HWND, placement: &WINDOWPLACEMENT, sizing: &Sizing) -> bool {
-  let rc = placement.rcNormalPosition;
+fn is_of_expected_size(handle: WindowHandle, placement: &WindowPlacement, sizing: &Sizing) -> bool {
+  let rc = placement.normal_position;
   let result =
     rc.left == sizing.x && rc.top == sizing.y && rc.right - rc.left == sizing.width && rc.bottom - rc.top == sizing.height;
 
-  log_actual_vs_expected(hwnd, sizing.x, sizing.y, sizing.width, sizing.height, rc);
-  debug!(
-    "Expected size of window: ({},{})x({},{})",
-    sizing.x, sizing.y, sizing.width, sizing.height
+  trace!(
+    "Expected size of {}: ({},{})x({},{})",
+    handle, sizing.x, sizing.y, sizing.width, sizing.height
   );
-  debug!(
-    "Actual size of window: ({},{})x({},{})",
+  trace!(
+    "Actual size of {}: ({},{})x({},{})",
+    handle,
     rc.left,
     rc.top,
     rc.right - rc.left,
     rc.bottom - rc.top
   );
   debug!(
-    "#{:?} {} of expected size (tolerance: {})",
-    hwnd,
-    if result { "is currently" } else { "is currently NOT" },
-    TOLERANCE_IN_PX
-  );
-
-  trace!(
-    "Expected size of #{:?}: ({},{})x({},{})",
-    window.0, expected_x, expected_y, expected_width, expected_height
-  );
-  trace!(
-    "Actual size of #{:?}: ({},{})x({},{})",
-    window.0,
-    rc.left,
-    rc.top,
-    rc.right - rc.left,
-    rc.bottom - rc.top
-  );
-  debug!(
-    "#{:?} {} near-maximized (tolerance: {})",
-    window.0,
+    "{} {} of expected size (tolerance: {})",
+    handle,
     if result { "is currently" } else { "is currently NOT" },
     TOLERANCE_IN_PX
   );
@@ -215,21 +187,9 @@ fn is_of_expected_size(hwnd: HWND, placement: &WINDOWPLACEMENT, sizing: &Sizing)
   result
 }
 
-fn execute_window_resizing(window: HWND, sizing: Sizing) {
-  let placement = WINDOWPLACEMENT {
-    length: size_of::<WINDOWPLACEMENT>() as u32,
-    flags: WINDOWPLACEMENT_FLAGS(0),
-    showCmd: SW_SHOWNORMAL.0 as u32,
-    ptMaxPosition: POINT { x: 0, y: 0 },
-    ptMinPosition: POINT { x: -1, y: -1 },
-    rcNormalPosition: RECT {
-      left: sizing.x,
-      top: sizing.y,
-      right: sizing.x + sizing.width,
-      bottom: sizing.y + sizing.height,
-    },
-  };
-  native_api::update_window_placement_and_force_repaint(window, &placement);
+fn execute_window_resizing(handle: WindowHandle, sizing: Sizing) {
+  let placement = WindowPlacement::new_from_sizing(sizing);
+  native_api::update_window_placement_and_force_repaint(handle, placement);
 }
 
 /// Returns the window under the cursor, if any. If there are multiple windows under the cursor, the foreground window
@@ -249,12 +209,12 @@ fn find_window_at_cursor<'a>(point: &Point, windows: &'a [Window]) -> Option<&'a
     if let Some(foreground_window) = native_api::get_foreground_window() {
       if let Some(window_info) = windows_under_cursor
         .iter()
-        .find(|window_info| window_info.id == foreground_window)
+        .find(|window_info| window_info.handle == foreground_window)
       {
         debug!(
           "Cursor is currently over foreground window {} \"{}\" at {point}",
-          window_info.id,
-          truncated_str(&window_info.title)
+          window_info.handle,
+          window_info.title_trunc()
         );
         return Some(window_info);
       }
@@ -275,8 +235,8 @@ fn find_window_at_cursor<'a>(point: &Point, windows: &'a [Window]) -> Option<&'a
     let closest_window = closest_window.expect("Failed to get the closest window");
     debug!(
       "Cursor is currently over window {} \"{}\" at {point} with a distance of {}",
-      closest_window.id,
-      truncated_str(&closest_window.title),
+      closest_window.handle,
+      closest_window.title_trunc(),
       min_distance.trunc()
     );
     return Some(closest_window);
@@ -328,7 +288,7 @@ fn find_closest_window_in_direction<'a>(
     let score = distance + angle;
     trace!(
       "Score for {} is [{}] (i.e. normalised_angle={}, distance={})",
-      window.id,
+      window.handle,
       score.trunc(),
       angle,
       distance,

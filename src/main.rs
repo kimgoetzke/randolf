@@ -1,20 +1,13 @@
-mod command;
-mod direction;
 mod hotkey_manager;
 mod native_api;
-mod point;
-mod rect;
-mod sizing;
 mod tray_menu_manager;
 mod utils;
-mod window;
 mod window_manager;
 
 #[macro_use]
 extern crate log;
 extern crate simplelog;
 
-use crate::command::Command;
 use crate::hotkey_manager::HotkeyManager;
 use crate::tray_menu_manager::TrayMenuManager;
 use crate::window_manager::WindowManager;
@@ -22,6 +15,7 @@ use simplelog::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
+use utils::Command;
 
 const EVENT_LOOP_SLEEP_DURATION: Duration = Duration::from_millis(20);
 const HEART_BEAT_DURATION: Duration = Duration::from_secs(5);

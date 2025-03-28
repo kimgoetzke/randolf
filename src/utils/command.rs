@@ -1,4 +1,4 @@
-use crate::direction::Direction;
+use crate::utils::Direction;
 use std::fmt::Display;
 
 #[derive(Debug)]

@@ -1,60 +1,57 @@
-use crate::point::Point;
-use crate::rect::Rect;
+use crate::utils::{Point, Rect};
 use std::fmt::Formatter;
 use windows::Win32::Foundation::HWND;
 
+const CHAR_LIMIT: usize = 20;
+
 #[derive(Eq, Hash, PartialEq, Copy, Clone, Debug)]
-pub(crate) struct WindowId {
+pub struct WindowHandle {
   pub hwnd: isize,
 }
 
-impl WindowId {
-  pub fn new(hwnd: isize) -> Self {
-    Self { hwnd }
-  }
-
+impl WindowHandle {
   pub fn as_hwnd(&self) -> HWND {
     HWND(self.hwnd as *mut core::ffi::c_void)
   }
 }
 
-impl From<HWND> for WindowId {
+impl From<HWND> for WindowHandle {
   fn from(value: HWND) -> Self {
     Self { hwnd: value.0 as isize }
   }
 }
 
-impl From<Window> for WindowId {
+impl From<Window> for WindowHandle {
   fn from(value: Window) -> Self {
-    Self { hwnd: value.id.hwnd }
+    Self { hwnd: value.handle.hwnd }
   }
 }
 
-impl From<&Window> for WindowId {
+impl From<&Window> for WindowHandle {
   fn from(value: &Window) -> Self {
-    Self { hwnd: value.id.hwnd }
+    Self { hwnd: value.handle.hwnd }
   }
 }
 
 #[allow(clippy::from_over_into)]
-impl Into<HWND> for WindowId {
+impl Into<HWND> for WindowHandle {
   fn into(self) -> HWND {
     HWND(self.hwnd as *mut core::ffi::c_void)
   }
 }
 
-impl std::fmt::Display for WindowId {
+impl std::fmt::Display for WindowHandle {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     write!(f, "#{}", self.hwnd)
   }
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct Window {
+pub struct Window {
+  pub handle: WindowHandle,
   pub title: String,
   pub rect: Rect,
   pub center: Point,
-  pub id: WindowId,
 }
 
 impl Window {
@@ -63,13 +60,24 @@ impl Window {
       title,
       center: Point::from_center_of_rect(&rect),
       rect,
-      id: WindowId::from(hwnd),
+      handle: WindowHandle::from(hwnd),
+    }
+  }
+
+  pub fn title_trunc(&self) -> String {
+    let char_count = self.title.chars().count();
+    if char_count <= CHAR_LIMIT + CHAR_LIMIT {
+      self.title.to_string()
+    } else {
+      let prefix: String = self.title.chars().take(CHAR_LIMIT).collect();
+      let suffix: String = self.title.chars().skip(char_count - CHAR_LIMIT).collect();
+      format!("{}...{}", prefix, suffix)
     }
   }
 }
 
 impl PartialEq for Window {
   fn eq(&self, other: &Self) -> bool {
-    self.id == other.id
+    self.handle == other.handle
   }
 }

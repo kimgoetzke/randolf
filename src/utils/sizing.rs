@@ -1,10 +1,10 @@
-use crate::rect::Rect;
+use crate::utils::Rect;
 
 pub struct Sizing {
-  pub(crate) x: i32,
-  pub(crate) y: i32,
-  pub(crate) width: i32,
-  pub(crate) height: i32,
+  pub x: i32,
+  pub y: i32,
+  pub width: i32,
+  pub height: i32,
 }
 
 impl Sizing {

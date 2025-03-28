@@ -1,5 +1,5 @@
 use crate::Command;
-use crate::direction::Direction;
+use crate::utils::direction::Direction;
 use crossbeam_channel::{Receiver, unbounded};
 use std::thread;
 use win_hotkeys::{InterruptHandle, VKey};
