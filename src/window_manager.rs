@@ -1,22 +1,29 @@
+use crate::configuration_manager::{ConfigurationProvider, WINDOW_MARGIN};
 use crate::native_api;
 use crate::utils::{Direction, Monitor, MonitorInfo, Point, Rect, Sizing, Window, WindowHandle, WindowPlacement};
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
 
 const TOLERANCE_IN_PX: i32 = 2;
-const DEFAULT_MARGIN: i32 = 20;
 
 pub(crate) struct WindowManager {
+  configuration_provider: Arc<Mutex<ConfigurationProvider>>,
   known_windows: HashMap<String, WindowPlacement>,
   virtual_desktop_manager: IVirtualDesktopManager,
 }
 
 impl WindowManager {
-  pub fn new() -> Self {
+  pub fn new(configuration_provider: Arc<Mutex<ConfigurationProvider>>) -> Self {
     Self {
       known_windows: HashMap::new(),
       virtual_desktop_manager: native_api::get_virtual_desktop_manager().expect("Failed to get the virtual desktop manager"),
+      configuration_provider,
     }
+  }
+
+  pub fn margin(&self) -> i32 {
+    self.configuration_provider.lock().unwrap().get_i32(WINDOW_MARGIN)
   }
 
   pub fn near_maximise_or_restore(&mut self) {
@@ -25,13 +32,37 @@ impl WindowManager {
       None => return,
     };
 
-    match is_near_maximized(&placement, &handle, &monitor_info) {
+    match self.is_near_maximized(&placement, &handle, &monitor_info) {
       true => restore_previous_placement(&self.known_windows, handle),
       false => {
         add_or_update_previous_placement(&mut self.known_windows, handle, placement);
-        near_maximize_window(handle, monitor_info);
+        near_maximize_window(handle, monitor_info, self.margin());
       }
     }
+  }
+
+  fn is_near_maximized(&self, placement: &WindowPlacement, handle: &WindowHandle, monitor_info: &MonitorInfo) -> bool {
+    let work_area = monitor_info.work_area;
+    let expected_x = work_area.left + self.margin();
+    let expected_y = work_area.top + self.margin();
+    let expected_width = work_area.right - work_area.left - self.margin() * 2;
+    let expected_height = work_area.bottom - work_area.top - self.margin() * 2;
+    let rect = placement.normal_position;
+    let result = (rect.left - expected_x).abs() <= TOLERANCE_IN_PX
+      && (rect.top - expected_y).abs() <= TOLERANCE_IN_PX
+      && (rect.right - rect.left - expected_width).abs() <= TOLERANCE_IN_PX
+      && (rect.bottom - rect.top - expected_height).abs() <= TOLERANCE_IN_PX;
+
+    let sizing = Sizing::new(expected_x, expected_y, expected_width, expected_height);
+    log_actual_vs_expected(handle, &sizing, rect);
+    debug!(
+      "{} {} near-maximized (tolerance: {})",
+      handle,
+      if result { "is currently" } else { "is currently NOT" },
+      TOLERANCE_IN_PX
+    );
+
+    result
   }
 
   pub fn move_window(&mut self, direction: Direction) {
@@ -40,10 +71,10 @@ impl WindowManager {
       None => return,
     };
     let sizing = match direction {
-      Direction::Left => Sizing::left_half_of_screen(monitor_info.work_area, DEFAULT_MARGIN),
-      Direction::Right => Sizing::right_half_of_screen(monitor_info.work_area, DEFAULT_MARGIN),
-      Direction::Up => Sizing::top_half_of_screen(monitor_info.work_area, DEFAULT_MARGIN),
-      Direction::Down => Sizing::bottom_half_of_screen(monitor_info.work_area, DEFAULT_MARGIN),
+      Direction::Left => Sizing::left_half_of_screen(monitor_info.work_area, self.margin()),
+      Direction::Right => Sizing::right_half_of_screen(monitor_info.work_area, self.margin()),
+      Direction::Up => Sizing::top_half_of_screen(monitor_info.work_area, self.margin()),
+      Direction::Down => Sizing::bottom_half_of_screen(monitor_info.work_area, self.margin()),
     };
 
     match is_of_expected_size(handle, &placement, &sizing) {
@@ -54,7 +85,7 @@ impl WindowManager {
         if let Some(target_monitor) = target_monitor {
           debug!("Moving window to [{}]", target_monitor);
           native_api::set_window_position(handle, target_monitor.work_area);
-          near_maximize_window(handle, MonitorInfo::from(target_monitor));
+          near_maximize_window(handle, MonitorInfo::from(target_monitor), self.margin());
           native_api::set_cursor_position(&target_monitor.center);
         } else {
           debug!("No monitor found in [{:?}] direction, did not move window", direction);
@@ -141,7 +172,7 @@ fn add_or_update_previous_placement(
   trace!("Adding/updating previous placement for window {}", handle);
 }
 
-fn near_maximize_window(handle: WindowHandle, monitor_info: MonitorInfo) {
+fn near_maximize_window(handle: WindowHandle, monitor_info: MonitorInfo, margin: i32) {
   info!("Near-maximizing {}", handle);
 
   // Maximize first to get the animation effect
@@ -149,32 +180,8 @@ fn near_maximize_window(handle: WindowHandle, monitor_info: MonitorInfo) {
 
   // Resize the window to the expected size
   let work_area = monitor_info.work_area;
-  let sizing = Sizing::near_maximise(work_area, DEFAULT_MARGIN);
+  let sizing = Sizing::near_maximise(work_area, margin);
   execute_window_resizing(handle, sizing);
-}
-
-fn is_near_maximized(placement: &WindowPlacement, handle: &WindowHandle, monitor_info: &MonitorInfo) -> bool {
-  let work_area = monitor_info.work_area;
-  let expected_x = work_area.left + DEFAULT_MARGIN;
-  let expected_y = work_area.top + DEFAULT_MARGIN;
-  let expected_width = work_area.right - work_area.left - DEFAULT_MARGIN * 2;
-  let expected_height = work_area.bottom - work_area.top - DEFAULT_MARGIN * 2;
-  let rect = placement.normal_position;
-  let result = (rect.left - expected_x).abs() <= TOLERANCE_IN_PX
-    && (rect.top - expected_y).abs() <= TOLERANCE_IN_PX
-    && (rect.right - rect.left - expected_width).abs() <= TOLERANCE_IN_PX
-    && (rect.bottom - rect.top - expected_height).abs() <= TOLERANCE_IN_PX;
-
-  let sizing = Sizing::new(expected_x, expected_y, expected_width, expected_height);
-  log_actual_vs_expected(handle, &sizing, rect);
-  debug!(
-    "{} {} near-maximized (tolerance: {})",
-    handle,
-    if result { "is currently" } else { "is currently NOT" },
-    TOLERANCE_IN_PX
-  );
-
-  result
 }
 
 fn is_of_expected_size(handle: WindowHandle, placement: &WindowPlacement, sizing: &Sizing) -> bool {

@@ -1,7 +1,7 @@
 [package]
 name = "randolf"
 description = "A partial window manager for Windows 11"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 
 [dependencies]
@@ -11,6 +11,8 @@ log = "0.4.26"
 trayicon = "0.2.0"
 simplelog = "0.12.2"
 crossbeam-channel = "0.5.14"
+serde = { version = "1.0.219", features = ["derive"] }
+toml = "0.8.20"
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"

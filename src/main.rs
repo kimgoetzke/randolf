@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod configuration_manager;
 mod hotkey_manager;
 mod log_manager;
 mod native_api;
@@ -11,12 +12,14 @@ mod window_manager;
 extern crate log;
 extern crate simplelog;
 
+use crate::configuration_manager::ConfigurationProvider;
 use crate::hotkey_manager::HotkeyManager;
 use crate::log_manager::LogManager;
 use crate::tray_menu_manager::TrayMenuManager;
 use crate::window_manager::WindowManager;
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use utils::Command;
 
@@ -24,11 +27,16 @@ const EVENT_LOOP_SLEEP_DURATION: Duration = Duration::from_millis(20);
 const HEART_BEAT_DURATION: Duration = Duration::from_secs(5);
 
 fn main() {
-  LogManager::new();
-  TrayMenuManager::new();
+  let configuration_manager = Arc::new(Mutex::new(ConfigurationProvider::new()));
+  LogManager::new_initialised(configuration_manager.clone());
+  TrayMenuManager::new_initialised(configuration_manager.clone());
+  configuration_manager
+    .lock()
+    .expect("Failed to read configuration provider")
+    .log_current_config();
 
   // Create window manager and register hotkeys
-  let wm = Rc::new(RefCell::new(WindowManager::new()));
+  let wm = Rc::new(RefCell::new(WindowManager::new(configuration_manager.clone())));
   let hkm = HotkeyManager::default();
   let (hotkey_receiver, _) = hkm.initialise();
 
@@ -53,6 +61,7 @@ fn main() {
 fn update_heart_beat(last_heartbeat: Instant) -> Instant {
   let now = Instant::now();
   if now.duration_since(last_heartbeat) >= HEART_BEAT_DURATION {
+    #[cfg(debug_assertions)]
     debug!("Still listening for events...");
     return now;
   }
