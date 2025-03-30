@@ -3,7 +3,8 @@ use std::mem::MaybeUninit;
 use std::{mem, ptr};
 use windows::Win32::Foundation::{HWND, LPARAM, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-  EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
+  EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint,
+  MonitorFromWindow,
 };
 use windows::Win32::System::Com::{CLSCTX_ALL, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx};
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
@@ -261,6 +262,10 @@ pub fn list_monitors() -> Monitors {
 
 pub fn get_monitor_for_window_handle(handle: WindowHandle) -> isize {
   unsafe { MonitorFromWindow(handle.as_hwnd(), MONITOR_DEFAULTTONEAREST) }.0 as isize
+}
+
+pub fn get_monitor_for_point(point: &Point) -> isize {
+  unsafe { MonitorFromPoint(point.into(), MONITOR_DEFAULTTONEAREST) }.0 as isize
 }
 
 pub fn get_virtual_desktop_manager() -> Option<IVirtualDesktopManager> {

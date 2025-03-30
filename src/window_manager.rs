@@ -1,5 +1,5 @@
 use crate::native_api;
-use crate::utils::{Direction, MonitorInfo, Point, Rect, Sizing, Window, WindowHandle, WindowPlacement};
+use crate::utils::{Direction, Monitor, MonitorInfo, Point, Rect, Sizing, Window, WindowHandle, WindowPlacement};
 use std::collections::HashMap;
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
 
@@ -76,7 +76,6 @@ impl WindowManager {
     native_api::close(window);
   }
 
-  // TODO: Allow moving cursor to center of desktop if there's an empty monitor/desktop
   // TODO: Allow cycling through windows that have the same center point
   pub fn move_cursor_to_window(&mut self, direction: Direction) {
     let windows = native_api::get_all_visible_windows();
@@ -89,18 +88,19 @@ impl WindowManager {
     let Some(target_window) =
       find_closest_window_in_direction(&target_point, direction, &windows, &self.virtual_desktop_manager)
     else {
-      info!("No window found in [{:?}] direction, did not move cursor", direction);
+      trace!("No window found in [{:?}] direction, attempting to find monitor", direction);
+      let all_monitors = native_api::list_monitors();
+      let this_monitor = native_api::get_monitor_for_point(&cursor_position);
+      match all_monitors.get(direction, this_monitor) {
+        Some(target_monitor) => move_focus_to_monitor(direction, target_monitor),
+        None => {
+          debug!("No monitor found in [{:?}] direction, did not move cursor", direction);
+        }
+      }
       return;
     };
     let target_point = Point::from_center_of_rect(&target_window.rect);
-    native_api::set_cursor_position(&target_point);
-    native_api::set_foreground_window(WindowHandle::from(target_window));
-    info!(
-      "Moved cursor in direction [{:?}] to {} \"{}\" at {target_point}",
-      direction,
-      target_window.handle,
-      target_window.title_trunc()
-    );
+    move_focus_to_window(direction, target_window, &target_point);
   }
 }
 
@@ -320,5 +320,24 @@ fn log_actual_vs_expected(handle: &WindowHandle, sizing: &Sizing, rc: Rect) {
     rc.top,
     rc.right - rc.left,
     rc.bottom - rc.top
+  );
+}
+
+fn move_focus_to_window(direction: Direction, target_window: &Window, target_point: &Point) {
+  native_api::set_cursor_position(target_point);
+  native_api::set_foreground_window(WindowHandle::from(target_window));
+  info!(
+    "Moved cursor in direction [{:?}] to {} \"{}\" at {target_point}",
+    direction,
+    target_window.handle,
+    target_window.title_trunc()
+  );
+}
+
+fn move_focus_to_monitor(direction: Direction, monitor: &Monitor) {
+  native_api::set_cursor_position(&monitor.center);
+  info!(
+    "Moved cursor in direction [{:?}] to {} on [{}]",
+    direction, monitor.center, monitor
   );
 }

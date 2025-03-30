@@ -1,7 +1,8 @@
 use crate::utils::{Rect, Sizing};
 use std::fmt::Formatter;
+use windows::Win32::Foundation::POINT;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Point {
   x: i32,
   y: i32,
@@ -38,6 +39,13 @@ impl Point {
 
   pub fn y(&self) -> i32 {
     self.y
+  }
+}
+
+#[allow(clippy::from_over_into)]
+impl Into<POINT> for &Point {
+  fn into(self) -> POINT {
+    POINT { x: self.x, y: self.y }
   }
 }
 
