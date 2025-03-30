@@ -7,7 +7,6 @@ pub enum Command {
   NearMaximiseWindow,
   MoveWindow(Direction),
   MoveCursorToWindowInDirection(Direction),
-  Exit,
 }
 
 impl Display for Command {
@@ -19,7 +18,6 @@ impl Display for Command {
       Command::MoveCursorToWindowInDirection(direction) => {
         write!(f, "Move cursor to window in direction [{:?}]", direction)
       }
-      Command::Exit => write!(f, "Exit"),
     }
   }
 }

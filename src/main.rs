@@ -30,7 +30,7 @@ fn main() {
   // Create window manager and register hotkeys
   let wm = Rc::new(RefCell::new(WindowManager::new()));
   let hkm = HotkeyManager::default();
-  let (hotkey_receiver, hkm_interrupt_handle) = hkm.initialise();
+  let (hotkey_receiver, _) = hkm.initialise();
 
   // Run event loop
   let mut last_heartbeat = Instant::now();
@@ -43,7 +43,6 @@ fn main() {
         Command::MoveWindow(direction) => wm.borrow_mut().move_window(direction),
         Command::MoveCursorToWindowInDirection(direction) => wm.borrow_mut().move_cursor_to_window(direction),
         Command::CloseWindow => wm.borrow_mut().close(),
-        Command::Exit => hkm_interrupt_handle.interrupt(),
       }
     }
     last_heartbeat = update_heart_beat(last_heartbeat);
