@@ -3,7 +3,7 @@ use crate::utils::{Direction, MonitorInfo, Point, Rect, Sizing, Window, WindowHa
 use std::collections::HashMap;
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
 
-const TOLERANCE_IN_PX: i32 = 4;
+const TOLERANCE_IN_PX: i32 = 2;
 const DEFAULT_MARGIN: i32 = 20;
 
 pub(crate) struct WindowManager {
@@ -29,32 +29,42 @@ impl WindowManager {
       true => restore_previous_placement(&self.known_windows, handle),
       false => {
         add_or_update_previous_placement(&mut self.known_windows, handle, placement);
-        near_maximize_window(handle, monitor_info, DEFAULT_MARGIN);
+        near_maximize_window(handle, monitor_info);
       }
     }
   }
 
-  // TODO: Add feature where pressing hotkey to move window to any side twice will move it to the next monitor in that
-  //  direction, if available
   pub fn move_window(&mut self, direction: Direction) {
     let (handle, placement, monitor_info) = match get_window_and_monitor_info() {
       Some(value) => value,
       None => return,
     };
-    let work_area = Rect::from(monitor_info.work_area);
     let sizing = match direction {
-      Direction::Left => Sizing::left_half_of_screen(work_area, DEFAULT_MARGIN),
-      Direction::Right => Sizing::right_half_of_screen(work_area, DEFAULT_MARGIN),
-      Direction::Up => Sizing::top_half_of_screen(work_area, DEFAULT_MARGIN),
-      Direction::Down => Sizing::bottom_half_of_screen(work_area, DEFAULT_MARGIN),
+      Direction::Left => Sizing::left_half_of_screen(monitor_info.work_area, DEFAULT_MARGIN),
+      Direction::Right => Sizing::right_half_of_screen(monitor_info.work_area, DEFAULT_MARGIN),
+      Direction::Up => Sizing::top_half_of_screen(monitor_info.work_area, DEFAULT_MARGIN),
+      Direction::Down => Sizing::bottom_half_of_screen(monitor_info.work_area, DEFAULT_MARGIN),
     };
 
     match is_of_expected_size(handle, &placement, &sizing) {
       true => {
-        info!("Checking if window can be moved to a different screen");
-        let monitor_info = native_api::list_monitors();
+        let all_monitors = native_api::list_monitors();
+        let this_monitor = native_api::get_monitor_for_window_handle(handle);
+        let target_monitor = all_monitors.get(direction, this_monitor);
+        if let Some(target_monitor) = target_monitor {
+          debug!("Moving window to [{}]", target_monitor);
+          native_api::set_window_position(handle, target_monitor.work_area);
+          near_maximize_window(handle, MonitorInfo::from(target_monitor));
+          native_api::set_cursor_position(&target_monitor.center);
+        } else {
+          debug!("No monitor found in [{:?}] direction, did not move window", direction);
+        }
       }
-      false => execute_window_resizing(handle, sizing),
+      false => {
+        let cursor_target_point = Point::from_center_of_sizing(&sizing);
+        execute_window_resizing(handle, sizing);
+        native_api::set_cursor_position(&cursor_target_point);
+      }
     }
   }
 
@@ -129,7 +139,7 @@ fn add_or_update_previous_placement(
   trace!("Adding/updating previous placement for window {}", handle);
 }
 
-fn near_maximize_window(handle: WindowHandle, monitor_info: MonitorInfo, margin: i32) {
+fn near_maximize_window(handle: WindowHandle, monitor_info: MonitorInfo) {
   info!("Near-maximizing {}", handle);
 
   // Maximize first to get the animation effect
@@ -137,12 +147,7 @@ fn near_maximize_window(handle: WindowHandle, monitor_info: MonitorInfo, margin:
 
   // Resize the window to the expected size
   let work_area = monitor_info.work_area;
-  let sizing = Sizing {
-    x: work_area.left + margin,
-    y: work_area.top + margin,
-    width: work_area.right - work_area.left - margin * 2,
-    height: work_area.bottom - work_area.top - margin * 2,
-  };
+  let sizing = Sizing::near_maximise(work_area, DEFAULT_MARGIN);
   execute_window_resizing(handle, sizing);
 }
 

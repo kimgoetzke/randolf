@@ -1,18 +1,17 @@
-#![allow(dead_code)]
-use crate::utils::{Monitor, MonitorInfo, Point, Rect, Window, WindowHandle, WindowPlacement};
+use crate::utils::{Monitor, MonitorInfo, Monitors, Point, Rect, Window, WindowHandle, WindowPlacement};
 use std::mem::MaybeUninit;
 use std::{mem, ptr};
 use windows::Win32::Foundation::{HWND, LPARAM, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-  EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint,
-  MonitorFromWindow,
+  EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
 };
 use windows::Win32::System::Com::{CLSCTX_ALL, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx};
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
 use windows::Win32::UI::WindowsAndMessaging::{
   DispatchMessageA, EnumWindows, GetCursorPos, GetForegroundWindow, GetWindowInfo, GetWindowPlacement, GetWindowTextW, MSG,
-  PM_REMOVE, PeekMessageA, PostMessageW, SW_MAXIMIZE, SendMessageW, SetCursorPos, SetForegroundWindow, SetWindowPlacement,
-  ShowWindow, TranslateMessage, WINDOWINFO, WINDOWPLACEMENT, WM_CLOSE, WM_PAINT, WS_VISIBLE,
+  PM_REMOVE, PeekMessageA, PostMessageW, SW_MAXIMIZE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOZORDER, SendMessageW,
+  SetCursorPos, SetForegroundWindow, SetWindowPlacement, SetWindowPos, ShowWindow, TranslateMessage, WINDOWINFO,
+  WINDOWPLACEMENT, WM_CLOSE, WM_PAINT, WS_VISIBLE,
 };
 use windows::core::BOOL;
 
@@ -45,7 +44,7 @@ pub fn get_monitor_info(handle: WindowHandle) -> Option<MonitorInfo> {
   unsafe {
     let monitor = MonitorFromWindow(handle.as_hwnd(), MONITOR_DEFAULTTONEAREST);
     if GetMonitorInfoW(monitor, &mut monitor_info).0 == 0 {
-      warn!("Failed to get monitor info for monitor that contains window {}", handle);
+      warn!("Failed to get monitor info for monitor that contains window {handle}");
       return None;
     }
   }
@@ -57,7 +56,7 @@ pub fn update_window_placement_and_force_repaint(handle: WindowHandle, placement
   let placement = placement.into();
   unsafe {
     if let Err(err) = SetWindowPlacement(handle.as_hwnd(), placement) {
-      warn!("Failed to set window placement for {} because: {}", handle, err.message());
+      warn!("Failed to set window placement for {handle} because: {}", err.message());
     }
 
     // Force a repaint
@@ -68,7 +67,7 @@ pub fn update_window_placement_and_force_repaint(handle: WindowHandle, placement
 pub fn maximise_window(handle: WindowHandle) {
   unsafe {
     if !ShowWindow(handle.as_hwnd(), SW_MAXIMIZE).as_bool() {
-      warn!("Failed to maximise window {}", handle);
+      warn!("Failed to maximise window {handle}");
     }
   }
 }
@@ -79,7 +78,7 @@ pub fn get_window_placement(handle: WindowHandle) -> Option<WindowPlacement> {
 
   unsafe {
     if GetWindowPlacement(handle.as_hwnd(), &mut placement).is_err() {
-      warn!("Failed to get window placement for window {}", handle);
+      warn!("Failed to get window placement for window {handle}");
       return None;
     }
   }
@@ -90,9 +89,25 @@ pub fn get_window_placement(handle: WindowHandle) -> Option<WindowPlacement> {
 pub fn restore_window_placement(handle: WindowHandle, previous_placement: WindowPlacement) {
   unsafe {
     if let Err(err) = SetWindowPlacement(handle.as_hwnd(), previous_placement.into()) {
-      warn!("Failed to restore window placement for {} because: {}", handle, err.message());
+      warn!("Failed to restore window placement for {handle} because: {}", err.message());
     }
     SendMessageW(handle.as_hwnd(), WM_PAINT, Some(WPARAM(0)), Some(LPARAM(0)));
+  }
+}
+
+pub fn set_window_position(handle: WindowHandle, rect: Rect) {
+  unsafe {
+    if let Err(err) = SetWindowPos(
+      handle.as_hwnd(),
+      Some(HWND(ptr::null_mut())),
+      rect.left,
+      rect.top,
+      rect.right - rect.left,
+      rect.bottom - rect.top,
+      SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+    ) {
+      warn!("Failed to set window position for window {handle}: {}", err.message());
+    }
   }
 }
 
@@ -117,8 +132,8 @@ pub fn get_cursor_position() -> Point {
 
 pub fn set_foreground_window(handle: WindowHandle) {
   unsafe {
-    if !bool::from(SetForegroundWindow(handle.into())) {
-      warn!("Failed to set foreground window to {}", handle);
+    if !SetForegroundWindow(handle.into()).as_bool() {
+      warn!("Failed to set foreground window to {handle}");
     }
   }
 }
@@ -126,7 +141,7 @@ pub fn set_foreground_window(handle: WindowHandle) {
 pub fn set_cursor_position(target_point: &Point) {
   unsafe {
     if let Err(err) = SetCursorPos(target_point.x(), target_point.y()) {
-      warn!("Failed to set cursor position to {} because: {}", target_point, err.message());
+      warn!("Failed to set cursor position to {target_point} because: {}", err.message());
     }
   }
 }
@@ -147,12 +162,11 @@ pub fn get_all_visible_windows() -> Vec<Window> {
     } else {
       let window_area = ((window.rect.right - window.rect.left) * (window.rect.bottom - window.rect.top)) / 1000;
       trace!(
-        "├> {}. {:?} at ({}, {}) with a size of {}k sq px and title \"{}\"",
+        "├> {}. {} at ({}, {}) with a size of {window_area}k sq px and title \"{}\"",
         i,
         window.handle,
         window.rect.left,
         window.rect.top,
-        window_area,
         window.title_trunc()
       );
       i += 1;
@@ -206,64 +220,47 @@ fn get_window_info_safe(hwnd: HWND) -> Result<WINDOWINFO, &'static str> {
   }
 }
 
-extern "system" fn enum_monitors(handle: HMONITOR, _: HDC, _: *mut RECT, data: LPARAM) -> BOOL {
+extern "system" fn enum_monitors_proc(monitor: HMONITOR, _dc: HDC, _rect: *mut RECT, data: LPARAM) -> BOOL {
   unsafe {
-    let monitors = &mut *(data.0 as *mut Vec<HMONITOR>);
-    monitors.push(handle);
+    let monitors = data.0 as *mut Vec<Monitor>;
+    let mut monitor_info = MONITORINFO {
+      cbSize: size_of::<MONITORINFO>() as u32,
+      ..Default::default()
+    };
+
+    if GetMonitorInfoW(monitor, &mut monitor_info).as_bool() {
+      (*monitors).push(Monitor::new(monitor, monitor_info));
+    }
+
     true.into()
   }
 }
 
-unsafe extern "system" fn enum_monitors_proc(monitor: HMONITOR, _dc: HDC, _rect: *mut RECT, data: LPARAM) -> BOOL {
-  let monitors = data.0 as *mut Vec<Monitor>;
-
-  let mut monitor_info = MONITORINFO::default();
-  monitor_info.cbSize = size_of::<MONITORINFO>() as u32;
-
-  if GetMonitorInfoW(monitor.into(), &mut monitor_info).as_bool() {
-    (*monitors).push(Monitor::new(monitor, monitor_info));
-  }
-
-  true.into() // Continue enumeration
-}
-
-pub fn list_monitors() -> Vec<Monitor> {
+pub fn list_monitors() -> Monitors {
   let mut monitors: Vec<Monitor> = Vec::new();
 
   unsafe {
-    let _ = EnumDisplayMonitors(
+    if !EnumDisplayMonitors(
       None,
       Some(ptr::null_mut()),
       Some(enum_monitors_proc),
       LPARAM(&mut monitors as *mut Vec<Monitor> as isize),
-    );
+    )
+    .as_bool()
+    {
+      warn!("Failed to enumerate monitors");
+    }
   }
 
   for monitor in &monitors {
-    info!(
-      "Monitor: handle={}, work_area[{}, {}, {}, {}], monitor_area[{}, {}, {}, {}], is_primary={}",
-      monitor.handle,
-      monitor.work_area.left,
-      monitor.work_area.top,
-      monitor.work_area.right,
-      monitor.work_area.bottom,
-      monitor.monitor_area.left,
-      monitor.monitor_area.top,
-      monitor.monitor_area.right,
-      monitor.monitor_area.bottom,
-      monitor.is_primary
-    );
+    info!("- {}", monitor,);
   }
 
-  monitors
+  Monitors::from(monitors)
 }
 
-pub fn get_monitor_for_window(window: isize) -> isize {
-  unsafe { MonitorFromWindow(HWND(window as *mut core::ffi::c_void), MONITOR_DEFAULTTONEAREST) }.0 as isize
-}
-
-pub fn get_monitor_for_point(point: POINT) -> isize {
-  unsafe { MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST) }.0 as isize
+pub fn get_monitor_for_window_handle(handle: WindowHandle) -> isize {
+  unsafe { MonitorFromWindow(handle.as_hwnd(), MONITOR_DEFAULTTONEAREST) }.0 as isize
 }
 
 pub fn get_virtual_desktop_manager() -> Option<IVirtualDesktopManager> {

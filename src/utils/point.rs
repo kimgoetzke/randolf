@@ -1,5 +1,5 @@
+use crate::utils::{Rect, Sizing};
 use std::fmt::Formatter;
-use crate::utils::Rect;
 
 #[derive(Clone, Debug)]
 pub struct Point {
@@ -11,12 +11,25 @@ impl Point {
   pub fn new(x: i32, y: i32) -> Self {
     Self { x, y }
   }
-  
+
   pub fn from_center_of_rect(rect: &Rect) -> Self {
     Self {
       x: rect.left + (rect.right - rect.left) / 2,
       y: rect.top + (rect.bottom - rect.top) / 2,
     }
+  }
+
+  pub fn from_center_of_sizing(sizing: &Sizing) -> Self {
+    Self {
+      x: sizing.x + sizing.width / 2,
+      y: sizing.y + sizing.height / 2,
+    }
+  }
+
+  pub fn distance_to(&self, other: &Point) -> f64 {
+    let x = (other.x - self.x) as f64;
+    let y = (other.y - self.y) as f64;
+    (x * x + y * y).sqrt()
   }
 
   pub fn x(&self) -> i32 {

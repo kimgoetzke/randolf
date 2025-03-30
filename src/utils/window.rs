@@ -42,7 +42,7 @@ impl Into<HWND> for WindowHandle {
 
 impl std::fmt::Display for WindowHandle {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    write!(f, "#{}", self.hwnd)
+    write!(f, "w#{}", self.hwnd)
   }
 }
 
