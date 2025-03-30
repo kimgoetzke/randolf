@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod configuration_manager;
+mod configuration_provider;
 mod hotkey_manager;
 mod log_manager;
 mod native_api;
@@ -12,7 +12,7 @@ mod window_manager;
 extern crate log;
 extern crate simplelog;
 
-use crate::configuration_manager::ConfigurationProvider;
+use crate::configuration_provider::ConfigurationProvider;
 use crate::hotkey_manager::HotkeyManager;
 use crate::log_manager::LogManager;
 use crate::tray_menu_manager::TrayMenuManager;

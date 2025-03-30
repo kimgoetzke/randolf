@@ -1,4 +1,4 @@
-use crate::configuration_manager::{ConfigurationProvider, FILE_LOGGING_ENABLED, WINDOW_MARGIN};
+use crate::configuration_provider::{ConfigurationProvider, FILE_LOGGING_ENABLED, WINDOW_MARGIN};
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;

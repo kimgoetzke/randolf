@@ -24,17 +24,30 @@ from C#/.NET to Rust, however contributions or suggestions are welcome.
 
 #### Additional features
 
-- Tray icon with a context menu to close the application
 - Pressing `Win` + `\` on a near-maximised window will reset the window to its previous size and position (i.e. undo the
   near-maximisation)
+- Writes application logs to a file in the directory of the executable (can be disabled)
+- Stores and loads configuration from `randolf.toml` in the directory of the executable
+- Tray icon with a context menu
+    - Allows customising the window margin
+    - Allows closing the application
 
 #### Features under consideration
 
 - Allow auto-start application on startup
 - Allow customising hotkeys
-- Allow customising margin
 - Group "snapped" window on a single screen and allow resizing them together
 - Add virtual desktops navigation
+
+## How to configure
+
+The configuration file `randolf.toml` is located in the same directory as the executable after the first start. The
+configuration file is created with the following default values:
+
+```toml
+file_logging_enabled = false
+default_margin = 20
+```
 
 ## How to develop
 

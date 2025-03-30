@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
 
-use crate::configuration_manager::{ConfigurationProvider, FILE_LOGGING_ENABLED};
+use crate::configuration_provider::{ConfigurationProvider, FILE_LOGGING_ENABLED};
 use log::LevelFilter;
 use simplelog::{ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode, WriteLogger};
 use std::fs::File;

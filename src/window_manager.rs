@@ -1,4 +1,4 @@
-use crate::configuration_manager::{ConfigurationProvider, WINDOW_MARGIN};
+use crate::configuration_provider::{ConfigurationProvider, WINDOW_MARGIN};
 use crate::native_api;
 use crate::utils::{Direction, Monitor, MonitorInfo, Point, Rect, Sizing, Window, WindowHandle, WindowPlacement};
 use std::collections::HashMap;
