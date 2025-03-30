@@ -13,7 +13,7 @@ Randolf is a partial window manager for Windows 11. Randolf allows you to:
 - `Win` + `Shift` + `Left`/`Top`/`Right`/`Down` or `h`/`j`/`k`/`l` - near-snap (snap minus margin) the active window
   to the left, top, right, or bottom of the screen.
 - `Win` + `Left`/`Top`/`Right`/`Down` - move the cursor to the closest window in the direction of the arrow key (and
-  highlight the window).
+  highlight the window) or to the center of the window-free monitor, if it exists.
 - `Win` + `q` - close the active window.
 
 My goal for this project was to implement some key window navigation concepts
@@ -28,12 +28,13 @@ from C#/.NET to Rust, however contributions or suggestions are welcome.
 - Pressing `Win` + `\` on a near-maximised window will reset the window to its previous size and position (i.e. undo the
   near-maximisation)
 
-#### Missing key features
+#### Features under consideration
 
 - Allow auto-start application on startup
 - Allow customising hotkeys
 - Allow customising margin
 - Group "snapped" window on a single screen and allow resizing them together
+- Add virtual desktops navigation
 
 ## How to develop
 

@@ -76,31 +76,33 @@ impl WindowManager {
     native_api::close(window);
   }
 
-  // TODO: Allow cycling through windows that have the same center point
   pub fn move_cursor_to_window(&mut self, direction: Direction) {
     let windows = native_api::get_all_visible_windows();
     let cursor_position = native_api::get_cursor_position();
-    let target_point = match find_window_at_cursor(&cursor_position, &windows) {
-      Some(window_info) => Point::from_center_of_rect(&window_info.rect),
-      None => cursor_position,
+    let (ref_point, ref_window) = match find_window_at_cursor(&cursor_position, &windows) {
+      Some(window_info) => (Point::from_center_of_rect(&window_info.rect), Some(window_info)),
+      None => (cursor_position, None),
     };
 
-    let Some(target_window) =
-      find_closest_window_in_direction(&target_point, direction, &windows, &self.virtual_desktop_manager)
-    else {
+    if let Some(target_window) =
+      find_closest_window_in_direction(&ref_point, direction, &windows, &self.virtual_desktop_manager, ref_window)
+    {
+      let target_point = Point::from_center_of_rect(&target_window.rect);
+      move_focus_to_window(direction, target_window, &target_point);
+    } else {
       trace!("No window found in [{:?}] direction, attempting to find monitor", direction);
       let all_monitors = native_api::list_monitors();
       let this_monitor = native_api::get_monitor_for_point(&cursor_position);
       match all_monitors.get(direction, this_monitor) {
         Some(target_monitor) => move_focus_to_monitor(direction, target_monitor),
         None => {
-          debug!("No monitor found in [{:?}] direction, did not move cursor", direction);
+          info!(
+            "No window or monitor found in [{:?}] direction, did not move cursor",
+            direction
+          );
         }
       }
-      return;
     };
-    let target_point = Point::from_center_of_rect(&target_window.rect);
-    move_focus_to_window(direction, target_window, &target_point);
   }
 }
 
@@ -256,6 +258,7 @@ fn find_closest_window_in_direction<'a>(
   direction: Direction,
   windows: &'a Vec<Window>,
   virtual_desktop_manager: &IVirtualDesktopManager,
+  reference_window: Option<&Window>,
 ) -> Option<&'a Window> {
   let mut closest_window = None;
   let mut closest_score = f64::MAX;
@@ -271,13 +274,17 @@ fn find_closest_window_in_direction<'a>(
     let dx = target_center_x - reference_point.x();
     let dy = target_center_y - reference_point.y();
 
-    // Skip windows that are not in the right direction
-    match direction {
-      Direction::Left if dx >= 0 => continue,
-      Direction::Right if dx <= 0 => continue,
-      Direction::Up if dy >= 0 => continue,
-      Direction::Down if dy <= 0 => continue,
-      _ => {}
+    // TODO: Allow user to toggle the behaviour of selecting windows at the same point
+    // Skip windows that are not in the right direction, unless it has the same center as the reference window - this
+    // enforces moving windows apart from each other because you won't be able to move the cursor to the next window
+    if reference_window?.center != window.center || reference_window?.handle == window.handle {
+      match direction {
+        Direction::Left if dx >= 0 => continue,
+        Direction::Right if dx <= 0 => continue,
+        Direction::Up if dy >= 0 => continue,
+        Direction::Down if dy <= 0 => continue,
+        _ => {}
+      }
     }
 
     let distance = ((dx.pow(2) + dy.pow(2)) as f64).sqrt().trunc();
