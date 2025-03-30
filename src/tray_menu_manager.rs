@@ -25,6 +25,7 @@ impl TrayMenuManager {
 
   fn create_tray_icon(tx: Sender<Event>) -> TrayIcon<Event> {
     let icon_bytes = include_bytes!("../assets/icon.ico");
+    let version = env!("CARGO_PKG_VERSION");
 
     TrayIconBuilder::new()
       .sender(move |e| {
@@ -38,7 +39,7 @@ impl TrayMenuManager {
       .menu(
         MenuBuilder::new()
           .with(MenuItem::Item {
-            name: "Randolf".into(),
+            name: format!("Randolf v{version}"),
             disabled: true,
             id: Event::DisabledItem,
             icon: None,

@@ -11,3 +11,10 @@ log = "0.4.26"
 trayicon = "0.2.0"
 simplelog = "0.12.2"
 crossbeam-channel = "0.5.14"
+
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1"
+
+[[bin]]
+name = "randolf"
+path = "src/main.rs"

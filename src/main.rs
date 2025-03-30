@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 mod hotkey_manager;
 mod native_api;
 mod tray_menu_manager;
