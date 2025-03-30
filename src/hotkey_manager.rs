@@ -54,9 +54,7 @@ impl HotkeyManager {
 
 fn register_move_cursor_hotkey(hkm: &mut win_hotkeys::HotkeyManager<Command>, direction: Direction, key: VKey) {
   hkm
-    .register_hotkey(key, &[VKey::LWin], move || {
-      Command::MoveCursorToWindowInDirection(direction)
-    })
+    .register_hotkey(key, &[VKey::LWin], move || Command::MoveCursorToWindowInDirection(direction))
     .unwrap_or_else(|err| {
       panic!(
         "Failed to register hotkey for {:?}: {err}",
@@ -68,10 +66,5 @@ fn register_move_cursor_hotkey(hkm: &mut win_hotkeys::HotkeyManager<Command>, di
 fn register_move_window_hotkey(hkm: &mut win_hotkeys::HotkeyManager<Command>, direction: Direction, key: VKey) {
   hkm
     .register_hotkey(key, &[VKey::LWin, VKey::Shift], move || Command::MoveWindow(direction))
-    .unwrap_or_else(|err| {
-      panic!(
-        "Failed to register hotkey for {:?}: {err}",
-        Command::MoveWindow(direction)
-      )
-    });
+    .unwrap_or_else(|err| panic!("Failed to register hotkey for {:?}: {err}", Command::MoveWindow(direction)));
 }
