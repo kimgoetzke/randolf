@@ -5,21 +5,24 @@ use std::path::{Path, PathBuf};
 
 pub const WINDOW_MARGIN: &str = "window_margin";
 pub const FILE_LOGGING_ENABLED: &str = "file_logging_enabled";
+pub const ALLOW_SELECTING_SAME_CENTER_WINDOWS: &str = "allow_selecting_same_center_windows";
 
 const CONFIGURATION_FILE_NAME: &str = "randolf.toml";
 const DEFAULT_WINDOW_MARGIN_VALUE: i32 = 20;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Configuration {
+  window_margin: i32,
   file_logging_enabled: bool,
-  default_margin: i32,
+  allow_selecting_same_center_windows: bool,
 }
 
 impl Default for Configuration {
   fn default() -> Self {
     Self {
+      window_margin: DEFAULT_WINDOW_MARGIN_VALUE,
       file_logging_enabled: true,
-      default_margin: DEFAULT_WINDOW_MARGIN_VALUE,
+      allow_selecting_same_center_windows: true,
     }
   }
 }
@@ -59,6 +62,7 @@ impl ConfigurationProvider {
     Ok(config_path)
   }
 
+  // TODO: Add missing configurations with default values when loading the configuration
   /// Loads configuration from file or creates a default one if the file doesn't exist.
   fn load_or_create_config(config_path: &Path) -> Result<Configuration, Box<dyn std::error::Error>> {
     match fs::read_to_string(config_path) {
@@ -85,11 +89,15 @@ impl ConfigurationProvider {
   pub fn get_bool(&self, name: &str) -> bool {
     match name {
       FILE_LOGGING_ENABLED => self.config.file_logging_enabled,
-      &_ => false,
+      ALLOW_SELECTING_SAME_CENTER_WINDOWS => self.config.allow_selecting_same_center_windows,
+      &_ => {
+        warn!("Failed to get configuration because [{name}] is unknown");
+
+        false
+      }
     }
   }
 
-  #[allow(clippy::single_match)]
   /// Sets bool value and saves the configuration to file.
   pub fn set_bool(&mut self, name: &str, value: bool) {
     match name {
@@ -101,14 +109,28 @@ impl ConfigurationProvider {
           }
         }
       }
-      &_ => {}
+      ALLOW_SELECTING_SAME_CENTER_WINDOWS => {
+        if self.config.allow_selecting_same_center_windows != value {
+          self.config.allow_selecting_same_center_windows = value;
+          if let Err(err) = self.save_config() {
+            error!("Failed to save configuration: {}", err);
+          }
+        }
+      }
+      &_ => {
+        warn!("Failed to save configuration because [{name}] is unknown");
+      }
     }
   }
 
   pub fn get_i32(&self, name: &str) -> i32 {
     match name {
-      WINDOW_MARGIN => self.config.default_margin,
-      &_ => 0,
+      WINDOW_MARGIN => self.config.window_margin,
+      &_ => {
+        warn!("Failed to get configuration because [{name}] is unknown");
+
+        0
+      }
     }
   }
 
@@ -116,14 +138,16 @@ impl ConfigurationProvider {
   pub fn set_i32(&mut self, name: &str, value: i32) {
     match name {
       WINDOW_MARGIN => {
-        if self.config.default_margin != value {
-          self.config.default_margin = value;
+        if self.config.window_margin != value {
+          self.config.window_margin = value;
           if let Err(err) = self.save_config() {
             error!("Failed to save configuration: {}", err);
           }
         }
       }
-      &_ => {}
+      &_ => {
+        warn!("Failed to save configuration because [{name}] is unknown");
+      }
     }
   }
 

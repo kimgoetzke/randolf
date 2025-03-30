@@ -1,4 +1,4 @@
-use crate::configuration_provider::{ConfigurationProvider, WINDOW_MARGIN};
+use crate::configuration_provider::{ALLOW_SELECTING_SAME_CENTER_WINDOWS, ConfigurationProvider, WINDOW_MARGIN};
 use crate::native_api;
 use crate::utils::{Direction, Monitor, MonitorInfo, Point, Rect, Sizing, Window, WindowHandle, WindowPlacement};
 use std::collections::HashMap;
@@ -116,7 +116,7 @@ impl WindowManager {
     };
 
     if let Some(target_window) =
-      find_closest_window_in_direction(&ref_point, direction, &windows, &self.virtual_desktop_manager, ref_window)
+      self.find_closest_window_in_direction(&ref_point, direction, &windows, &self.virtual_desktop_manager, ref_window)
     {
       let target_point = Point::from_center_of_rect(&target_window.rect);
       move_focus_to_window(direction, target_window, &target_point);
@@ -134,6 +134,73 @@ impl WindowManager {
         }
       }
     };
+  }
+
+  fn find_closest_window_in_direction<'a>(
+    &self,
+    reference_point: &Point,
+    direction: Direction,
+    windows: &'a Vec<Window>,
+    virtual_desktop_manager: &IVirtualDesktopManager,
+    reference_window: Option<&Window>,
+  ) -> Option<&'a Window> {
+    let mut closest_window = None;
+    let mut closest_score = f64::MAX;
+
+    for window in windows {
+      // Skip windows that are not on the current desktop
+      if !native_api::is_window_on_current_desktop(virtual_desktop_manager, window)? {
+        continue;
+      }
+
+      let target_center_x = window.rect.left + (window.rect.right - window.rect.left) / 2;
+      let target_center_y = window.rect.top + (window.rect.bottom - window.rect.top) / 2;
+      let dx = target_center_x - reference_point.x();
+      let dy = target_center_y - reference_point.y();
+
+      // Skip windows that are not in the right direction, unless it has the same center as the reference window, if
+      // the relevant configuration is enabled (see README for more information)
+      let is_config_enabled = self
+        .configuration_provider
+        .lock()
+        .expect("Failed to get configuration provider")
+        .get_bool(ALLOW_SELECTING_SAME_CENTER_WINDOWS);
+      if !is_config_enabled || reference_window?.center != window.center || reference_window?.handle == window.handle {
+        match direction {
+          Direction::Left if dx >= 0 => continue,
+          Direction::Right if dx <= 0 => continue,
+          Direction::Up if dy >= 0 => continue,
+          Direction::Down if dy <= 0 => continue,
+          _ => {}
+        }
+      }
+
+      let distance = ((dx.pow(2) + dy.pow(2)) as f64).sqrt().trunc();
+
+      // Calculate angle between the vector and the direction vector
+      let angle = match direction {
+        Direction::Left => (dy as f64).atan2((-dx) as f64).abs(),
+        Direction::Right => (dy as f64).atan2(dx as f64).abs(),
+        Direction::Up => (dx as f64).atan2((-dy) as f64).abs(),
+        Direction::Down => (dx as f64).atan2(dy as f64).abs(),
+      };
+
+      // Calculate a score based on the distance and angle and select the closest window
+      let score = distance + angle;
+      trace!(
+        "Score for {} is [{}] (i.e. normalised_angle={}, distance={})",
+        window.handle,
+        score.trunc(),
+        angle,
+        distance,
+      );
+      if score < closest_score {
+        closest_score = score;
+        closest_window = Some(window);
+      }
+    }
+
+    closest_window
   }
 }
 
@@ -258,68 +325,6 @@ fn find_window_at_cursor<'a>(point: &Point, windows: &'a [Window]) -> Option<&'a
   }
 
   None
-}
-
-fn find_closest_window_in_direction<'a>(
-  reference_point: &Point,
-  direction: Direction,
-  windows: &'a Vec<Window>,
-  virtual_desktop_manager: &IVirtualDesktopManager,
-  reference_window: Option<&Window>,
-) -> Option<&'a Window> {
-  let mut closest_window = None;
-  let mut closest_score = f64::MAX;
-
-  for window in windows {
-    // Skip windows that are not on the current desktop
-    if !native_api::is_window_on_current_desktop(virtual_desktop_manager, window)? {
-      continue;
-    }
-
-    let target_center_x = window.rect.left + (window.rect.right - window.rect.left) / 2;
-    let target_center_y = window.rect.top + (window.rect.bottom - window.rect.top) / 2;
-    let dx = target_center_x - reference_point.x();
-    let dy = target_center_y - reference_point.y();
-
-    // TODO: Allow user to toggle the behaviour of selecting windows at the same point
-    // Skip windows that are not in the right direction, unless it has the same center as the reference window - this
-    // enforces moving windows apart from each other because you won't be able to move the cursor to the next window
-    if reference_window?.center != window.center || reference_window?.handle == window.handle {
-      match direction {
-        Direction::Left if dx >= 0 => continue,
-        Direction::Right if dx <= 0 => continue,
-        Direction::Up if dy >= 0 => continue,
-        Direction::Down if dy <= 0 => continue,
-        _ => {}
-      }
-    }
-
-    let distance = ((dx.pow(2) + dy.pow(2)) as f64).sqrt().trunc();
-
-    // Calculate angle between the vector and the direction vector
-    let angle = match direction {
-      Direction::Left => (dy as f64).atan2((-dx) as f64).abs(),
-      Direction::Right => (dy as f64).atan2(dx as f64).abs(),
-      Direction::Up => (dx as f64).atan2((-dy) as f64).abs(),
-      Direction::Down => (dx as f64).atan2(dy as f64).abs(),
-    };
-
-    // Calculate a score based on the distance and angle and select the closest window
-    let score = distance + angle;
-    trace!(
-      "Score for {} is [{}] (i.e. normalised_angle={}, distance={})",
-      window.handle,
-      score.trunc(),
-      angle,
-      distance,
-    );
-    if score < closest_score {
-      closest_score = score;
-      closest_window = Some(window);
-    }
-  }
-
-  closest_window
 }
 
 fn log_actual_vs_expected(handle: &WindowHandle, sizing: &Sizing, rc: Rect) {

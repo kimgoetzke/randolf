@@ -45,9 +45,33 @@ The configuration file `randolf.toml` is located in the same directory as the ex
 configuration file is created with the following default values:
 
 ```toml
-file_logging_enabled = false
-default_margin = 20
+window_margin = 20
+file_logging_enabled = true
+allow_selecting_same_center_windows = true
 ```
+
+##### window_margin
+
+Default: `20`
+
+The margin in pixels that is used when near-maximising or near-snapping a window. The margin is subtracted from the size
+of the screen when calculating the size and position of the window.
+
+##### file_logging_enabled
+
+Default: `true`
+
+Whether to write logs to a file in the directory of the executable or the project root directory. The log file is named
+`randolf.log`. The log file is overwritten on each start of the application.
+
+##### allow_selecting_same_center_windows
+
+Default: `true`
+
+Whether to allow selecting windows, the center of which is the same as the center of the active window. Enabling this
+effectively means that the cursor cannot be moved away from two windows of the same size (as their centers are the
+same) until at least one of them is moved/resized. Disabling this, however, means that you will no longer be able to
+select the non-foreground window of the windows with the same center using this application.
 
 ## How to develop
 

@@ -62,7 +62,7 @@ fn update_heart_beat(last_heartbeat: Instant) -> Instant {
   let now = Instant::now();
   if now.duration_since(last_heartbeat) >= HEART_BEAT_DURATION {
     #[cfg(debug_assertions)]
-    debug!("Still listening for events...");
+    trace!("Still listening for events...");
     return now;
   }
 
