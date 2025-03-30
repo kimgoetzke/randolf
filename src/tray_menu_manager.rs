@@ -15,10 +15,10 @@ enum Event {
 
 impl TrayMenuManager {
   pub fn new() -> Self {
-    debug!("Creating tray icon...");
     let (tx, rx) = unbounded();
     let tray_icon = Self::create_tray_icon(tx);
     Self::initialise(rx, tray_icon);
+    debug!("Created tray icon & menu");
 
     Self {}
   }

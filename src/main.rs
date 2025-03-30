@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod hotkey_manager;
+mod log_manager;
 mod native_api;
 mod tray_menu_manager;
 mod utils;
@@ -11,9 +12,9 @@ extern crate log;
 extern crate simplelog;
 
 use crate::hotkey_manager::HotkeyManager;
+use crate::log_manager::LogManager;
 use crate::tray_menu_manager::TrayMenuManager;
 use crate::window_manager::WindowManager;
-use simplelog::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -23,16 +24,7 @@ const EVENT_LOOP_SLEEP_DURATION: Duration = Duration::from_millis(20);
 const HEART_BEAT_DURATION: Duration = Duration::from_secs(5);
 
 fn main() {
-  // Initialise logger
-  CombinedLogger::init(vec![TermLogger::new(
-    LevelFilter::Debug,
-    Config::default(),
-    TerminalMode::Mixed,
-    ColorChoice::Auto,
-  )])
-  .expect("Failed to initialize logger");
-
-  // Create tray menu
+  LogManager::new();
   TrayMenuManager::new();
 
   // Create window manager and register hotkeys

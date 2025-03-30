@@ -253,7 +253,7 @@ pub fn list_monitors() -> Monitors {
   }
 
   for monitor in &monitors {
-    info!("- {}", monitor,);
+    trace!("- {}", monitor,);
   }
 
   Monitors::from(monitors)
