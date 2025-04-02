@@ -1,4 +1,4 @@
-use crate::utils::{Direction, Monitor};
+use crate::utils::{Direction, Monitor, print_monitor_layout_to_canvas};
 
 pub struct Monitors {
   monitors: Vec<Monitor>,
@@ -33,5 +33,10 @@ impl Monitors {
     }
 
     left
+  }
+
+  #[allow(dead_code)]
+  pub fn print_layout(&self) {
+    print_monitor_layout_to_canvas(&self.monitors);
   }
 }
