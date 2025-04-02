@@ -31,10 +31,10 @@ impl Monitor {
   /// Returns true if the monitor is in the given direction of the other monitor.
   pub fn is_in_direction_of(&self, other: &Monitor, direction: Direction) -> bool {
     match direction {
-      Direction::Left => self.monitor_area.right < other.monitor_area.left,
-      Direction::Right => other.monitor_area.right < self.monitor_area.left,
-      Direction::Up => self.monitor_area.bottom < other.monitor_area.top,
-      Direction::Down => other.monitor_area.bottom < self.monitor_area.top,
+      Direction::Left => self.monitor_area.right <= other.monitor_area.left,
+      Direction::Right => other.monitor_area.right <= self.monitor_area.left,
+      Direction::Up => self.monitor_area.bottom <= other.monitor_area.top,
+      Direction::Down => other.monitor_area.bottom <= self.monitor_area.top,
     }
   }
 }
