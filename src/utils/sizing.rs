@@ -48,7 +48,7 @@ impl Sizing {
     }
   }
 
-  pub fn near_maximise(work_area: Rect, margin: i32) -> Self {
+  pub fn near_maximised(work_area: Rect, margin: i32) -> Self {
     Self {
       x: work_area.left + margin,
       y: work_area.top + margin,

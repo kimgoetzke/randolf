@@ -9,6 +9,7 @@ pub mod rect;
 pub mod sizing;
 pub mod window;
 mod window_placement;
+mod desktop;
 
 pub use command::Command;
 pub use debugger_utils::*;

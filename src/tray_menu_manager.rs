@@ -1,6 +1,7 @@
 use crate::configuration_provider::{
   ALLOW_SELECTING_SAME_CENTER_WINDOWS, ConfigurationProvider, FILE_LOGGING_ENABLED, WINDOW_MARGIN,
 };
+use crate::native_api::list_monitors;
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
@@ -21,6 +22,7 @@ enum Event {
   ToggleLogging,
   SetMargin(i32),
   ToggleSelectingSameCenterWindows,
+  LogMonitorLayout,
 }
 
 impl TrayMenuManager {
@@ -73,6 +75,18 @@ impl TrayMenuManager {
       })
       .separator()
       .submenu(
+        "Configure debug settings",
+        MenuBuilder::new()
+          .checkable(
+            "Enable file logging",
+            config.get_bool(FILE_LOGGING_ENABLED),
+            Event::ToggleLogging,
+          )
+          .separator()
+          .item("Print monitor layout to file", Event::LogMonitorLayout),
+      )
+      .separator()
+      .submenu(
         "Set window margin to...",
         MenuBuilder::new()
           .checkable("5", 5 == current_margin, Event::SetMargin(5))
@@ -88,11 +102,7 @@ impl TrayMenuManager {
         config.get_bool(ALLOW_SELECTING_SAME_CENTER_WINDOWS),
         Event::ToggleSelectingSameCenterWindows,
       )
-      .checkable(
-        "Enable file logging",
-        config.get_bool(FILE_LOGGING_ENABLED),
-        Event::ToggleLogging,
-      )
+      .separator()
       .item("Exit  👋", Event::Exit)
   }
 
@@ -162,6 +172,10 @@ impl TrayMenuManager {
         Event::Exit => {
           info!("Exit application...");
           std::process::exit(0);
+        }
+        Event::LogMonitorLayout => {
+          list_monitors().print_layout();
+          info!("Logged monitor layout");
         }
         e => {
           error!("Received unhandled tray menu event: {:?}", e);

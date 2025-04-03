@@ -247,7 +247,7 @@ fn near_maximize_window(handle: WindowHandle, monitor_info: MonitorInfo, margin:
 
   // Resize the window to the expected size
   let work_area = monitor_info.work_area;
-  let sizing = Sizing::near_maximise(work_area, margin);
+  let sizing = Sizing::near_maximised(work_area, margin);
   execute_window_resizing(handle, sizing);
 }
 

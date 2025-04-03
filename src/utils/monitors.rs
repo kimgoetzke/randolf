@@ -9,8 +9,8 @@ impl Monitors {
     Self { monitors }
   }
 
-  pub fn get(&self, direction: Direction, handle: isize) -> Option<&Monitor> {
-    let monitor = self.get_by_handle(handle)?;
+  pub fn get(&self, direction: Direction, reference_handle: isize) -> Option<&Monitor> {
+    let monitor = self.get_by_handle(reference_handle)?;
 
     self.get_direction_of(monitor, direction)
   }
