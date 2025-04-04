@@ -55,7 +55,7 @@ impl HotkeyManager {
 
     hotkey_manager.register_application_hotkey(DEFAULT_TERMINAL, VKey::T, true);
     hotkey_manager.register_application_hotkey(DEFAULT_BROWSER, VKey::F, false);
-    hotkey_manager.register_application_hotkey(DEFAULT_FILE_MANAGER, VKey::Home, false);
+    hotkey_manager.register_application_hotkey(DEFAULT_FILE_MANAGER, VKey::M, false);
 
     hotkey_manager
   }
