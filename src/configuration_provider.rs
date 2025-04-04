@@ -6,6 +6,9 @@ use std::path::{Path, PathBuf};
 pub const WINDOW_MARGIN: &str = "window_margin";
 pub const FILE_LOGGING_ENABLED: &str = "file_logging_enabled";
 pub const ALLOW_SELECTING_SAME_CENTER_WINDOWS: &str = "allow_selecting_same_center_windows";
+pub const DEFAULT_TERMINAL: &str = "default_terminal";
+pub const DEFAULT_BROWSER: &str = "default_browser";
+pub const DEFAULT_FILE_MANAGER: &str = "default_file_manager";
 
 const CONFIGURATION_FILE_NAME: &str = "randolf.toml";
 const DEFAULT_WINDOW_MARGIN_VALUE: i32 = 20;
@@ -15,6 +18,9 @@ struct Configuration {
   window_margin: i32,
   file_logging_enabled: bool,
   allow_selecting_same_center_windows: bool,
+  default_terminal: Option<String>,
+  default_browser: Option<String>,
+  default_file_manager: Option<String>,
 }
 
 impl Default for Configuration {
@@ -23,6 +29,9 @@ impl Default for Configuration {
       window_margin: DEFAULT_WINDOW_MARGIN_VALUE,
       file_logging_enabled: true,
       allow_selecting_same_center_windows: true,
+      default_terminal: None,
+      default_browser: None,
+      default_file_manager: None,
     }
   }
 }
@@ -41,7 +50,7 @@ impl ConfigurationProvider {
   }
 
   pub fn log_current_config(&self) {
-    info!("{:?}", self.config);
+    debug!("{:?}", self.config);
   }
 
   /// Determines the appropriate path for the configuration file. First tries the executable directory, then falls back
@@ -147,6 +156,19 @@ impl ConfigurationProvider {
       }
       &_ => {
         warn!("Failed to save configuration because [{name}] is unknown");
+      }
+    }
+  }
+
+  pub fn get_str(&self, name: &str) -> Option<String> {
+    match name {
+      DEFAULT_BROWSER => self.config.default_browser.clone(),
+      DEFAULT_TERMINAL => self.config.default_terminal.clone(),
+      DEFAULT_FILE_MANAGER => self.config.default_file_manager.clone(),
+      &_ => {
+        warn!("Failed to get configuration because [{name}] is unknown");
+
+        None
       }
     }
   }
