@@ -1,7 +1,8 @@
 use crate::Command;
-use crate::configuration_provider::{ConfigurationProvider, DEFAULT_BROWSER, DEFAULT_FILE_MANAGER, DEFAULT_TERMINAL};
+use crate::configuration_provider::ConfigurationProvider;
 use crate::utils::direction::Direction;
 use crossbeam_channel::{Receiver, unbounded};
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use win_hotkeys::{InterruptHandle, VKey};
@@ -10,7 +11,7 @@ const BACKSLASH: u32 = 0xDC;
 
 pub struct HotkeyManager {
   hkm: win_hotkeys::HotkeyManager<Command>,
-  configuration_provider: Arc<Mutex<ConfigurationProvider>>,
+  _configuration_provider: Arc<Mutex<ConfigurationProvider>>,
 }
 
 // TODO: Try to make MOD_NOREPEAT work again
@@ -18,11 +19,11 @@ impl HotkeyManager {
   fn new(configuration_provider: Arc<Mutex<ConfigurationProvider>>) -> Self {
     Self {
       hkm: win_hotkeys::HotkeyManager::new(),
-      configuration_provider,
+      _configuration_provider: configuration_provider,
     }
   }
 
-  pub fn default(configuration_provider: Arc<Mutex<ConfigurationProvider>>) -> Self {
+  pub fn new_initialised(configuration_provider: Arc<Mutex<ConfigurationProvider>>) -> Self {
     let mut hotkey_manager = HotkeyManager::new(configuration_provider.clone());
     let hkm = &mut hotkey_manager.hkm;
 
@@ -39,6 +40,7 @@ impl HotkeyManager {
     register_move_cursor_hotkey(hkm, Direction::Down, VKey::Down);
     register_move_cursor_hotkey(hkm, Direction::Up, VKey::Up);
     register_move_cursor_hotkey(hkm, Direction::Right, VKey::Right);
+
     register_move_window_hotkey(hkm, Direction::Left, VKey::Left);
     register_move_window_hotkey(hkm, Direction::Down, VKey::Down);
     register_move_window_hotkey(hkm, Direction::Up, VKey::Up);
@@ -47,15 +49,28 @@ impl HotkeyManager {
     register_move_window_hotkey(hkm, Direction::Down, VKey::J);
     register_move_window_hotkey(hkm, Direction::Up, VKey::K);
     register_move_window_hotkey(hkm, Direction::Right, VKey::L);
+
     register_switch_desktop_hotkey(hkm, VKey::Vk1, 1);
     register_switch_desktop_hotkey(hkm, VKey::Vk2, 2);
     register_switch_desktop_hotkey(hkm, VKey::Vk3, 3);
     register_switch_desktop_hotkey(hkm, VKey::Vk4, 4);
     register_switch_desktop_hotkey(hkm, VKey::Vk5, 5);
 
-    hotkey_manager.register_application_hotkey(DEFAULT_TERMINAL, VKey::T, true);
-    hotkey_manager.register_application_hotkey(DEFAULT_BROWSER, VKey::F, false);
-    hotkey_manager.register_application_hotkey(DEFAULT_FILE_MANAGER, VKey::M, false);
+    for hotkey in configuration_provider
+      .lock()
+      .expect("Failed to lock configuration provider")
+      .get_hotkeys()
+    {
+      match VKey::from_str(&hotkey.hotkey) {
+        Ok(key) => {
+          hotkey_manager.register_application_hotkey(&hotkey.name, &hotkey.path, key, hotkey.execute_as_admin);
+        }
+        Err(err) => {
+          warn!("Failed to parse hotkey [{}] for [{}]: {}", hotkey.hotkey, &hotkey.name, err);
+          continue;
+        }
+      }
+    }
 
     hotkey_manager
   }
@@ -71,33 +86,23 @@ impl HotkeyManager {
     (rx, handle)
   }
 
-  fn register_application_hotkey(&mut self, application: &str, key: VKey, open_as_admin: bool) {
-    if let Some(path_to_executable) = self
-      .configuration_provider
-      .lock()
-      .expect("Failed to read configuration provider")
-      .get_str(application)
-    {
-      let path_to_executable_clone = path_to_executable.clone();
-      self
-        .hkm
-        .register_hotkey(key, &[VKey::LWin], move || {
-          Command::OpenApplication(path_to_executable.clone(), open_as_admin)
-        })
-        .unwrap_or_else({
-          |_| {
-            panic!(
-              "Failed to register hotkey for {:?}",
-              Command::OpenApplication(path_to_executable_clone, open_as_admin)
-            )
-          }
-        });
-    } else {
-      info!(
-        "Did not to register hotkey for [{}] because it is not set in configuration file",
-        application
-      );
-    }
+  fn register_application_hotkey(&mut self, name: &str, path: &str, key: VKey, open_as_admin: bool) {
+    self
+      .hkm
+      .register_hotkey(key, &[VKey::LWin], {
+        let path_for_closure = path.to_string();
+        move || Command::OpenApplication(path_for_closure.clone(), open_as_admin)
+      })
+      .unwrap_or_else(|_| {
+        panic!(
+          "Failed to register hotkey for {:?}",
+          Command::OpenApplication(name.to_string(), open_as_admin)
+        )
+      });
+    debug!(
+      "Registered hotkey for [{}] to open [{}] as admin [{}]",
+      name, path, open_as_admin
+    );
   }
 }
 

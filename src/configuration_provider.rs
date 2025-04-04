@@ -6,15 +6,19 @@ use std::path::{Path, PathBuf};
 pub const WINDOW_MARGIN: &str = "window_margin";
 pub const FILE_LOGGING_ENABLED: &str = "file_logging_enabled";
 pub const ALLOW_SELECTING_SAME_CENTER_WINDOWS: &str = "allow_selecting_same_center_windows";
-pub const DEFAULT_TERMINAL: &str = "default_terminal";
-pub const DEFAULT_BROWSER: &str = "default_browser";
-pub const DEFAULT_FILE_MANAGER: &str = "default_file_manager";
 
 const CONFIGURATION_FILE_NAME: &str = "randolf.toml";
 const DEFAULT_WINDOW_MARGIN_VALUE: i32 = 20;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 struct Configuration {
+  pub general: GeneralConfiguration,
+  #[serde(default)]
+  pub hotkey: Vec<CustomHotkey>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct GeneralConfiguration {
   window_margin: i32,
   file_logging_enabled: bool,
   allow_selecting_same_center_windows: bool,
@@ -23,7 +27,7 @@ struct Configuration {
   default_file_manager: Option<String>,
 }
 
-impl Default for Configuration {
+impl Default for GeneralConfiguration {
   fn default() -> Self {
     Self {
       window_margin: DEFAULT_WINDOW_MARGIN_VALUE,
@@ -34,6 +38,14 @@ impl Default for Configuration {
       default_file_manager: None,
     }
   }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CustomHotkey {
+  pub name: String,
+  pub path: String,
+  pub hotkey: String,
+  pub execute_as_admin: bool,
 }
 
 pub struct ConfigurationProvider {
@@ -97,8 +109,8 @@ impl ConfigurationProvider {
 
   pub fn get_bool(&self, name: &str) -> bool {
     match name {
-      FILE_LOGGING_ENABLED => self.config.file_logging_enabled,
-      ALLOW_SELECTING_SAME_CENTER_WINDOWS => self.config.allow_selecting_same_center_windows,
+      FILE_LOGGING_ENABLED => self.config.general.file_logging_enabled,
+      ALLOW_SELECTING_SAME_CENTER_WINDOWS => self.config.general.allow_selecting_same_center_windows,
       &_ => {
         warn!("Failed to get configuration because [{name}] is unknown");
 
@@ -111,16 +123,16 @@ impl ConfigurationProvider {
   pub fn set_bool(&mut self, name: &str, value: bool) {
     match name {
       FILE_LOGGING_ENABLED => {
-        if self.config.file_logging_enabled != value {
-          self.config.file_logging_enabled = value;
+        if self.config.general.file_logging_enabled != value {
+          self.config.general.file_logging_enabled = value;
           if let Err(err) = self.save_config() {
             error!("Failed to save configuration: {}", err);
           }
         }
       }
       ALLOW_SELECTING_SAME_CENTER_WINDOWS => {
-        if self.config.allow_selecting_same_center_windows != value {
-          self.config.allow_selecting_same_center_windows = value;
+        if self.config.general.allow_selecting_same_center_windows != value {
+          self.config.general.allow_selecting_same_center_windows = value;
           if let Err(err) = self.save_config() {
             error!("Failed to save configuration: {}", err);
           }
@@ -134,7 +146,7 @@ impl ConfigurationProvider {
 
   pub fn get_i32(&self, name: &str) -> i32 {
     match name {
-      WINDOW_MARGIN => self.config.window_margin,
+      WINDOW_MARGIN => self.config.general.window_margin,
       &_ => {
         warn!("Failed to get configuration because [{name}] is unknown");
 
@@ -147,8 +159,8 @@ impl ConfigurationProvider {
   pub fn set_i32(&mut self, name: &str, value: i32) {
     match name {
       WINDOW_MARGIN => {
-        if self.config.window_margin != value {
-          self.config.window_margin = value;
+        if self.config.general.window_margin != value {
+          self.config.general.window_margin = value;
           if let Err(err) = self.save_config() {
             error!("Failed to save configuration: {}", err);
           }
@@ -160,17 +172,8 @@ impl ConfigurationProvider {
     }
   }
 
-  pub fn get_str(&self, name: &str) -> Option<String> {
-    match name {
-      DEFAULT_BROWSER => self.config.default_browser.clone(),
-      DEFAULT_TERMINAL => self.config.default_terminal.clone(),
-      DEFAULT_FILE_MANAGER => self.config.default_file_manager.clone(),
-      &_ => {
-        warn!("Failed to get configuration because [{name}] is unknown");
-
-        None
-      }
-    }
+  pub fn get_hotkeys(&self) -> &Vec<CustomHotkey> {
+    &self.config.hotkey
   }
 
   /// Saves the current configuration to file.

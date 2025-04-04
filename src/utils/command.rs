@@ -6,7 +6,6 @@ pub enum Command {
   CloseWindow,
   NearMaximiseWindow,
   MoveWindow(Direction),
-  MoveCursorToWindowInDirection(Direction),
   MoveCursor(Direction),
   OpenApplication(String, bool),
 }
@@ -21,6 +20,7 @@ impl Display for Command {
         write!(f, "Move cursor to window in direction [{:?}]", direction)
       }
       Command::OpenApplication(path, as_admin) => write!(f, "Open application [{path}] as admin [{as_admin}]"),
+      Command::OpenApplication(path, as_admin) => write!(f, "Open [{path}] as admin [{as_admin}]"),
     }
   }
 }

@@ -42,7 +42,7 @@ fn main() {
 
   // Create window manager and register hotkeys
   let wm = Rc::new(RefCell::new(WindowManager::new(configuration_manager.clone())));
-  let hkm = HotkeyManager::default(configuration_manager.clone());
+  let hkm = HotkeyManager::new_initialised(configuration_manager.clone());
   let (hotkey_receiver, _) = hkm.initialise();
 
   // Run event loop
