@@ -7,7 +7,8 @@
 > [!NOTE]
 > This project is still under active development and lacks important features.
 
-Randolf is a partial window manager for Windows 11. Randolf allows you to:
+Randolf is a window management tool for Windows 11 that provides window tiling-like functionality. Randolf allows you
+to:
 
 - `Win` + `\` - near-maximise the active window (maximise minus margin).
 - `Win` + `Shift` + `Left`/`Top`/`Right`/`Down` or `h`/`j`/`k`/`l` - near-snap (snap minus margin) the active window
@@ -15,6 +16,8 @@ Randolf is a partial window manager for Windows 11. Randolf allows you to:
 - `Win` + `Left`/`Top`/`Right`/`Down` - move the cursor to the closest window in the direction of the arrow key (and
   highlight the window) or to the center of the window-free monitor, if it exists.
 - `Win` + `q` - close the active window.
+- Configure an arbitrary number of hotkeys for launching applications (e.g. `Win` + `f` to launch Firefox) via the
+  configuration file.
 
 My goal for this project was to implement some key window navigation concepts
 from [my Linux configuration](https://github.com/kimgoetzke/nixos-config) for Windows, offering an experience,
@@ -45,6 +48,7 @@ The configuration file `randolf.toml` is located in the same directory as the ex
 configuration file is created with the following default values:
 
 ```toml
+[general]
 window_margin = 20
 file_logging_enabled = true
 allow_selecting_same_center_windows = true
@@ -72,6 +76,33 @@ Whether to allow selecting windows, the center of which is the same as the cente
 effectively means that the cursor cannot be moved away from two windows of the same size (as their centers are the
 same) until at least one of them is moved/resized. Disabling this, however, means that you will no longer be able to
 select the non-foreground window of the windows with the same center using this application.
+
+In addition to the above, the application also supports setting custom hotkeys via the configuration file like so:
+
+```toml
+[[hotkey]]
+name = "Browser"
+path = "C:\\Program Files\\Mozilla Firefox\\firefox.exe"
+hotkey = "F"
+execute_as_admin = false
+
+[[hotkey]]
+name = "File Explorer"
+path = "explorer.exe"
+hotkey = "M"
+execute_as_admin = false
+```
+
+- `name`: The name of the hotkey. This is used to identify the hotkey in logs but has no other value.
+- `path`: The path to the executable of the application to be started. Must use double backslashes (`\\`) as path
+  separators. If the executable is in the system path, you can use just the name of the executable (e.g.
+  `wt.exe`).
+- `hotkey`: The key name (
+  see [list of options](https://github.com/iholston/win-hotkeys/blob/f5f903a725ce309f86608bba6d8a76fb6efb97b8/src/keys.rs#L506))
+  to be used to start the application. Modifier key is always `Win`. Must be a single key.
+- `execute_as_admin`: Whether to execute the application as administrator. If unsure, set this to `false`.
+- You can define an arbitrary number of hotkeys.
+- Using the same key for multiple hotkeys is not supported.
 
 ## How to develop
 
