@@ -37,10 +37,9 @@ from C#/.NET to Rust, however contributions or suggestions are welcome.
 
 #### Features under consideration
 
-- Allow auto-start application on startup
-- Allow customising hotkeys
-- Group "snapped" window on a single screen and allow resizing them together
 - Add virtual desktops navigation
+- Allow auto-start application on startup
+- Group "snapped" window on a single screen and allow resizing them together
 
 ## How to configure
 
@@ -59,14 +58,15 @@ allow_selecting_same_center_windows = true
 Default: `20`
 
 The margin in pixels that is used when near-maximising or near-snapping a window. The margin is subtracted from the size
-of the screen when calculating the size and position of the window.
+of the screen when calculating the size and position of the window. Can be configured via the tray icon context menu.
 
 ##### file_logging_enabled
 
 Default: `true`
 
 Whether to write logs to a file in the directory of the executable or the project root directory. The log file is named
-`randolf.log`. The log file is overwritten on each start of the application.
+`randolf.log`. The log file is overwritten on each start of the application. Can be configured via the tray icon context
+menu but requires restart to take effect.
 
 ##### allow_selecting_same_center_windows
 
@@ -75,7 +75,8 @@ Default: `true`
 Whether to allow selecting windows, the center of which is the same as the center of the active window. Enabling this
 effectively means that the cursor cannot be moved away from two windows of the same size (as their centers are the
 same) until at least one of them is moved/resized. Disabling this, however, means that you will no longer be able to
-select the non-foreground window of the windows with the same center using this application.
+select the non-foreground window of the windows with the same center using this application. Can be configured via the
+tray icon context menu.
 
 In addition to the above, the application also supports setting custom hotkeys via the configuration file like so:
 
@@ -103,6 +104,7 @@ execute_as_admin = false
 - `execute_as_admin`: Whether to execute the application as administrator. If unsure, set this to `false`.
 - You can define an arbitrary number of hotkeys.
 - Using the same key for multiple hotkeys is not supported.
+- Hotkeys cannot be configured via the tray icon context menu.
 
 ## How to develop
 
