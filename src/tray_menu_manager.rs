@@ -1,7 +1,8 @@
 use crate::configuration_provider::{
   ALLOW_SELECTING_SAME_CENTER_WINDOWS, ConfigurationProvider, FILE_LOGGING_ENABLED, WINDOW_MARGIN,
 };
-use crate::native_api::list_monitors;
+use crate::native_api::get_all_monitors;
+use crate::utils::CONFIGURATION_PROVIDER_LOCK;
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
@@ -47,7 +48,7 @@ impl TrayMenuManager {
   fn create_tray_icon(&mut self, tx: Sender<Event>) -> TrayIcon<Event> {
     let icon_bytes = include_bytes!("../assets/icon.ico");
     let version = env!("CARGO_PKG_VERSION");
-    let configuration = self.configuration_provider.lock().expect("Configuration provider is locked");
+    let configuration = self.configuration_provider.lock().expect(CONFIGURATION_PROVIDER_LOCK);
 
     TrayIconBuilder::new()
       .sender(move |e| {
@@ -174,7 +175,7 @@ impl TrayMenuManager {
           std::process::exit(0);
         }
         Event::LogMonitorLayout => {
-          list_monitors().print_layout();
+          get_all_monitors().print_layout();
           info!("Logged monitor layout");
         }
         e => {
@@ -186,5 +187,5 @@ impl TrayMenuManager {
 }
 
 fn unlocked_config_provider(config_provider: &Arc<Mutex<ConfigurationProvider>>) -> MutexGuard<ConfigurationProvider> {
-  config_provider.lock().expect("Failed to lock configuration provider")
+  config_provider.lock().expect(CONFIGURATION_PROVIDER_LOCK)
 }

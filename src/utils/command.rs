@@ -7,6 +7,7 @@ pub enum Command {
   NearMaximiseWindow,
   MoveWindow(Direction),
   MoveCursor(Direction),
+  SwitchDesktop(isize),
   OpenApplication(String, bool),
 }
 
@@ -19,7 +20,7 @@ impl Display for Command {
       Command::MoveCursor(direction) => {
         write!(f, "Move cursor to window in direction [{:?}]", direction)
       }
-      Command::OpenApplication(path, as_admin) => write!(f, "Open application [{path}] as admin [{as_admin}]"),
+      Command::SwitchDesktop(desktop) => write!(f, "Switch to desktop [{desktop}]"),
       Command::OpenApplication(path, as_admin) => write!(f, "Open [{path}] as admin [{as_admin}]"),
     }
   }

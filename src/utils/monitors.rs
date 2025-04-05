@@ -35,6 +35,14 @@ impl Monitors {
     left
   }
 
+  pub fn get_primary(&self) -> Option<&Monitor> {
+    self.monitors.iter().find(|m| m.is_primary)
+  }
+
+  pub fn get_all(&self) -> Vec<&Monitor> {
+    self.monitors.iter().collect()
+  }
+
   #[allow(dead_code)]
   pub fn print_layout(&self) {
     print_monitor_layout_to_canvas(&self.monitors);

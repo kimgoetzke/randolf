@@ -200,8 +200,8 @@ extern "system" fn enum_window(hwnd: HWND, lparam: LPARAM) -> BOOL {
     let title = String::from_utf16_lossy(&text[..len as usize]);
     if !title.is_empty() {
       let rect = Rect::from(info.rcWindow);
-      let window_info = Window::new(title, rect, hwnd);
-      windows.push(window_info);
+      let window = Window::new(title, rect, hwnd);
+      windows.push(window);
     }
 
     true.into()
@@ -237,7 +237,7 @@ extern "system" fn enum_monitors_proc(monitor: HMONITOR, _dc: HDC, _rect: *mut R
   }
 }
 
-pub fn list_monitors() -> Monitors {
+pub fn get_all_monitors() -> Monitors {
   let mut monitors: Vec<Monitor> = Vec::new();
 
   unsafe {

@@ -1,6 +1,8 @@
-use crate::configuration_provider::{ALLOW_SELECTING_SAME_CENTER_WINDOWS, ConfigurationProvider, WINDOW_MARGIN};
+use crate::configuration_provider::{
+  ALLOW_SELECTING_SAME_CENTER_WINDOWS, ConfigurationProvider, DESKTOP_CONTAINER_COUNT, WINDOW_MARGIN,
+};
 use crate::native_api;
-use crate::utils::{Direction, Monitor, MonitorInfo, Point, Rect, Sizing, Window, WindowHandle, WindowPlacement};
+use crate::utils::*;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
@@ -10,16 +12,53 @@ const TOLERANCE_IN_PX: i32 = 2;
 pub(crate) struct WindowManager {
   configuration_provider: Arc<Mutex<ConfigurationProvider>>,
   known_windows: HashMap<String, WindowPlacement>,
+  desktop_containers: HashMap<isize, DesktopContainer>,
+  active_desktop: isize,
   virtual_desktop_manager: IVirtualDesktopManager,
 }
 
 impl WindowManager {
   pub fn new(configuration_provider: Arc<Mutex<ConfigurationProvider>>) -> Self {
+    let desktop_container_count = configuration_provider
+      .lock()
+      .expect(CONFIGURATION_PROVIDER_LOCK)
+      .get_i32(DESKTOP_CONTAINER_COUNT);
     Self {
       known_windows: HashMap::new(),
       virtual_desktop_manager: native_api::get_virtual_desktop_manager().expect("Failed to get the virtual desktop manager"),
+      desktop_containers: Self::initialise_desktop_containers(desktop_container_count),
+      active_desktop: 1,
       configuration_provider,
     }
+  }
+
+  // TODO: Sort by monitor ID + direction + distance (left -> top -> middle -> right -> bottom)
+  fn initialise_desktop_containers(desktop_container_count: i32) -> HashMap<isize, DesktopContainer> {
+    let mut desktop_containers = HashMap::new();
+    let all_monitors = native_api::get_all_monitors();
+    for monitor in all_monitors.get_all().iter() {
+      let monitor_id = monitor.handle;
+      if monitor.is_primary {
+        for layer in 1..=desktop_container_count as usize {
+          let unique_id = monitor_id + layer as isize;
+          let container = DesktopContainer::new(unique_id, layer, monitor);
+          desktop_containers.insert(unique_id, container);
+        }
+      } else {
+        desktop_containers.insert(monitor_id, DesktopContainer::new(monitor_id, 1, monitor));
+      }
+    }
+    debug!(
+      "Initialised [{}] desktop containers (desktop_container_count={desktop_container_count}): {:?}",
+      desktop_containers.len(),
+      desktop_containers.keys()
+    );
+    desktop_containers
+  }
+
+  /// Returns the unique IDs for all desktop containers across all monitors.
+  pub fn get_desktop_ids(&self) -> Vec<isize> {
+    self.desktop_containers.keys().cloned().collect()
   }
 
   pub fn margin(&self) -> i32 {
@@ -79,7 +118,7 @@ impl WindowManager {
 
     match is_of_expected_size(handle, &placement, &sizing) {
       true => {
-        let all_monitors = native_api::list_monitors();
+        let all_monitors = native_api::get_all_monitors();
         let this_monitor = native_api::get_monitor_for_window_handle(handle);
         let target_monitor = all_monitors.get(direction, this_monitor);
         if let Some(target_monitor) = target_monitor {
@@ -122,7 +161,7 @@ impl WindowManager {
       move_focus_to_window(direction, target_window, &target_point);
     } else {
       trace!("No window found in [{:?}] direction, attempting to find monitor", direction);
-      let all_monitors = native_api::list_monitors();
+      let all_monitors = native_api::get_all_monitors();
       let this_monitor = native_api::get_monitor_for_point(&cursor_position);
       match all_monitors.get(direction, this_monitor) {
         Some(target_monitor) => move_focus_to_monitor(direction, target_monitor),
@@ -163,7 +202,7 @@ impl WindowManager {
       let is_config_enabled = self
         .configuration_provider
         .lock()
-        .expect("Failed to get configuration provider")
+        .expect(CONFIGURATION_PROVIDER_LOCK)
         .get_bool(ALLOW_SELECTING_SAME_CENTER_WINDOWS);
       if !is_config_enabled || reference_window?.center != window.center || reference_window?.handle == window.handle {
         match direction {
@@ -201,6 +240,23 @@ impl WindowManager {
     }
 
     closest_window
+  }
+
+  pub fn switch_desktop(&mut self, desktop: isize) {
+    if desktop == self.active_desktop {
+      debug!("Ignored request to switch to [{}] because it's the current desktop", desktop);
+      return;
+    }
+
+    if let Some(option) = self.desktop_containers.get(&desktop) {
+      debug!(
+        "Switched desktop from [{}] to [{}] on monitor [{}]",
+        self.active_desktop, option.id, option.monitor_id
+      );
+      self.active_desktop = option.id;
+    } else {
+      warn!("Failed to switch desktop to [{}] because it does not exist", desktop);
+    }
   }
 }
 

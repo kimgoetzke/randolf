@@ -18,6 +18,7 @@ use crate::configuration_provider::ConfigurationProvider;
 use crate::hotkey_manager::HotkeyManager;
 use crate::log_manager::LogManager;
 use crate::tray_menu_manager::TrayMenuManager;
+use crate::utils::CONFIGURATION_PROVIDER_LOCK;
 use crate::window_manager::WindowManager;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -37,12 +38,13 @@ fn main() {
   )));
   configuration_manager
     .lock()
-    .expect("Failed to read configuration provider")
+    .expect(CONFIGURATION_PROVIDER_LOCK)
     .log_current_config();
 
   // Create window manager and register hotkeys
   let wm = Rc::new(RefCell::new(WindowManager::new(configuration_manager.clone())));
-  let hkm = HotkeyManager::new_initialised(configuration_manager.clone());
+  let desktop_ids = wm.borrow().get_desktop_ids();
+  let hkm = HotkeyManager::new_initialised(configuration_manager.clone(), desktop_ids);
   let (hotkey_receiver, _) = hkm.initialise();
 
   // Run event loop
@@ -56,6 +58,7 @@ fn main() {
         Command::MoveWindow(direction) => wm.borrow_mut().move_window(direction),
         Command::MoveCursor(direction) => wm.borrow_mut().move_cursor_to_window(direction),
         Command::CloseWindow => wm.borrow_mut().close(),
+        Command::SwitchDesktop(desktop) => wm.borrow_mut().switch_desktop(desktop),
         Command::OpenApplication(path, as_admin) => launcher.borrow_mut().launch(path, as_admin),
       }
     }

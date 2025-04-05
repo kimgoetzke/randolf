@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 pub const WINDOW_MARGIN: &str = "window_margin";
 pub const FILE_LOGGING_ENABLED: &str = "file_logging_enabled";
 pub const ALLOW_SELECTING_SAME_CENTER_WINDOWS: &str = "allow_selecting_same_center_windows";
+pub const DESKTOP_CONTAINER_COUNT: &str = "desktop_container_count";
 
 const CONFIGURATION_FILE_NAME: &str = "randolf.toml";
 const DEFAULT_WINDOW_MARGIN_VALUE: i32 = 20;
@@ -22,9 +23,7 @@ struct GeneralConfiguration {
   window_margin: i32,
   file_logging_enabled: bool,
   allow_selecting_same_center_windows: bool,
-  default_terminal: Option<String>,
-  default_browser: Option<String>,
-  default_file_manager: Option<String>,
+  desktop_container_count: i32,
 }
 
 impl Default for GeneralConfiguration {
@@ -33,9 +32,7 @@ impl Default for GeneralConfiguration {
       window_margin: DEFAULT_WINDOW_MARGIN_VALUE,
       file_logging_enabled: true,
       allow_selecting_same_center_windows: true,
-      default_terminal: None,
-      default_browser: None,
-      default_file_manager: None,
+      desktop_container_count: 3,
     }
   }
 }
@@ -84,6 +81,7 @@ impl ConfigurationProvider {
   }
 
   // TODO: Add missing configurations with default values when loading the configuration
+  // TODO: Add validation e.g. desktop_container_count < x, paths for hotkeys, etc.
   /// Loads configuration from file or creates a default one if the file doesn't exist.
   fn load_or_create_config(config_path: &Path) -> Result<Configuration, Box<dyn std::error::Error>> {
     match fs::read_to_string(config_path) {
@@ -147,6 +145,7 @@ impl ConfigurationProvider {
   pub fn get_i32(&self, name: &str) -> i32 {
     match name {
       WINDOW_MARGIN => self.config.general.window_margin,
+      DESKTOP_CONTAINER_COUNT => self.config.general.desktop_container_count,
       &_ => {
         warn!("Failed to get configuration because [{name}] is unknown");
 
