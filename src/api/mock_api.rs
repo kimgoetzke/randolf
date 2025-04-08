@@ -112,7 +112,7 @@ pub(crate) mod test {
     }
 
     fn get_window_class_name(&self, handle: &WindowHandle) -> String {
-      todo!()
+      unimplemented!()
     }
 
     fn is_window_minimised(&self, handle: WindowHandle) -> bool {
@@ -120,7 +120,7 @@ pub(crate) mod test {
     }
 
     fn is_not_a_managed_window(&self, handle: &WindowHandle) -> bool {
-      todo!()
+      unimplemented!()
     }
 
     fn is_window_hidden(&self, handle: &WindowHandle) -> bool {
@@ -133,15 +133,15 @@ pub(crate) mod test {
     }
 
     fn set_window_position(&self, handle: WindowHandle, rect: Rect) {
-      todo!()
+      unimplemented!()
     }
 
     fn do_restore_window(&self, window: &Window, is_minimised: &bool) {
-      todo!()
+      unimplemented!()
     }
 
     fn do_maximise_window(&self, handle: WindowHandle) {
-      todo!()
+      unimplemented!()
     }
 
     fn do_hide_window(&self, handle: WindowHandle) {
@@ -149,7 +149,7 @@ pub(crate) mod test {
     }
 
     fn do_close_window(&self, handle: WindowHandle) {
-      todo!()
+      unimplemented!()
     }
 
     fn get_window_placement(&self, handle: WindowHandle) -> Option<WindowPlacement> {
@@ -157,11 +157,11 @@ pub(crate) mod test {
     }
 
     fn set_window_placement_and_force_repaint(&self, handle: WindowHandle, placement: WindowPlacement) {
-      todo!()
+      unimplemented!()
     }
 
     fn do_restore_window_placement(&self, handle: WindowHandle, previous_placement: WindowPlacement) {
-      todo!()
+      unimplemented!()
     }
 
     fn get_cursor_position(&self) -> Point {
@@ -175,15 +175,15 @@ pub(crate) mod test {
     }
 
     fn get_all_monitors(&self) -> Monitors {
-      todo!()
+      unimplemented!()
     }
 
     fn get_monitor_info_from_window(&self, handle: WindowHandle) -> Option<MonitorInfo> {
-      todo!()
+      unimplemented!()
     }
 
     fn get_monitor_for_window_handle(&self, handle: WindowHandle) -> isize {
-      todo!()
+      unimplemented!()
     }
 
     fn get_monitor_for_point(&self, point: &Point) -> isize {
@@ -191,11 +191,11 @@ pub(crate) mod test {
     }
 
     fn get_virtual_desktop_manager(&self) -> Option<IVirtualDesktopManager> {
-      todo!()
+      unimplemented!()
     }
 
     fn is_window_on_current_desktop(&self, vdm: &IVirtualDesktopManager, window: &Window) -> Option<bool> {
-      todo!()
+      unimplemented!()
     }
   }
 }
