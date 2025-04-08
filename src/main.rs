@@ -8,6 +8,7 @@ mod native_api;
 mod tray_menu_manager;
 mod utils;
 mod window_manager;
+mod workspace_manager;
 
 #[macro_use]
 extern crate log;
@@ -43,8 +44,8 @@ fn main() {
 
   // Create window manager and register hotkeys
   let wm = Rc::new(RefCell::new(WindowManager::new(configuration_manager.clone())));
-  let desktop_ids = wm.borrow().get_desktop_ids();
-  let hkm = HotkeyManager::new_with_hotkeys(configuration_manager.clone(), desktop_ids);
+  let workspace_ids = wm.borrow().get_ordered_workspace_ids();
+  let hkm = HotkeyManager::new_with_hotkeys(configuration_manager.clone(), workspace_ids);
   let (hotkey_receiver, _) = hkm.initialise();
 
   // Run event loop
@@ -56,9 +57,9 @@ fn main() {
       match command {
         Command::NearMaximiseWindow => wm.borrow_mut().near_maximise_or_restore(),
         Command::MoveWindow(direction) => wm.borrow_mut().move_window(direction),
-        Command::MoveCursor(direction) => wm.borrow_mut().move_cursor_to_window(direction),
+        Command::MoveCursor(direction) => wm.borrow_mut().move_cursor(direction),
         Command::CloseWindow => wm.borrow_mut().close(),
-        Command::SwitchDesktop(desktop) => wm.borrow_mut().switch_desktop(desktop),
+        Command::SwitchWorkspace(id) => wm.borrow_mut().switch_workspace(id),
         Command::OpenApplication(path, as_admin) => launcher.borrow_mut().launch(path, as_admin),
       }
     }

@@ -1,7 +1,7 @@
 mod command;
 mod constants;
 mod debugger_utils;
-mod desktop;
+mod workspace;
 mod direction;
 mod monitor;
 mod monitor_info;
@@ -15,7 +15,7 @@ mod window_placement;
 pub use command::Command;
 pub use constants::*;
 pub use debugger_utils::*;
-pub use desktop::DesktopContainer;
+pub use workspace::{Workspace, WorkspaceId};
 pub use direction::Direction;
 pub use monitor::Monitor;
 pub use monitor_info::MonitorInfo;

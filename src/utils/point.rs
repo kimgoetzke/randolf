@@ -40,6 +40,10 @@ impl Point {
   pub fn y(&self) -> i32 {
     self.y
   }
+
+  pub fn as_point(&self) -> POINT {
+    POINT { x: self.x, y: self.y }
+  }
 }
 
 #[allow(clippy::from_over_into)]

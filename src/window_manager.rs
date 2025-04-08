@@ -1,8 +1,9 @@
 use crate::configuration_provider::{
-  ALLOW_SELECTING_SAME_CENTER_WINDOWS, ConfigurationProvider, DESKTOP_CONTAINER_COUNT, WINDOW_MARGIN,
+  ADDITIONAL_WORKSPACE_COUNT, ALLOW_SELECTING_SAME_CENTER_WINDOWS, ConfigurationProvider, WINDOW_MARGIN,
 };
 use crate::native_api;
 use crate::utils::*;
+use crate::workspace_manager::WorkspaceManager;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
@@ -12,53 +13,28 @@ const TOLERANCE_IN_PX: i32 = 2;
 pub(crate) struct WindowManager {
   configuration_provider: Arc<Mutex<ConfigurationProvider>>,
   known_windows: HashMap<String, WindowPlacement>,
-  desktop_containers: HashMap<isize, DesktopContainer>,
-  active_desktop: isize,
+  workspace_manager: WorkspaceManager,
   virtual_desktop_manager: IVirtualDesktopManager,
 }
 
 impl WindowManager {
   pub fn new(configuration_provider: Arc<Mutex<ConfigurationProvider>>) -> Self {
-    let desktop_container_count = configuration_provider
+    let additional_workspace_count = configuration_provider
       .lock()
       .expect(CONFIGURATION_PROVIDER_LOCK)
-      .get_i32(DESKTOP_CONTAINER_COUNT);
+      .get_i32(ADDITIONAL_WORKSPACE_COUNT);
+    let workspace_manager = WorkspaceManager::new(additional_workspace_count);
     Self {
       known_windows: HashMap::new(),
       virtual_desktop_manager: native_api::get_virtual_desktop_manager().expect("Failed to get the virtual desktop manager"),
-      desktop_containers: Self::initialise_desktop_containers(desktop_container_count),
-      active_desktop: 1,
+      workspace_manager,
       configuration_provider,
     }
   }
 
-  // TODO: Sort by monitor ID + direction + distance (left -> top -> middle -> right -> bottom)
-  fn initialise_desktop_containers(desktop_container_count: i32) -> HashMap<isize, DesktopContainer> {
-    let mut desktop_containers = HashMap::new();
-    let all_monitors = native_api::get_all_monitors();
-    for monitor in all_monitors.get_all().iter() {
-      let monitor_id = monitor.handle;
-      if monitor.is_primary {
-        for layer in 1..=desktop_container_count as usize {
-          let unique_id = monitor_id + layer as isize;
-          let container = DesktopContainer::new(unique_id, layer, monitor);
-          desktop_containers.insert(unique_id, container);
-        }
-      } else {
-        desktop_containers.insert(monitor_id, DesktopContainer::new(monitor_id, 1, monitor));
-      }
-    }
-    debug!(
-      "Initialised [{}] desktop containers (desktop_container_count={desktop_container_count}): {:?}",
-      desktop_containers.len(),
-      desktop_containers.keys()
-    );
-    desktop_containers
-  }
-
-  /// Returns the unique IDs for all desktop containers across all monitors.
-  pub fn get_desktop_ids(&self) -> Vec<isize> {
-    self.desktop_containers.keys().cloned().collect()
+  /// Returns the unique IDs for all desktop containers across all monitors in their natural order.
+  pub fn get_ordered_workspace_ids(&self) -> Vec<WorkspaceId> {
+    self.workspace_manager.get_ordered_workspace_ids()
   }
 
   pub fn margin(&self) -> i32 {
@@ -143,10 +119,10 @@ impl WindowManager {
       return;
     };
 
-    native_api::close(window);
+    native_api::close_window(window);
   }
 
-  pub fn move_cursor_to_window(&mut self, direction: Direction) {
+  pub fn move_cursor(&mut self, direction: Direction) {
     let windows = native_api::get_all_visible_windows();
     let cursor_position = native_api::get_cursor_position();
     let (ref_point, ref_window) = match find_window_at_cursor(&cursor_position, &windows) {
@@ -194,8 +170,8 @@ impl WindowManager {
 
       let target_center_x = window.rect.left + (window.rect.right - window.rect.left) / 2;
       let target_center_y = window.rect.top + (window.rect.bottom - window.rect.top) / 2;
-      let dx = target_center_x - reference_point.x();
-      let dy = target_center_y - reference_point.y();
+      let dx = target_center_x as i64 - reference_point.x() as i64;
+      let dy = target_center_y as i64 - reference_point.y() as i64;
 
       // Skip windows that are not in the right direction, unless it has the same center as the reference window, if
       // the relevant configuration is enabled (see README for more information)
@@ -242,28 +218,15 @@ impl WindowManager {
     closest_window
   }
 
-  pub fn switch_desktop(&mut self, desktop: isize) {
-    if desktop == self.active_desktop {
-      debug!("Ignored request to switch to [{}] because it's the current desktop", desktop);
-      return;
-    }
-
-    if let Some(option) = self.desktop_containers.get(&desktop) {
-      debug!(
-        "Switched desktop from [{}] to [{}] on monitor [{}]",
-        self.active_desktop, option.id, option.monitor_id
-      );
-      self.active_desktop = option.id;
-    } else {
-      warn!("Failed to switch desktop to [{}] because it does not exist", desktop);
-    }
+  pub fn switch_workspace(&mut self, id: WorkspaceId) {
+    self.workspace_manager.switch_workspace(id);
   }
 }
 
 fn get_window_and_monitor_info() -> Option<(WindowHandle, WindowPlacement, MonitorInfo)> {
   let window = native_api::get_foreground_window()?;
   let placement = native_api::get_window_placement(window)?;
-  let monitor_info = native_api::get_monitor_info(window)?;
+  let monitor_info = native_api::get_monitor_info_from_window(window)?;
   Some((window, placement, monitor_info))
 }
 
@@ -327,7 +290,7 @@ fn is_of_expected_size(handle: WindowHandle, placement: &WindowPlacement, sizing
 
 fn execute_window_resizing(handle: WindowHandle, sizing: Sizing) {
   let placement = WindowPlacement::new_from_sizing(sizing);
-  native_api::update_window_placement_and_force_repaint(handle, placement);
+  native_api::set_window_placement_and_force_repaint(handle, placement);
 }
 
 /// Returns the window under the cursor, if any. If there are multiple windows under the cursor, the foreground window

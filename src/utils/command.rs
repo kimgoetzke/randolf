@@ -1,4 +1,4 @@
-use crate::utils::Direction;
+use crate::utils::{WorkspaceId, Direction};
 use std::fmt::Display;
 
 #[derive(Debug)]
@@ -7,7 +7,7 @@ pub enum Command {
   NearMaximiseWindow,
   MoveWindow(Direction),
   MoveCursor(Direction),
-  SwitchDesktop(isize),
+  SwitchWorkspace(WorkspaceId),
   OpenApplication(String, bool),
 }
 
@@ -20,7 +20,7 @@ impl Display for Command {
       Command::MoveCursor(direction) => {
         write!(f, "Move cursor to window in direction [{:?}]", direction)
       }
-      Command::SwitchDesktop(desktop) => write!(f, "Switch to desktop [{desktop}]"),
+      Command::SwitchWorkspace(id) => write!(f, "Switch to workspace [{id}]"),
       Command::OpenApplication(path, as_admin) => write!(f, "Open [{path}] as admin [{as_admin}]"),
     }
   }

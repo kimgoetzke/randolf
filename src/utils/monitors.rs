@@ -5,7 +5,8 @@ pub struct Monitors {
 }
 
 impl Monitors {
-  pub fn from(monitors: Vec<Monitor>) -> Self {
+  pub fn from(mut monitors: Vec<Monitor>) -> Self {
+    monitors.sort_by(|a, b| a.handle.cmp(&b.handle));
     Self { monitors }
   }
 
@@ -33,10 +34,6 @@ impl Monitors {
     }
 
     left
-  }
-
-  pub fn get_primary(&self) -> Option<&Monitor> {
-    self.monitors.iter().find(|m| m.is_primary)
   }
 
   pub fn get_all(&self) -> Vec<&Monitor> {
