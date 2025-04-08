@@ -14,9 +14,10 @@ to:
 - `Win` + `Shift` + `Left`/`Top`/`Right`/`Down` or `h`/`j`/`k`/`l` - near-snap (snap minus margin) the active window
   to the left, top, right, or bottom of the screen.
 - `Win` + `Left`/`Top`/`Right`/`Down` - move the cursor to the closest window in the direction of the arrow key (and
-  highlight the window) or to the center of the window-free monitor, if it exists.
+  activate the window) or to the center of the window-free monitor, if it exists.
 - `Win` + `q` - close the active window.
 - `Win` + `1`/`2`/... - switch between workspaces.
+- `Win` + `Shift` + `1`/`2`/... - move the active window to respective workspace.
 - Configure an arbitrary number of hotkeys for launching applications (e.g. `Win` + `f` to launch Firefox) via the
   configuration file.
 
@@ -36,8 +37,9 @@ from C#/.NET to Rust, however contributions or suggestions are welcome.
     - Allows customising the window margin
     - Allows closing the application
 
-#### Features under consideration
+#### Features currently under consideration
 
+- Allow customising modifier keys and/or customising window/workspace management hotkeys
 - Allow auto-start application on startup
 - Group "snapped" window on a single screen and allow resizing them together
 
@@ -113,6 +115,17 @@ execute_as_admin = false
 - You can define an arbitrary number of hotkeys.
 - Using the same key for multiple hotkeys is not supported.
 - Hotkeys cannot be configured via the tray icon context menu.
+
+## FAQ
+
+### How do I auto-start this application?
+
+You can create a shortcut to the executable and place it in the startup folder (
+`$HOME\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup`). To do this:
+
+1. Create a shortcut to the executable and cut it
+2. Press `Win` + `r`, type `shell:startup`, and press `Enter`
+3. Paste the shortcut into the startup folder
 
 ## How to develop
 

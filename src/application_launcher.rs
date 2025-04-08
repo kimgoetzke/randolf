@@ -2,8 +2,6 @@ use crate::configuration_provider::ConfigurationProvider;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
-// TODO: Refactor to load and initialise any application + hotkey combinations from a dedicated section in the
-//  config TOML file
 pub struct ApplicationLauncher {
   #[allow(unused)]
   configuration_provider: Arc<Mutex<ConfigurationProvider>>,

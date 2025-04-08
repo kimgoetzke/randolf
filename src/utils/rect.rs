@@ -8,6 +8,17 @@ pub struct Rect {
   pub bottom: i32,
 }
 
+impl Rect {
+  pub fn new(top: i32, left: i32, right: i32, bottom: i32) -> Self {
+    Self {
+      top,
+      left,
+      right,
+      bottom,
+    }
+  }
+}
+
 impl From<RECT> for Rect {
   fn from(value: RECT) -> Self {
     Self {
@@ -19,6 +30,7 @@ impl From<RECT> for Rect {
   }
 }
 
+#[allow(clippy::from_over_into)]
 impl Into<RECT> for Rect {
   fn into(self) -> RECT {
     RECT {

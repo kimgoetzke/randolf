@@ -43,6 +43,7 @@ impl From<WINDOWPLACEMENT> for WindowPlacement {
   }
 }
 
+#[allow(clippy::from_over_into)]
 impl Into<WINDOWPLACEMENT> for WindowPlacement {
   fn into(self) -> WINDOWPLACEMENT {
     WINDOWPLACEMENT {
@@ -62,6 +63,7 @@ impl Into<WINDOWPLACEMENT> for WindowPlacement {
   }
 }
 
+#[allow(clippy::from_over_into)]
 impl Into<*const WINDOWPLACEMENT> for WindowPlacement {
   fn into(self) -> *const WINDOWPLACEMENT {
     let wp = Box::new(self.into());

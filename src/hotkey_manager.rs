@@ -105,7 +105,7 @@ impl HotkeyManager {
           continue;
         }
       }
-      debug!(
+      trace!(
         "Registered hotkey [{}] + [{}] to switch to workspace [{}]",
         MAIN_MOD, key_number, workspace_id
       );
@@ -139,7 +139,7 @@ impl HotkeyManager {
           continue;
         }
       }
-      debug!(
+      trace!(
         "Registered hotkey [{}] + [{}] + [{}] to move foreground window to workspace [{}]",
         MAIN_MOD, SECONDARY_MOD, key_number, workspace_id
       );
