@@ -51,7 +51,7 @@ fn main() {
   // Run event loop
   let mut last_heartbeat = Instant::now();
   loop {
-    native_api::process_windows_messages();
+    native_api::do_process_windows_messages();
     if let Ok(command) = hotkey_receiver.try_recv() {
       info!("Hotkey pressed: {}", command);
       match command {
@@ -60,6 +60,7 @@ fn main() {
         Command::MoveCursor(direction) => wm.borrow_mut().move_cursor(direction),
         Command::CloseWindow => wm.borrow_mut().close(),
         Command::SwitchWorkspace(id) => wm.borrow_mut().switch_workspace(id),
+        Command::MoveWindowToWorkspace(id) => wm.borrow_mut().move_window_to_workspace(id),
         Command::OpenApplication(path, as_admin) => launcher.borrow_mut().launch(path, as_admin),
       }
     }

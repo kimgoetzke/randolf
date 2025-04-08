@@ -48,6 +48,19 @@ impl Workspace {
     }
   }
 
+  pub fn add_window(&mut self, window: Window) {
+    if !self.windows.iter().any(|w| w.handle == window.handle) {
+      let (is_minimised, is_maximised) = native_api::get_window_minimised_maximised_state(window.handle);
+      if !is_minimised {
+        native_api::do_hide_window(window.handle);
+      }
+      self.window_state_info.push((window.handle, is_minimised, is_maximised));
+      self.windows.push(window);
+    } else {
+      warn!("Window {} already exists in workspace {}", window.handle, self.id);
+    }
+  }
+
   pub fn store_and_hide_windows(&mut self, windows: Vec<Window>) {
     self.clear_windows();
     let mut window_state_info = vec![];
@@ -56,7 +69,7 @@ impl Workspace {
       let (is_minimised, is_maximised) = native_api::get_window_minimised_maximised_state(window.handle);
       window_state_info.push((window.handle, is_minimised, is_maximised));
       if !is_minimised {
-        native_api::hide_window(window.handle);
+        native_api::do_hide_window(window.handle);
       }
     }
 
@@ -76,7 +89,7 @@ impl Workspace {
     }
     if !(!self.windows.is_empty() && !self.window_state_info.is_empty()) {
       warn!(
-        "Data inconsistency detected: {} stores [{}] windows but [{}] window states",
+        "Data inconsistency detected: {} stores [{}] window(s) but [{}] window state(s)",
         self.id,
         self.windows.len(),
         self.window_state_info.len()
@@ -88,7 +101,7 @@ impl Workspace {
         match self.windows.iter().find(|w| w.handle == *window_handle) {
           Some(window) => {
             if window.is_hidden() {
-              native_api::restore_window(window, is_minimised);
+              native_api::do_restore_window(window, is_minimised);
             } else {
               debug!("Attempted to restore window {} but it is already visible", window_handle);
             }

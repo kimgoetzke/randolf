@@ -40,7 +40,6 @@ impl Monitors {
     self.monitors.iter().collect()
   }
 
-  #[allow(dead_code)]
   pub fn print_layout(&self) {
     print_monitor_layout_to_canvas(&self.monitors);
   }

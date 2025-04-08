@@ -9,6 +9,7 @@ use win_hotkeys::{InterruptHandle, VKey};
 
 const BACKSLASH: u32 = 0xDC;
 const MAIN_MOD: VKey = VKey::LWin;
+const SECONDARY_MOD: VKey = VKey::Shift;
 
 pub struct HotkeyManager {
   hkm: win_hotkeys::HotkeyManager<Command>,
@@ -50,8 +51,9 @@ impl HotkeyManager {
     hotkey_manager.register_close_window_hotkey(VKey::Q);
     hotkey_manager.register_near_maximise_window_hotkey(VKey::CustomKeyCode(BACKSLASH as u16));
 
-    // Switch workspace
-    hotkey_manager.register_switch_workspace_hotkeys(workspace_ids);
+    // Workspace management
+    hotkey_manager.register_switch_workspace_hotkeys(&workspace_ids);
+    hotkey_manager.register_move_window_to_workspace_hotkeys(&workspace_ids);
 
     // Launch application
     hotkey_manager.register_application_hotkeys();
@@ -80,11 +82,11 @@ impl HotkeyManager {
   fn register_close_window_hotkey(&mut self, key: VKey) {
     self
       .hkm
-      .register_hotkey(key, &[MAIN_MOD, VKey::Shift], || Command::CloseWindow)
+      .register_hotkey(key, &[MAIN_MOD, SECONDARY_MOD], || Command::CloseWindow)
       .unwrap_or_else(|err| panic!("Failed to register hotkey for {:?}: {err}", Command::CloseWindow));
   }
 
-  fn register_switch_workspace_hotkeys(&mut self, workspace_ids: Vec<WorkspaceId>) {
+  fn register_switch_workspace_hotkeys(&mut self, workspace_ids: &[WorkspaceId]) {
     for (i, workspace_id) in workspace_ids.iter().enumerate() {
       let key_number = i + 1;
       if key_number >= 9 {
@@ -104,8 +106,8 @@ impl HotkeyManager {
         }
       }
       debug!(
-        "Registered hotkey [Win] + [{}] to switch to workspace [{}]",
-        key_number, workspace_id
+        "Registered hotkey [{}] + [{}] to switch to workspace [{}]",
+        MAIN_MOD, key_number, workspace_id
       );
     }
   }
@@ -116,6 +118,45 @@ impl HotkeyManager {
       .hkm
       .register_hotkey(key, &[MAIN_MOD], move || Command::SwitchWorkspace(id))
       .unwrap_or_else(|err| panic!("Failed to register hotkey for {:?}: {err}", Command::SwitchWorkspace(id)));
+  }
+
+  fn register_move_window_to_workspace_hotkeys(&mut self, workspace_ids: &[WorkspaceId]) {
+    for (i, workspace_id) in workspace_ids.iter().enumerate() {
+      let key_number = i + 1;
+      if key_number >= 9 {
+        warn!(
+          "Cannot bind workspace number [{}] to a hotkey because it is greater than 9",
+          key_number
+        );
+        continue;
+      }
+      match VKey::from_keyname(key_number.to_string().as_str()) {
+        Ok(key) => {
+          self.register_move_window_to_workspace_hotkey(key, workspace_id);
+        }
+        Err(err) => {
+          warn!("Failed to parse workspace hotkey [{}]: {err}", i);
+          continue;
+        }
+      }
+      debug!(
+        "Registered hotkey [{}] + [{}] + [{}] to move foreground window to workspace [{}]",
+        MAIN_MOD, SECONDARY_MOD, key_number, workspace_id
+      );
+    }
+  }
+
+  fn register_move_window_to_workspace_hotkey(&mut self, key: VKey, workspace_id: &WorkspaceId) {
+    let id = *workspace_id;
+    self
+      .hkm
+      .register_hotkey(key, &[MAIN_MOD, SECONDARY_MOD], move || Command::MoveWindowToWorkspace(id))
+      .unwrap_or_else(|err| {
+        panic!(
+          "Failed to register hotkey for {:?}: {err}",
+          Command::MoveWindowToWorkspace(id)
+        )
+      });
   }
 
   fn register_application_hotkeys(&mut self) {

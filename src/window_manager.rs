@@ -119,7 +119,7 @@ impl WindowManager {
       return;
     };
 
-    native_api::close_window(window);
+    native_api::do_close_window(window);
   }
 
   pub fn move_cursor(&mut self, direction: Direction) {
@@ -221,6 +221,10 @@ impl WindowManager {
   pub fn switch_workspace(&mut self, id: WorkspaceId) {
     self.workspace_manager.switch_workspace(id);
   }
+  
+  pub fn move_window_to_workspace(&mut self, id: WorkspaceId) {
+    self.workspace_manager.move_window_to_workspace(id);
+  }
 }
 
 fn get_window_and_monitor_info() -> Option<(WindowHandle, WindowPlacement, MonitorInfo)> {
@@ -234,7 +238,7 @@ fn restore_previous_placement(known_windows: &HashMap<String, WindowPlacement>, 
   let window_id = format!("{:?}", handle.hwnd);
   if let Some(previous_placement) = known_windows.get(&window_id) {
     info!("Restoring previous placement for {}", window_id);
-    native_api::restore_window_placement(handle, previous_placement.clone());
+    native_api::do_restore_window_placement(handle, previous_placement.clone());
   } else {
     warn!("No previous placement found for {}", window_id);
   }
@@ -262,7 +266,7 @@ fn near_maximize_window(handle: WindowHandle, monitor_info: MonitorInfo, margin:
   info!("Near-maximizing {}", handle);
 
   // Maximize first to get the animation effect
-  native_api::maximise_window(handle);
+  native_api::do_maximise_window(handle);
 
   // Resize the window to the expected size
   let work_area = monitor_info.work_area;

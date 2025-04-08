@@ -59,7 +59,7 @@ pub fn set_window_placement_and_force_repaint(handle: WindowHandle, placement: W
   }
 }
 
-pub fn restore_window_placement(handle: WindowHandle, previous_placement: WindowPlacement) {
+pub fn do_restore_window_placement(handle: WindowHandle, previous_placement: WindowPlacement) {
   unsafe {
     if let Err(err) = SetWindowPlacement(handle.as_hwnd(), previous_placement.into()) {
       warn!("Failed to restore window placement for {handle} because: {}", err.message());
@@ -181,6 +181,14 @@ fn get_window_info(hwnd: HWND) -> Result<WINDOWINFO, &'static str> {
   }
 }
 
+pub fn get_window_title(handle: &WindowHandle) -> String {
+  unsafe {
+    let mut text: [u16; 512] = [0; 512];
+    let len = GetWindowTextW(handle.as_hwnd(), &mut text);
+    String::from_utf16_lossy(&text[..len as usize])
+  }
+}
+
 pub fn is_window_hidden(handle: &WindowHandle) -> bool {
   unsafe { !IsWindowVisible(handle.as_hwnd()).as_bool() }
 }
@@ -201,7 +209,7 @@ pub fn get_window_minimised_maximised_state(handle: WindowHandle) -> (bool, bool
   (is_iconic, is_zoomed)
 }
 
-pub fn restore_window(window: &Window, is_minimised: &bool) {
+pub fn do_restore_window(window: &Window, is_minimised: &bool) {
   debug!("Restoring window {}", window.handle);
   unsafe {
     if !*is_minimised {
@@ -225,7 +233,7 @@ pub fn restore_window(window: &Window, is_minimised: &bool) {
   }
 }
 
-pub fn maximise_window(handle: WindowHandle) {
+pub fn do_maximise_window(handle: WindowHandle) {
   unsafe {
     if !ShowWindow(handle.as_hwnd(), SW_MAXIMIZE).as_bool() {
       warn!("Failed to maximise window {handle}");
@@ -233,7 +241,7 @@ pub fn maximise_window(handle: WindowHandle) {
   }
 }
 
-pub fn hide_window(handle: WindowHandle) {
+pub fn do_hide_window(handle: WindowHandle) {
   unsafe {
     if !ShowWindow(handle.as_hwnd(), SW_HIDE).as_bool() {
       warn!("Failed to hide window {handle}");
@@ -241,7 +249,7 @@ pub fn hide_window(handle: WindowHandle) {
   }
 }
 
-pub fn close_window(handle: WindowHandle) {
+pub fn do_close_window(handle: WindowHandle) {
   unsafe {
     if let Err(err) = PostMessageW(Option::from(handle.as_hwnd()), WM_CLOSE, WPARAM(0), LPARAM(0)) {
       warn!("Failed to close window {:?} because: {}", handle, err.message());
@@ -386,7 +394,7 @@ pub fn is_window_on_current_desktop(vdm: &IVirtualDesktopManager, window: &Windo
   }
 }
 
-pub fn process_windows_messages() {
+pub fn do_process_windows_messages() {
   let mut msg = MaybeUninit::<MSG>::uninit();
   unsafe {
     if PeekMessageA(msg.as_mut_ptr(), Option::from(HWND(ptr::null_mut())), 0, 0, PM_REMOVE).into() {

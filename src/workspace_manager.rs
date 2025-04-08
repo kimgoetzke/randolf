@@ -1,5 +1,5 @@
 use crate::native_api;
-use crate::utils::{Workspace, WorkspaceId};
+use crate::utils::{Window, Workspace, WorkspaceId};
 use std::collections::HashMap;
 
 pub struct WorkspaceManager {
@@ -7,7 +7,6 @@ pub struct WorkspaceManager {
   workspaces: HashMap<WorkspaceId, Workspace>,
 }
 
-// TODO: Allow moving windows to different workspaces
 impl WorkspaceManager {
   pub fn new(additional_workspace_count: i32) -> Self {
     let (workspaces, active_workspaces) = Self::initialise_workspaces(additional_workspace_count);
@@ -62,19 +61,10 @@ impl WorkspaceManager {
   }
 
   pub fn switch_workspace(&mut self, target_workspace_id: WorkspaceId) {
-    let Some(current_workspace_id) = self.remove_active_workspace_for_cursor_position() else {
-      warn!("Failed to switch workspace because: Unable to find the active workspace");
-      return;
+    let current_workspace_id = match self.get_current_workspace(target_workspace_id) {
+      Some(id) => id,
+      None => return,
     };
-
-    if target_workspace_id == current_workspace_id {
-      info!(
-        "Ignored request to switch to {} because it is already active",
-        target_workspace_id
-      );
-      self.add_active_workspace(current_workspace_id);
-      return;
-    }
 
     let target_monitor_active_workspace_id = if let Some(workspace) = self.remove_active_workspace(&target_workspace_id) {
       workspace
@@ -85,7 +75,7 @@ impl WorkspaceManager {
           target_workspace_id
         );
       }
-      debug!(
+      trace!(
         "Expecting target monitor workspace ({}) and current workspace ({}) to be on the same monitor",
         target_workspace_id.monitor_id, current_workspace_id.monitor_id
       );
@@ -94,7 +84,6 @@ impl WorkspaceManager {
 
     // Hide and store all windows in the target workspace, if required
     if !target_workspace_id.is_same_workspace(&target_monitor_active_workspace_id) {
-      debug!("Attempting to store and hide all windows in workspace {target_monitor_active_workspace_id}");
       if let Some(target_monitor_active_workspace) = self.workspaces.get_mut(&target_monitor_active_workspace_id) {
         let current_windows =
           native_api::get_all_visible_windows_within_area(target_monitor_active_workspace.monitor.monitor_area);
@@ -147,6 +136,24 @@ impl WorkspaceManager {
     info!("Switched workspace from {} to {}", current_workspace_id, target_workspace_id);
   }
 
+  fn get_current_workspace(&mut self, target_workspace_id: WorkspaceId) -> Option<WorkspaceId> {
+    let Some(current_workspace_id) = self.remove_active_workspace_for_cursor_position() else {
+      warn!("Failed to complete request: Unable to find the active workspace");
+      return None;
+    };
+
+    if target_workspace_id == current_workspace_id {
+      info!(
+        "Ignored request because current and target workspaces are the same: {}",
+        target_workspace_id
+      );
+      self.add_active_workspace(current_workspace_id);
+      return None;
+    }
+
+    Some(current_workspace_id)
+  }
+
   fn remove_active_workspace_for_cursor_position(&mut self) -> Option<WorkspaceId> {
     let cursor_position = native_api::get_cursor_position();
     let monitor_handle = native_api::get_monitor_for_point(&cursor_position);
@@ -173,6 +180,41 @@ impl WorkspaceManager {
     } else {
       warn!("Attempted to add workspace [{workspace_id}] to active workspaces but it already exists");
     }
+  }
+
+  pub fn move_window_to_workspace(&mut self, target_workspace_id: WorkspaceId) {
+    let current_workspace_id = match self.get_current_workspace(target_workspace_id) {
+      Some(id) => id,
+      None => return,
+    };
+    self.add_active_workspace(current_workspace_id);
+
+    let Some(foreground_window) = native_api::get_foreground_window() else {
+      debug!("Ignored request to move window to workspace because there is no foreground window");
+      return;
+    };
+    let Some(window_placement) = native_api::get_window_placement(foreground_window) else {
+      debug!("Ignored request to move window to workspace because the window is not visible");
+      return;
+    };
+    let window_title = native_api::get_window_title(&foreground_window);
+    let window = Window::new(window_title, window_placement.normal_position, foreground_window.as_hwnd());
+
+    if let Some(target_workspace) = self.workspaces.get_mut(&target_workspace_id) {
+      target_workspace.add_window(window.clone());
+    } else {
+      warn!(
+        "Failed to move window to workspace because: The target workspace ({}) does not exist",
+        target_workspace_id
+      );
+    }
+
+    info!(
+      "Moved window {} ({}) to workspace {}",
+      window.handle,
+      window.title_trunc(),
+      target_workspace_id
+    );
   }
 
   fn log_active_workspaces(&self) {
