@@ -118,7 +118,7 @@ execute_as_admin = false
 
 ## FAQ
 
-### How do I auto-start this application?
+### How can I get this application to launch when Windows starts?
 
 You can create a shortcut to the executable and place it in the startup folder (
 `$HOME\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup`). To do this:

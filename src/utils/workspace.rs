@@ -157,6 +157,7 @@ mod tests {
   fn workspace_id_same_monitor_returns_true() {
     let id1 = WorkspaceId::from(1, 1);
     let id2 = WorkspaceId::from(1, 2);
+
     assert!(id1.is_same_monitor(&id2));
   }
 
@@ -164,6 +165,7 @@ mod tests {
   fn workspace_id_different_monitor_returns_false() {
     let id1 = WorkspaceId::from(1, 1);
     let id2 = WorkspaceId::from(2, 1);
+
     assert!(!id1.is_same_monitor(&id2));
   }
 
@@ -171,6 +173,7 @@ mod tests {
   fn workspace_id_same_workspace_returns_true() {
     let id1 = WorkspaceId::from(1, 1);
     let id2 = WorkspaceId::from(1, 1);
+
     assert!(id1.is_same_workspace(&id2));
   }
 
@@ -178,6 +181,7 @@ mod tests {
   fn workspace_id_different_workspace_returns_false() {
     let id1 = WorkspaceId::from(1, 1);
     let id2 = WorkspaceId::from(1, 2);
+
     assert!(!id1.is_same_workspace(&id2));
   }
 
