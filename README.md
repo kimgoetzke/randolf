@@ -16,6 +16,7 @@ to:
 - `Win` + `Left`/`Top`/`Right`/`Down` - move the cursor to the closest window in the direction of the arrow key (and
   highlight the window) or to the center of the window-free monitor, if it exists.
 - `Win` + `q` - close the active window.
+- `Win` + `1`/`2`/... - switch between workspaces.
 - Configure an arbitrary number of hotkeys for launching applications (e.g. `Win` + `f` to launch Firefox) via the
   configuration file.
 
@@ -37,7 +38,6 @@ from C#/.NET to Rust, however contributions or suggestions are welcome.
 
 #### Features under consideration
 
-- Add virtual desktops navigation
 - Allow auto-start application on startup
 - Group "snapped" window on a single screen and allow resizing them together
 
@@ -51,6 +51,7 @@ configuration file is created with the following default values:
 window_margin = 20
 file_logging_enabled = true
 allow_selecting_same_center_windows = true
+additional_workspace_count = 3
 ```
 
 ##### window_margin
@@ -77,6 +78,13 @@ effectively means that the cursor cannot be moved away from two windows of the s
 same) until at least one of them is moved/resized. Disabling this, however, means that you will no longer be able to
 select the non-foreground window of the windows with the same center using this application. Can be configured via the
 tray icon context menu.
+
+##### additional_workspace_count
+
+Default: `3`
+
+The number of virtual workspaces that are created on the primary monitor by Randolf. Workspaces are similar to Windows
+desktops but only apply to a single monitor and are much faster to switch.
 
 In addition to the above, the application also supports setting custom hotkeys via the configuration file like so:
 

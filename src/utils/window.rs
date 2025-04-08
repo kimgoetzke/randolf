@@ -1,6 +1,7 @@
 use crate::utils::{Point, Rect};
 use std::fmt::Formatter;
 use windows::Win32::Foundation::HWND;
+use crate::native_api;
 
 const CHAR_LIMIT: usize = 20;
 
@@ -73,6 +74,10 @@ impl Window {
       let suffix: String = self.title.chars().skip(char_count - CHAR_LIMIT).collect();
       format!("{}...{}", prefix, suffix)
     }
+  }
+  
+  pub fn is_hidden(&self) -> bool {
+    native_api::is_window_hidden(&self.handle)
   }
 }
 

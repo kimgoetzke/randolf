@@ -1,6 +1,6 @@
 use crate::Command;
 use crate::configuration_provider::ConfigurationProvider;
-use crate::utils::{CONFIGURATION_PROVIDER_LOCK, Direction};
+use crate::utils::{CONFIGURATION_PROVIDER_LOCK, Direction, WorkspaceId};
 use crossbeam_channel::{Receiver, unbounded};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
@@ -24,7 +24,10 @@ impl HotkeyManager {
     }
   }
 
-  pub fn new_with_hotkeys(configuration_provider: Arc<Mutex<ConfigurationProvider>>, desktop_ids: Vec<isize>) -> Self {
+  pub fn new_with_hotkeys(
+    configuration_provider: Arc<Mutex<ConfigurationProvider>>,
+    workspace_ids: Vec<WorkspaceId>,
+  ) -> Self {
     let mut hotkey_manager = HotkeyManager::new(configuration_provider.clone());
 
     // Move cursor
@@ -47,8 +50,8 @@ impl HotkeyManager {
     hotkey_manager.register_close_window_hotkey(VKey::Q);
     hotkey_manager.register_near_maximise_window_hotkey(VKey::CustomKeyCode(BACKSLASH as u16));
 
-    // Switch desktop
-    hotkey_manager.register_switch_desktop_hotkeys(desktop_ids);
+    // Switch workspace
+    hotkey_manager.register_switch_workspace_hotkeys(workspace_ids);
 
     // Launch application
     hotkey_manager.register_application_hotkeys();
@@ -81,37 +84,38 @@ impl HotkeyManager {
       .unwrap_or_else(|err| panic!("Failed to register hotkey for {:?}: {err}", Command::CloseWindow));
   }
 
-  fn register_switch_desktop_hotkeys(&mut self, desktop_ids: Vec<isize>) {
-    for (i, desktop_id) in desktop_ids.iter().enumerate() {
+  fn register_switch_workspace_hotkeys(&mut self, workspace_ids: Vec<WorkspaceId>) {
+    for (i, workspace_id) in workspace_ids.iter().enumerate() {
       let key_number = i + 1;
       if key_number >= 9 {
         warn!(
-          "Cannot bind desktop number [{}] to a hotkey because it is greater than 9",
+          "Cannot bind workspace number [{}] to a hotkey because it is greater than 9",
           key_number
         );
         continue;
       }
       match VKey::from_keyname(key_number.to_string().as_str()) {
         Ok(key) => {
-          self.register_switch_desktop_hotkey(key, *desktop_id);
+          self.register_switch_workspace_hotkey(key, workspace_id);
         }
         Err(err) => {
-          warn!("Failed to parse desktop hotkey [{}]: {err}", i);
+          warn!("Failed to parse workspace hotkey [{}]: {err}", i);
           continue;
         }
       }
-      trace!(
-        "Registered hotkey [Win] + [{}] to switch to desktop [{}]",
-        key_number, desktop_id
+      debug!(
+        "Registered hotkey [Win] + [{}] to switch to workspace [{}]",
+        key_number, workspace_id
       );
     }
   }
 
-  fn register_switch_desktop_hotkey(&mut self, key: VKey, desktop: isize) {
+  fn register_switch_workspace_hotkey(&mut self, key: VKey, workspace_id: &WorkspaceId) {
+    let id = *workspace_id;
     self
       .hkm
-      .register_hotkey(key, &[MAIN_MOD], move || Command::SwitchDesktop(desktop))
-      .unwrap_or_else(|err| panic!("Failed to register hotkey for {:?}: {err}", Command::SwitchDesktop(desktop)));
+      .register_hotkey(key, &[MAIN_MOD], move || Command::SwitchWorkspace(id))
+      .unwrap_or_else(|err| panic!("Failed to register hotkey for {:?}: {err}", Command::SwitchWorkspace(id)));
   }
 
   fn register_application_hotkeys(&mut self) {

@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 pub const WINDOW_MARGIN: &str = "window_margin";
 pub const FILE_LOGGING_ENABLED: &str = "file_logging_enabled";
 pub const ALLOW_SELECTING_SAME_CENTER_WINDOWS: &str = "allow_selecting_same_center_windows";
-pub const DESKTOP_CONTAINER_COUNT: &str = "desktop_container_count";
+pub const ADDITIONAL_WORKSPACE_COUNT: &str = "additional_workspace_count";
 
 const CONFIGURATION_FILE_NAME: &str = "randolf.toml";
 const DEFAULT_WINDOW_MARGIN_VALUE: i32 = 20;
@@ -23,7 +23,7 @@ struct GeneralConfiguration {
   window_margin: i32,
   file_logging_enabled: bool,
   allow_selecting_same_center_windows: bool,
-  desktop_container_count: i32,
+  additional_workspace_count: i32,
 }
 
 impl Default for GeneralConfiguration {
@@ -32,7 +32,7 @@ impl Default for GeneralConfiguration {
       window_margin: DEFAULT_WINDOW_MARGIN_VALUE,
       file_logging_enabled: true,
       allow_selecting_same_center_windows: true,
-      desktop_container_count: 3,
+      additional_workspace_count: 3,
     }
   }
 }
@@ -145,7 +145,7 @@ impl ConfigurationProvider {
   pub fn get_i32(&self, name: &str) -> i32 {
     match name {
       WINDOW_MARGIN => self.config.general.window_margin,
-      DESKTOP_CONTAINER_COUNT => self.config.general.desktop_container_count,
+      ADDITIONAL_WORKSPACE_COUNT => self.config.general.additional_workspace_count,
       &_ => {
         warn!("Failed to get configuration because [{name}] is unknown");
 
