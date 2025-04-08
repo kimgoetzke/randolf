@@ -9,7 +9,7 @@ pub struct Rect {
 }
 
 impl Rect {
-  pub fn new(top: i32, left: i32, right: i32, bottom: i32) -> Self {
+  pub fn new(left: i32, top: i32, right: i32, bottom: i32) -> Self {
     Self {
       top,
       left,

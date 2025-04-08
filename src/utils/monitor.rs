@@ -56,7 +56,7 @@ impl Display for Monitor {
 
 #[cfg(test)]
 mod tests {
-  use crate::utils::{Monitor, Point, Rect};
+  use crate::utils::{Direction, Monitor, Point, Rect};
 
   impl Monitor {
     pub fn new_test(handle: isize, monitor_area: Rect) -> Self {
@@ -86,10 +86,39 @@ mod tests {
         handle: 2,
         size: 0,
         is_primary: false,
-        monitor_area: Rect::new(600, -800, 0, 0),
-        work_area: Rect::new(550, -800, 0, 0),
+        monitor_area: Rect::new(-800, 600, 0, 0),
+        work_area: Rect::new(-800, 550, 0, 0),
         center: Point::new(-400, 300),
       }
     }
+  }
+
+  #[test]
+  fn is_in_direction_of_returns_true() {
+    let monitor1 = Monitor::mock_1();
+    let monitor2 = Monitor::mock_2();
+
+    assert!(monitor2.is_in_direction_of(&monitor1, Direction::Left));
+    assert!(monitor1.is_in_direction_of(&monitor2, Direction::Right));
+  }
+
+  #[test]
+  fn is_in_direction_of_returns_false() {
+    let monitor1 = Monitor::new_test(1, Rect::new(0, 0, 1920, 1080));
+    let monitor2 = Monitor::new_test(2, Rect::new(1920, 0, 3840, 1080));
+
+    assert!(!monitor1.is_in_direction_of(&monitor2, Direction::Right));
+    assert!(!monitor1.is_in_direction_of(&monitor2, Direction::Up));
+    assert!(!monitor1.is_in_direction_of(&monitor2, Direction::Down));
+  }
+
+  #[test]
+  fn is_in_direction_of_returns_false_for_if_no_other_monitors() {
+    let monitor1 = Monitor::mock_1();
+
+    assert!(!monitor1.is_in_direction_of(&monitor1, Direction::Left));
+    assert!(!monitor1.is_in_direction_of(&monitor1, Direction::Right));
+    assert!(!monitor1.is_in_direction_of(&monitor1, Direction::Up));
+    assert!(!monitor1.is_in_direction_of(&monitor1, Direction::Down));
   }
 }
