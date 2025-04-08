@@ -1,7 +1,7 @@
+use crate::api::NativeApi;
 use crate::configuration_provider::{
   ADDITIONAL_WORKSPACE_COUNT, ALLOW_SELECTING_SAME_CENTER_WINDOWS, ConfigurationProvider, WINDOW_MARGIN,
 };
-use crate::native_api;
 use crate::utils::*;
 use crate::workspace_manager::WorkspaceManager;
 use std::collections::HashMap;
@@ -10,25 +10,29 @@ use windows::Win32::UI::Shell::IVirtualDesktopManager;
 
 const TOLERANCE_IN_PX: i32 = 2;
 
-pub(crate) struct WindowManager {
+pub struct WindowManager<T: NativeApi> {
   configuration_provider: Arc<Mutex<ConfigurationProvider>>,
   known_windows: HashMap<String, WindowPlacement>,
-  workspace_manager: WorkspaceManager,
+  workspace_manager: WorkspaceManager<T>,
   virtual_desktop_manager: IVirtualDesktopManager,
+  windows_api: T,
 }
 
-impl WindowManager {
-  pub fn new(configuration_provider: Arc<Mutex<ConfigurationProvider>>) -> Self {
+impl<T: NativeApi + Copy> WindowManager<T> {
+  pub fn new(configuration_provider: Arc<Mutex<ConfigurationProvider>>, api: T) -> Self {
     let additional_workspace_count = configuration_provider
       .lock()
       .expect(CONFIGURATION_PROVIDER_LOCK)
       .get_i32(ADDITIONAL_WORKSPACE_COUNT);
-    let workspace_manager = WorkspaceManager::new(additional_workspace_count);
+    let workspace_manager = WorkspaceManager::new(additional_workspace_count, api);
     Self {
       known_windows: HashMap::new(),
-      virtual_desktop_manager: native_api::get_virtual_desktop_manager().expect("Failed to get the virtual desktop manager"),
+      virtual_desktop_manager: api
+        .get_virtual_desktop_manager()
+        .expect("Failed to get the virtual desktop manager"),
       workspace_manager,
       configuration_provider,
+      windows_api: api,
     }
   }
 
@@ -42,17 +46,29 @@ impl WindowManager {
   }
 
   pub fn near_maximise_or_restore(&mut self) {
-    let (handle, placement, monitor_info) = match get_window_and_monitor_info() {
+    let (handle, placement, monitor_info) = match self.get_window_and_monitor_info() {
       Some(value) => value,
       None => return,
     };
 
     match self.is_near_maximized(&placement, &handle, &monitor_info) {
-      true => restore_previous_placement(&self.known_windows, handle),
+      true => self.restore_previous_placement(&self.known_windows, handle),
       false => {
         add_or_update_previous_placement(&mut self.known_windows, handle, placement);
-        near_maximize_window(handle, monitor_info, self.margin());
+        self.near_maximize_window(handle, monitor_info, self.margin());
       }
+    }
+  }
+
+  fn restore_previous_placement(&self, known_windows: &HashMap<String, WindowPlacement>, handle: WindowHandle) {
+    let window_id = format!("{:?}", handle.hwnd);
+    if let Some(previous_placement) = known_windows.get(&window_id) {
+      info!("Restoring previous placement for {}", window_id);
+      self
+        .windows_api
+        .do_restore_window_placement(handle, previous_placement.clone());
+    } else {
+      warn!("No previous placement found for {}", window_id);
     }
   }
 
@@ -80,8 +96,20 @@ impl WindowManager {
     result
   }
 
+  fn near_maximize_window(&self, handle: WindowHandle, monitor_info: MonitorInfo, margin: i32) {
+    info!("Near-maximizing {}", handle);
+
+    // First maximize to get the animation effect
+    self.windows_api.do_maximise_window(handle);
+
+    // Then resize the window to the expected size
+    let work_area = monitor_info.work_area;
+    let sizing = Sizing::near_maximised(work_area, margin);
+    self.execute_window_resizing(handle, sizing);
+  }
+
   pub fn move_window(&mut self, direction: Direction) {
-    let (handle, placement, monitor_info) = match get_window_and_monitor_info() {
+    let (handle, placement, monitor_info) = match self.get_window_and_monitor_info() {
       Some(value) => value,
       None => return,
     };
@@ -94,38 +122,38 @@ impl WindowManager {
 
     match is_of_expected_size(handle, &placement, &sizing) {
       true => {
-        let all_monitors = native_api::get_all_monitors();
-        let this_monitor = native_api::get_monitor_for_window_handle(handle);
+        let all_monitors = self.windows_api.get_all_monitors();
+        let this_monitor = self.windows_api.get_monitor_for_window_handle(handle);
         let target_monitor = all_monitors.get(direction, this_monitor);
         if let Some(target_monitor) = target_monitor {
           debug!("Moving window to [{}]", target_monitor);
-          native_api::set_window_position(handle, target_monitor.work_area);
-          near_maximize_window(handle, MonitorInfo::from(target_monitor), self.margin());
-          native_api::set_cursor_position(&target_monitor.center);
+          self.windows_api.set_window_position(handle, target_monitor.work_area);
+          self.near_maximize_window(handle, MonitorInfo::from(target_monitor), self.margin());
+          self.windows_api.set_cursor_position(&target_monitor.center);
         } else {
           debug!("No monitor found in [{:?}] direction, did not move window", direction);
         }
       }
       false => {
         let cursor_target_point = Point::from_center_of_sizing(&sizing);
-        execute_window_resizing(handle, sizing);
-        native_api::set_cursor_position(&cursor_target_point);
+        self.execute_window_resizing(handle, sizing);
+        self.windows_api.set_cursor_position(&cursor_target_point);
       }
     }
   }
 
   pub fn close(&mut self) {
-    let Some(window) = native_api::get_foreground_window() else {
+    let Some(window) = self.windows_api.get_foreground_window() else {
       return;
     };
 
-    native_api::do_close_window(window);
+    self.windows_api.do_close_window(window);
   }
 
   pub fn move_cursor(&mut self, direction: Direction) {
-    let windows = native_api::get_all_visible_windows();
-    let cursor_position = native_api::get_cursor_position();
-    let (ref_point, ref_window) = match find_window_at_cursor(&cursor_position, &windows) {
+    let windows = self.windows_api.get_all_visible_windows();
+    let cursor_position = self.windows_api.get_cursor_position();
+    let (ref_point, ref_window) = match self.find_window_at_cursor(&cursor_position, &windows) {
       Some(window_info) => (Point::from_center_of_rect(&window_info.rect), Some(window_info)),
       None => (cursor_position, None),
     };
@@ -134,13 +162,13 @@ impl WindowManager {
       self.find_closest_window_in_direction(&ref_point, direction, &windows, &self.virtual_desktop_manager, ref_window)
     {
       let target_point = Point::from_center_of_rect(&target_window.rect);
-      move_focus_to_window(direction, target_window, &target_point);
+      self.move_focus_to_window(direction, target_window, &target_point);
     } else {
       trace!("No window found in [{:?}] direction, attempting to find monitor", direction);
-      let all_monitors = native_api::get_all_monitors();
-      let this_monitor = native_api::get_monitor_for_point(&cursor_position);
+      let all_monitors = self.windows_api.get_all_monitors();
+      let this_monitor = self.windows_api.get_monitor_for_point(&cursor_position);
       match all_monitors.get(direction, this_monitor) {
-        Some(target_monitor) => move_focus_to_monitor(direction, target_monitor),
+        Some(target_monitor) => self.move_focus_to_monitor(direction, target_monitor),
         None => {
           info!(
             "No window or monitor found in [{:?}] direction, did not move cursor",
@@ -164,7 +192,10 @@ impl WindowManager {
 
     for window in windows {
       // Skip windows that are not on the current desktop
-      if !native_api::is_window_on_current_desktop(virtual_desktop_manager, window)? {
+      if !self
+        .windows_api
+        .is_window_on_current_desktop(virtual_desktop_manager, window)?
+      {
         continue;
       }
 
@@ -218,29 +249,96 @@ impl WindowManager {
     closest_window
   }
 
+  fn execute_window_resizing(&self, handle: WindowHandle, sizing: Sizing) {
+    let placement = WindowPlacement::new_from_sizing(sizing);
+    self.windows_api.set_window_placement_and_force_repaint(handle, placement);
+  }
+
+  /// Returns the window under the cursor, if any. If there are multiple windows under the cursor, the foreground window
+  /// is returned if it's in the list. Otherwise, the closest window is returned.
+  fn find_window_at_cursor<'a>(&self, point: &Point, windows: &'a [Window]) -> Option<&'a Window> {
+    let windows_under_cursor = windows
+      .iter()
+      .filter(|window_info| {
+        point.x() >= window_info.rect.left
+          && point.x() <= window_info.rect.right
+          && point.y() >= window_info.rect.top
+          && point.y() <= window_info.rect.bottom
+      })
+      .collect::<Vec<&Window>>();
+
+    if !windows_under_cursor.is_empty() {
+      if let Some(foreground_window) = self.windows_api.get_foreground_window() {
+        if let Some(window_info) = windows_under_cursor
+          .iter()
+          .find(|window_info| window_info.handle == foreground_window)
+        {
+          debug!(
+            "Cursor is currently over foreground window {} \"{}\" at {point}",
+            window_info.handle,
+            window_info.title_trunc()
+          );
+          return Some(window_info);
+        }
+      }
+
+      let mut closest_window = None;
+      let mut min_distance = f64::MAX;
+      for window_info in windows_under_cursor {
+        let distance = ((window_info.center.x().pow(2) + window_info.center.y().pow(2)) as f64)
+          .sqrt()
+          .trunc();
+
+        if distance < min_distance {
+          min_distance = distance;
+          closest_window = Some(window_info);
+        }
+      }
+      let closest_window = closest_window.expect("Failed to get the closest window");
+      debug!(
+        "Cursor is currently over window {} \"{}\" at {point} with a distance of {}",
+        closest_window.handle,
+        closest_window.title_trunc(),
+        min_distance.trunc()
+      );
+      return Some(closest_window);
+    }
+
+    None
+  }
+
+  fn get_window_and_monitor_info(&self) -> Option<(WindowHandle, WindowPlacement, MonitorInfo)> {
+    let window = self.windows_api.get_foreground_window()?;
+    let placement = self.windows_api.get_window_placement(window)?;
+    let monitor_info = self.windows_api.get_monitor_info_from_window(window)?;
+    Some((window, placement, monitor_info))
+  }
+
+  fn move_focus_to_window(&self, direction: Direction, target_window: &Window, target_point: &Point) {
+    self.windows_api.set_cursor_position(target_point);
+    self.windows_api.set_foreground_window(WindowHandle::from(target_window));
+    info!(
+      "Moved cursor in direction [{:?}] to {} \"{}\" at {target_point}",
+      direction,
+      target_window.handle,
+      target_window.title_trunc()
+    );
+  }
+
+  fn move_focus_to_monitor(&self, direction: Direction, monitor: &Monitor) {
+    self.windows_api.set_cursor_position(&monitor.center);
+    info!(
+      "Moved cursor in direction [{:?}] to {} on [{}]",
+      direction, monitor.center, monitor
+    );
+  }
+
   pub fn switch_workspace(&mut self, id: WorkspaceId) {
     self.workspace_manager.switch_workspace(id);
   }
-  
+
   pub fn move_window_to_workspace(&mut self, id: WorkspaceId) {
     self.workspace_manager.move_window_to_workspace(id);
-  }
-}
-
-fn get_window_and_monitor_info() -> Option<(WindowHandle, WindowPlacement, MonitorInfo)> {
-  let window = native_api::get_foreground_window()?;
-  let placement = native_api::get_window_placement(window)?;
-  let monitor_info = native_api::get_monitor_info_from_window(window)?;
-  Some((window, placement, monitor_info))
-}
-
-fn restore_previous_placement(known_windows: &HashMap<String, WindowPlacement>, handle: WindowHandle) {
-  let window_id = format!("{:?}", handle.hwnd);
-  if let Some(previous_placement) = known_windows.get(&window_id) {
-    info!("Restoring previous placement for {}", window_id);
-    native_api::do_restore_window_placement(handle, previous_placement.clone());
-  } else {
-    warn!("No previous placement found for {}", window_id);
   }
 }
 
@@ -262,18 +360,6 @@ fn add_or_update_previous_placement(
   trace!("Adding/updating previous placement for window {}", handle);
 }
 
-fn near_maximize_window(handle: WindowHandle, monitor_info: MonitorInfo, margin: i32) {
-  info!("Near-maximizing {}", handle);
-
-  // Maximize first to get the animation effect
-  native_api::do_maximise_window(handle);
-
-  // Resize the window to the expected size
-  let work_area = monitor_info.work_area;
-  let sizing = Sizing::near_maximised(work_area, margin);
-  execute_window_resizing(handle, sizing);
-}
-
 fn is_of_expected_size(handle: WindowHandle, placement: &WindowPlacement, sizing: &Sizing) -> bool {
   let rect = placement.normal_position;
   let result = rect.left == sizing.x
@@ -292,64 +378,6 @@ fn is_of_expected_size(handle: WindowHandle, placement: &WindowPlacement, sizing
   result
 }
 
-fn execute_window_resizing(handle: WindowHandle, sizing: Sizing) {
-  let placement = WindowPlacement::new_from_sizing(sizing);
-  native_api::set_window_placement_and_force_repaint(handle, placement);
-}
-
-/// Returns the window under the cursor, if any. If there are multiple windows under the cursor, the foreground window
-/// is returned if it's in the list. Otherwise, the closest window is returned.
-fn find_window_at_cursor<'a>(point: &Point, windows: &'a [Window]) -> Option<&'a Window> {
-  let windows_under_cursor = windows
-    .iter()
-    .filter(|window_info| {
-      point.x() >= window_info.rect.left
-        && point.x() <= window_info.rect.right
-        && point.y() >= window_info.rect.top
-        && point.y() <= window_info.rect.bottom
-    })
-    .collect::<Vec<&Window>>();
-
-  if !windows_under_cursor.is_empty() {
-    if let Some(foreground_window) = native_api::get_foreground_window() {
-      if let Some(window_info) = windows_under_cursor
-        .iter()
-        .find(|window_info| window_info.handle == foreground_window)
-      {
-        debug!(
-          "Cursor is currently over foreground window {} \"{}\" at {point}",
-          window_info.handle,
-          window_info.title_trunc()
-        );
-        return Some(window_info);
-      }
-    }
-
-    let mut closest_window = None;
-    let mut min_distance = f64::MAX;
-    for window_info in windows_under_cursor {
-      let distance = ((window_info.center.x().pow(2) + window_info.center.y().pow(2)) as f64)
-        .sqrt()
-        .trunc();
-
-      if distance < min_distance {
-        min_distance = distance;
-        closest_window = Some(window_info);
-      }
-    }
-    let closest_window = closest_window.expect("Failed to get the closest window");
-    debug!(
-      "Cursor is currently over window {} \"{}\" at {point} with a distance of {}",
-      closest_window.handle,
-      closest_window.title_trunc(),
-      min_distance.trunc()
-    );
-    return Some(closest_window);
-  }
-
-  None
-}
-
 fn log_actual_vs_expected(handle: &WindowHandle, sizing: &Sizing, rc: Rect) {
   trace!(
     "Expected size of {}: ({},{})x({},{})",
@@ -362,24 +390,5 @@ fn log_actual_vs_expected(handle: &WindowHandle, sizing: &Sizing, rc: Rect) {
     rc.top,
     rc.right - rc.left,
     rc.bottom - rc.top
-  );
-}
-
-fn move_focus_to_window(direction: Direction, target_window: &Window, target_point: &Point) {
-  native_api::set_cursor_position(target_point);
-  native_api::set_foreground_window(WindowHandle::from(target_window));
-  info!(
-    "Moved cursor in direction [{:?}] to {} \"{}\" at {target_point}",
-    direction,
-    target_window.handle,
-    target_window.title_trunc()
-  );
-}
-
-fn move_focus_to_monitor(direction: Direction, monitor: &Monitor) {
-  native_api::set_cursor_position(&monitor.center);
-  info!(
-    "Moved cursor in direction [{:?}] to {} on [{}]",
-    direction, monitor.center, monitor
   );
 }

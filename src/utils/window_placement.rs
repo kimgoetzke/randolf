@@ -70,3 +70,22 @@ impl Into<*const WINDOWPLACEMENT> for WindowPlacement {
     Box::into_raw(wp)
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use crate::utils::{Point, Rect, WindowPlacement};
+  use windows::Win32::UI::WindowsAndMessaging::{SW_SHOWNORMAL, WINDOWPLACEMENT};
+
+  impl WindowPlacement {
+    pub fn new_from_rect(rect: Rect) -> Self {
+      Self {
+        length: size_of::<WINDOWPLACEMENT>() as u32,
+        flags: 0,
+        show_cmd: SW_SHOWNORMAL.0 as u32,
+        min_position: Point::new(0, 0),
+        max_position: Point::new(-1, -1),
+        normal_position: rect,
+      }
+    }
+  }
+}

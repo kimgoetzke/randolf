@@ -53,3 +53,43 @@ impl Display for Monitor {
     )
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use crate::utils::{Monitor, Point, Rect};
+
+  impl Monitor {
+    pub fn new_test(handle: isize, monitor_area: Rect) -> Self {
+      Self {
+        handle,
+        size: 0,
+        is_primary: false,
+        monitor_area,
+        work_area: monitor_area,
+        center: Point::from_center_of_rect(&monitor_area),
+      }
+    }
+
+    pub fn mock_1() -> Self {
+      Monitor {
+        handle: 1,
+        size: 0,
+        is_primary: false,
+        monitor_area: Rect::new(0, 0, 1920, 1080),
+        work_area: Rect::new(0, 0, 1920, 1030),
+        center: Point::new(960, 540),
+      }
+    }
+
+    pub fn mock_2() -> Self {
+      Monitor {
+        handle: 2,
+        size: 0,
+        is_primary: false,
+        monitor_area: Rect::new(600, -800, 0, 0),
+        work_area: Rect::new(550, -800, 0, 0),
+        center: Point::new(-400, 300),
+      }
+    }
+  }
+}

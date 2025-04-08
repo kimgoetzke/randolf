@@ -1,10 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod api;
 mod application_launcher;
 mod configuration_provider;
 mod hotkey_manager;
 mod log_manager;
-mod native_api;
 mod tray_menu_manager;
 mod utils;
 mod window_manager;
@@ -14,6 +14,7 @@ mod workspace_manager;
 extern crate log;
 extern crate simplelog;
 
+use crate::api::WindowsApi;
 use crate::application_launcher::ApplicationLauncher;
 use crate::configuration_provider::ConfigurationProvider;
 use crate::hotkey_manager::HotkeyManager;
@@ -43,7 +44,8 @@ fn main() {
     .log_current_config();
 
   // Create window manager and register hotkeys
-  let wm = Rc::new(RefCell::new(WindowManager::new(configuration_manager.clone())));
+  let windows_api = WindowsApi::new();
+  let wm = Rc::new(RefCell::new(WindowManager::new(configuration_manager.clone(), windows_api)));
   let workspace_ids = wm.borrow().get_ordered_workspace_ids();
   let hkm = HotkeyManager::new_with_hotkeys(configuration_manager.clone(), workspace_ids);
   let (hotkey_receiver, _) = hkm.initialise();
@@ -51,7 +53,7 @@ fn main() {
   // Run event loop
   let mut last_heartbeat = Instant::now();
   loop {
-    native_api::do_process_windows_messages();
+    api::do_process_windows_messages();
     if let Ok(command) = hotkey_receiver.try_recv() {
       info!("Hotkey pressed: {}", command);
       match command {

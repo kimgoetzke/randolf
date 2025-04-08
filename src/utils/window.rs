@@ -1,4 +1,3 @@
-use crate::native_api;
 use crate::utils::{Point, Rect};
 use std::fmt::Formatter;
 use windows::Win32::Foundation::HWND;
@@ -56,7 +55,7 @@ pub struct Window {
 }
 
 impl Window {
-  pub fn new(title: String, rect: Rect, hwnd: HWND) -> Self {
+  pub fn new(hwnd: HWND, title: String, rect: Rect) -> Self {
     Self {
       title,
       center: Point::from_center_of_rect(&rect),
@@ -75,14 +74,32 @@ impl Window {
       format!("{}...{}", prefix, suffix)
     }
   }
-
-  pub fn is_hidden(&self) -> bool {
-    native_api::is_window_hidden(&self.handle)
-  }
 }
 
 impl PartialEq for Window {
   fn eq(&self, other: &Self) -> bool {
     self.handle == other.handle
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use crate::utils::{Point, Rect, Window, WindowHandle};
+
+  impl WindowHandle {
+    pub fn new(hwnd: isize) -> Self {
+      Self { hwnd }
+    }
+  }
+
+  impl Window {
+    pub fn from(window_handle: isize, title: String, rect: Rect) -> Self {
+      Window {
+        handle: WindowHandle::new(window_handle),
+        title,
+        center: Point::from_center_of_rect(&rect),
+        rect,
+      }
+    }
   }
 }

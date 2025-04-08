@@ -41,3 +41,19 @@ impl Into<RECT> for Rect {
     }
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use crate::utils::Rect;
+
+  impl Rect {
+    pub fn default() -> Self {
+      Self {
+        left: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+      }
+    }
+  }
+}
