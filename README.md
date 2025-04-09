@@ -1,6 +1,6 @@
-<p align="center" style="background-color: #57887e; width: 210px; height: 210px; border-radius: 50%; display: flex; justify-content: center; align-items: center; margin: auto;">
-  <img src="./assets/randolf.png" width="200" height="200" alt="Randolf" style="border-radius: 50%;"/>
-</p>
+<p align="center">
+  <img src="./assets/randolf.png" width="200" height="200" alt="Randolf"/>
+</p>O
 
 # Meet Randolf
 
