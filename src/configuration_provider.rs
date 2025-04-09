@@ -179,6 +179,7 @@ impl ConfigurationProvider {
   fn save_config(&self) -> Result<(), Box<dyn std::error::Error>> {
     let toml_string = toml::to_string_pretty(&self.config)?;
     fs::write(&self.config_path, toml_string)?;
+
     Ok(())
   }
 }
@@ -204,8 +205,8 @@ mod tests {
     assert!(result.is_ok(), "Should successfully create default config");
     let config = result.unwrap();
     assert_eq!(config.general.window_margin, DEFAULT_WINDOW_MARGIN_VALUE);
-    assert_eq!(config.general.file_logging_enabled, true);
-    assert_eq!(config.general.allow_selecting_same_center_windows, true);
+    assert!(config.general.file_logging_enabled);
+    assert!(config.general.allow_selecting_same_center_windows);
     assert_eq!(config.general.additional_workspace_count, 3);
     assert!(config.hotkey.is_empty());
 
@@ -242,12 +243,12 @@ mod tests {
     assert!(result.is_ok(), "Should successfully load config");
     let loaded_config = result.unwrap();
     assert_eq!(loaded_config.general.window_margin, 50);
-    assert_eq!(loaded_config.general.file_logging_enabled, false);
-    assert_eq!(loaded_config.general.allow_selecting_same_center_windows, false);
+    assert!(!loaded_config.general.file_logging_enabled);
+    assert!(!loaded_config.general.allow_selecting_same_center_windows);
     assert_eq!(loaded_config.general.additional_workspace_count, 5);
     assert_eq!(loaded_config.hotkey.len(), 1);
     assert_eq!(loaded_config.hotkey[0].name, "Test App");
-    assert_eq!(loaded_config.hotkey[0].execute_as_admin, true);
+    assert!(loaded_config.hotkey[0].execute_as_admin);
   }
 
   #[test]
