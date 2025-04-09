@@ -1,6 +1,6 @@
 <p align="center">
   <img src="./assets/randolf.png" width="200" height="200" alt="Randolf"/>
-</p>O
+</p>
 
 # Meet Randolf
 
