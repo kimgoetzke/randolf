@@ -1,5 +1,6 @@
 use crate::api::NativeApi;
-use crate::utils::{Monitor, MonitorInfo, Monitors, Point, Rect, Window, WindowHandle, WindowPlacement};
+use crate::utils::WindowHandle;
+use crate::utils::{Monitor, MonitorInfo, Monitors, Point, Rect, Window, WindowPlacement};
 use std::mem::MaybeUninit;
 use std::{mem, ptr};
 use windows::Win32::Foundation::{HWND, LPARAM, POINT, RECT, WPARAM};

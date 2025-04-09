@@ -2,7 +2,7 @@ use crate::utils::{Direction, Point, Rect};
 use std::fmt::Display;
 use windows::Win32::Graphics::Gdi::{HMONITOR, MONITORINFO};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Monitor {
   pub handle: isize,
   pub size: u32,

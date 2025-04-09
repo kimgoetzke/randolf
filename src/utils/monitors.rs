@@ -44,3 +44,70 @@ impl Monitors {
     print_monitor_layout_to_canvas(&self.monitors);
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use crate::utils::{Direction, Monitor, Monitors, Rect};
+
+  #[test]
+  fn from_sorts_monitors_by_handle() {
+    let monitor1 = Monitor::new_test(2, Rect::new(0, 0, 1920, 1080));
+    let monitor2 = Monitor::new_test(1, Rect::new(1920, 0, 3840, 1080));
+    let monitors = Monitors::from(vec![monitor1.clone(), monitor2.clone()]);
+
+    assert_eq!(monitors.get_all(), vec![&monitor2, &monitor1]);
+  }
+
+  #[test]
+  fn get_returns_monitor_in_specified_direction() {
+    let monitor1 = Monitor::new_test(1, Rect::new(0, 0, 1920, 1080));
+    let monitor2 = Monitor::new_test(2, Rect::new(1920, 0, 3840, 1080));
+    let monitors = Monitors::from(vec![monitor1.clone(), monitor2.clone()]);
+
+    let result = monitors.get(Direction::Right, monitor1.handle);
+
+    assert_eq!(result, Some(&monitor2));
+  }
+
+  #[test]
+  fn get_returns_none_if_no_monitor_in_direction() {
+    let monitor1 = Monitor::new_test(1, Rect::new(0, 0, 1920, 1080));
+    let monitors = Monitors::from(vec![monitor1.clone()]);
+
+    let result = monitors.get(Direction::Right, monitor1.handle);
+
+    assert!(result.is_none());
+  }
+
+  #[test]
+  fn get_by_handle_returns_correct_monitor() {
+    let monitor1 = Monitor::new_test(1, Rect::new(0, 0, 1920, 1080));
+    let monitor2 = Monitor::new_test(2, Rect::new(1920, 0, 3840, 1080));
+    let monitors = Monitors::from(vec![monitor1.clone(), monitor2.clone()]);
+
+    let result = monitors.get_by_handle(2);
+
+    assert_eq!(result, Some(&monitor2));
+  }
+
+  #[test]
+  fn get_by_handle_returns_none_for_invalid_handle() {
+    let monitor1 = Monitor::new_test(1, Rect::new(0, 0, 1920, 1080));
+    let monitors = Monitors::from(vec![monitor1.clone()]);
+
+    let result = monitors.get_by_handle(99);
+
+    assert!(result.is_none());
+  }
+
+  #[test]
+  fn get_all_returns_all_monitors() {
+    let monitor1 = Monitor::new_test(1, Rect::new(0, 0, 1920, 1080));
+    let monitor2 = Monitor::new_test(2, Rect::new(1920, 0, 3840, 1080));
+    let monitors = Monitors::from(vec![monitor1.clone(), monitor2.clone()]);
+
+    let result = monitors.get_all();
+
+    assert_eq!(result, vec![&monitor1, &monitor2]);
+  }
+}

@@ -1,4 +1,5 @@
-use crate::utils::{MonitorInfo, Monitors, Point, Rect, Window, WindowHandle, WindowPlacement};
+use crate::utils::WindowHandle;
+use crate::utils::{MonitorInfo, Monitors, Point, Rect, Window, WindowPlacement};
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
 
 pub trait NativeApi {

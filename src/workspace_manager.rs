@@ -291,7 +291,8 @@ impl<T: NativeApi + Copy> WorkspaceManager<T> {
 mod tests {
   use super::*;
   use crate::api::MockWindowsApi;
-  use crate::utils::{Monitor, Point, Rect, WindowHandle, WindowPlacement, Workspace, WorkspaceId};
+  use crate::utils::WindowHandle;
+  use crate::utils::{Monitor, Point, Rect, WindowPlacement, Workspace, WorkspaceId};
 
   impl WorkspaceManager<MockWindowsApi> {
     pub fn new_for_testing(target_workspace_id: WorkspaceId) -> Self {

@@ -1,5 +1,6 @@
 use crate::api::NativeApi;
-use crate::utils::{Monitor, Window, WindowHandle};
+use crate::utils::window_handle::WindowHandle;
+use crate::utils::{Monitor, Window};
 use std::fmt::Display;
 
 #[derive(Debug, Copy, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]

@@ -57,3 +57,64 @@ impl Sizing {
     }
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::utils::Rect;
+
+  #[test]
+  fn right_half_of_screen_calculates_correct_sizing() {
+    let work_area = Rect::new(0, 0, 100, 200);
+    let sizing = Sizing::right_half_of_screen(work_area, 10);
+
+    assert_eq!(sizing.x, 55);
+    assert_eq!(sizing.y, 10);
+    assert_eq!(sizing.width, 35);
+    assert_eq!(sizing.height, 180);
+  }
+
+  #[test]
+  fn left_half_of_screen_calculates_correct_sizing() {
+    let work_area = Rect::new(0, 0, 100, 200);
+    let sizing = Sizing::left_half_of_screen(work_area, 10);
+
+    assert_eq!(sizing.x, 10);
+    assert_eq!(sizing.y, 10);
+    assert_eq!(sizing.width, 35);
+    assert_eq!(sizing.height, 180);
+  }
+
+  #[test]
+  fn top_half_of_screen_calculates_correct_sizing() {
+    let work_area = Rect::new(0, 0, 100, 200);
+    let sizing = Sizing::top_half_of_screen(work_area, 10);
+
+    assert_eq!(sizing.x, 10);
+    assert_eq!(sizing.y, 10);
+    assert_eq!(sizing.width, 80);
+    assert_eq!(sizing.height, 85);
+  }
+
+  #[test]
+  fn bottom_half_of_screen_calculates_correct_sizing() {
+    let work_area = Rect::new(0, 0, 100, 200);
+    let sizing = Sizing::bottom_half_of_screen(work_area, 10);
+
+    assert_eq!(sizing.x, 10);
+    assert_eq!(sizing.y, 105);
+    assert_eq!(sizing.width, 80);
+    assert_eq!(sizing.height, 85);
+  }
+
+  #[test]
+  fn near_maximised_calculates_correct_sizing() {
+    let work_area = Rect::new(0, 0, 100, 200);
+    let sizing = Sizing::near_maximised(work_area, 10);
+
+    assert_eq!(sizing.x, 10);
+    assert_eq!(sizing.y, 10);
+    assert_eq!(sizing.width, 80);
+    assert_eq!(sizing.height, 180);
+  }
+}

@@ -9,6 +9,7 @@ mod point;
 mod rect;
 mod sizing;
 mod window;
+mod window_handle;
 mod window_placement;
 mod workspace;
 
@@ -22,6 +23,7 @@ pub use monitors::Monitors;
 pub use point::Point;
 pub use rect::Rect;
 pub use sizing::Sizing;
-pub use window::{Window, WindowHandle};
+pub use window::Window;
+pub use window_handle::WindowHandle;
 pub use window_placement::WindowPlacement;
 pub use workspace::{Workspace, WorkspaceId};

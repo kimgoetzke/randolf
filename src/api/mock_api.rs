@@ -3,7 +3,8 @@
 pub(crate) mod test {
 
   use crate::api::NativeApi;
-  use crate::utils::{Monitor, MonitorInfo, Monitors, Point, Rect, Window, WindowHandle, WindowPlacement};
+  use crate::utils::WindowHandle;
+  use crate::utils::{Monitor, MonitorInfo, Monitors, Point, Rect, Window, WindowPlacement};
   use std::cell::RefCell;
   use std::collections::HashMap;
   use windows::Win32::UI::Shell::IVirtualDesktopManager;

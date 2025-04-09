@@ -45,6 +45,7 @@ impl Into<RECT> for Rect {
 #[cfg(test)]
 mod tests {
   use crate::utils::Rect;
+  use windows::Win32::Foundation::RECT;
 
   impl Rect {
     pub fn default() -> Self {
@@ -55,5 +56,42 @@ mod tests {
         bottom: 0,
       }
     }
+  }
+
+  #[test]
+  fn new_creates_rect_with_correct_coordinates() {
+    let rect = Rect::new(1, 2, 3, 4);
+
+    assert_eq!(rect.left, 1);
+    assert_eq!(rect.top, 2);
+    assert_eq!(rect.right, 3);
+    assert_eq!(rect.bottom, 4);
+  }
+
+  #[test]
+  fn from_windows_rect_converts_correctly() {
+    let windows_rect = RECT {
+      left: 5,
+      top: 6,
+      right: 7,
+      bottom: 8,
+    };
+    let rect: Rect = windows_rect.into();
+
+    assert_eq!(rect.left, 5);
+    assert_eq!(rect.top, 6);
+    assert_eq!(rect.right, 7);
+    assert_eq!(rect.bottom, 8);
+  }
+
+  #[test]
+  fn into_windows_rect_converts_correctly() {
+    let rect = Rect::new(9, 10, 11, 12);
+    let windows_rect: RECT = rect.into();
+
+    assert_eq!(windows_rect.left, 9);
+    assert_eq!(windows_rect.top, 10);
+    assert_eq!(windows_rect.right, 11);
+    assert_eq!(windows_rect.bottom, 12);
   }
 }

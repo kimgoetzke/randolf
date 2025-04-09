@@ -73,8 +73,9 @@ impl Into<*const WINDOWPLACEMENT> for WindowPlacement {
 
 #[cfg(test)]
 mod tests {
-  use crate::utils::{Point, Rect, WindowPlacement};
-  use windows::Win32::UI::WindowsAndMessaging::{SW_SHOWNORMAL, WINDOWPLACEMENT};
+  use crate::utils::{Point, Rect, Sizing, WindowPlacement};
+  use windows::Win32::Foundation::POINT;
+  use windows::Win32::UI::WindowsAndMessaging::{SW_SHOWNORMAL, WINDOWPLACEMENT, WINDOWPLACEMENT_FLAGS};
 
   impl WindowPlacement {
     pub fn new_from_rect(rect: Rect) -> Self {
@@ -86,6 +87,89 @@ mod tests {
         max_position: Point::new(-1, -1),
         normal_position: rect,
       }
+    }
+
+    pub fn new_for_testing() -> Self {
+      WindowPlacement {
+        length: 44,
+        flags: 1,
+        show_cmd: 2,
+        min_position: Point::new(5, 10),
+        max_position: Point::new(-5, -10),
+        normal_position: Rect::new(10, 20, 30, 40),
+      }
+    }
+  }
+
+  #[test]
+  fn new_from_sizing_creates_correct_window_placement() {
+    let sizing = Sizing {
+      x: 10,
+      y: 20,
+      width: 100,
+      height: 200,
+    };
+    let placement = WindowPlacement::new_from_sizing(sizing);
+
+    assert_eq!(placement.length, size_of::<WINDOWPLACEMENT>() as u32);
+    assert_eq!(placement.flags, 0);
+    assert_eq!(placement.show_cmd, SW_SHOWNORMAL.0 as u32);
+    assert_eq!(placement.min_position, Point::new(0, 0));
+    assert_eq!(placement.max_position, Point::new(-1, -1));
+    assert_eq!(placement.normal_position, Rect::new(10, 20, 110, 220));
+  }
+
+  #[test]
+  fn from_window_placement_converts_correctly() {
+    let wp = WINDOWPLACEMENT {
+      length: 44,
+      flags: WINDOWPLACEMENT_FLAGS(1),
+      showCmd: 2,
+      ptMinPosition: POINT { x: 5, y: 10 },
+      ptMaxPosition: POINT { x: -5, y: -10 },
+      rcNormalPosition: Rect::new(10, 20, 30, 40).into(),
+    };
+    let placement: WindowPlacement = wp.into();
+
+    assert_eq!(placement.length, 44);
+    assert_eq!(placement.flags, 1);
+    assert_eq!(placement.show_cmd, 2);
+    assert_eq!(placement.min_position, Point::new(5, 10));
+    assert_eq!(placement.max_position, Point::new(-5, -10));
+    assert_eq!(placement.normal_position, Rect::new(10, 20, 30, 40));
+  }
+
+  #[test]
+  fn into_window_placement_converts_correctly() {
+    let placement = WindowPlacement::new_for_testing();
+    let wp: WINDOWPLACEMENT = placement.into();
+
+    assert_eq!(wp.length, 44);
+    assert_eq!(wp.flags.0, 1);
+    assert_eq!(wp.showCmd, 2);
+    assert_eq!(wp.ptMinPosition.x, 5);
+    assert_eq!(wp.ptMinPosition.y, 10);
+    assert_eq!(wp.ptMaxPosition.x, -5);
+    assert_eq!(wp.ptMaxPosition.y, -10);
+    assert_eq!(Rect::from(wp.rcNormalPosition), Rect::new(10, 20, 30, 40));
+  }
+
+  #[test]
+  fn into_pointer_creates_valid_pointer() {
+    let placement = WindowPlacement::new_for_testing();
+    let ptr: *const WINDOWPLACEMENT = placement.into();
+
+    unsafe {
+      assert!(!ptr.is_null());
+      let deref = *ptr;
+      assert_eq!(deref.length, 44);
+      assert_eq!(deref.flags.0, 1);
+      assert_eq!(deref.showCmd, 2);
+      assert_eq!(deref.ptMinPosition.x, 5);
+      assert_eq!(deref.ptMinPosition.y, 10);
+      assert_eq!(deref.ptMaxPosition.x, -5);
+      assert_eq!(deref.ptMaxPosition.y, -10);
+      assert_eq!(Rect::from(deref.rcNormalPosition), Rect::new(10, 20, 30, 40));
     }
   }
 }
