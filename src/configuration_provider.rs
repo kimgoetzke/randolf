@@ -182,3 +182,83 @@ impl ConfigurationProvider {
     Ok(())
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::fs::{self, File};
+  use std::io::Write;
+  use tempfile::TempDir;
+
+  fn create_temp_directory() -> TempDir {
+    TempDir::new().expect("Failed to create temporary directory")
+  }
+
+  #[test]
+  fn load_or_create_config_creates_default_when_file_does_not_exist() {
+    let directory = create_temp_directory();
+    let path = directory.path().join(CONFIGURATION_FILE_NAME);
+
+    let result = ConfigurationProvider::load_or_create_config(&path);
+
+    assert!(result.is_ok(), "Should successfully create default config");
+    let config = result.unwrap();
+    assert_eq!(config.general.window_margin, DEFAULT_WINDOW_MARGIN_VALUE);
+    assert_eq!(config.general.file_logging_enabled, true);
+    assert_eq!(config.general.allow_selecting_same_center_windows, true);
+    assert_eq!(config.general.additional_workspace_count, 3);
+    assert!(config.hotkey.is_empty());
+
+    assert!(path.exists(), "Config file should have been created");
+
+    let raw_contents = fs::read_to_string(path).expect("Should read the config file");
+    let parsed_contents: Configuration = toml::from_str(&raw_contents).expect("Should parse valid TOML");
+    assert_eq!(parsed_contents.general.window_margin, DEFAULT_WINDOW_MARGIN_VALUE);
+  }
+
+  #[test]
+  fn load_or_create_config_loads_existing_file() {
+    let directory = create_temp_directory();
+    let path = directory.path().join(CONFIGURATION_FILE_NAME);
+    let custom_config = Configuration {
+      general: GeneralConfiguration {
+        window_margin: 50,
+        file_logging_enabled: false,
+        allow_selecting_same_center_windows: false,
+        additional_workspace_count: 5,
+      },
+      hotkey: vec![CustomHotkey {
+        name: "Test App".to_string(),
+        path: "C:\\test.exe".to_string(),
+        hotkey: "y".to_string(),
+        execute_as_admin: true,
+      }],
+    };
+    let toml_string = toml::to_string_pretty(&custom_config).expect("Failed to serialize config");
+    fs::write(&path, toml_string).expect("Failed to write config file");
+
+    let result = ConfigurationProvider::load_or_create_config(&path);
+
+    assert!(result.is_ok(), "Should successfully load config");
+    let loaded_config = result.unwrap();
+    assert_eq!(loaded_config.general.window_margin, 50);
+    assert_eq!(loaded_config.general.file_logging_enabled, false);
+    assert_eq!(loaded_config.general.allow_selecting_same_center_windows, false);
+    assert_eq!(loaded_config.general.additional_workspace_count, 5);
+    assert_eq!(loaded_config.hotkey.len(), 1);
+    assert_eq!(loaded_config.hotkey[0].name, "Test App");
+    assert_eq!(loaded_config.hotkey[0].execute_as_admin, true);
+  }
+
+  #[test]
+  fn load_or_create_config_handles_invalid_toml() {
+    let directory = create_temp_directory();
+    let path = directory.path().join(CONFIGURATION_FILE_NAME);
+    let mut file = File::create(&path).expect("Failed to create test file");
+    file.write_all(b"this is not valid TOML]").expect("Failed to write test data");
+
+    let result = ConfigurationProvider::load_or_create_config(&path);
+
+    assert!(result.is_err(), "Should fail with invalid TOML");
+  }
+}

@@ -4,10 +4,7 @@
 
 # Meet Randolf
 
-> [!NOTE]
-> This project is still under active development and lacks important features.
-
-Randolf is a window management tool for Windows 11 that provides window tiling-like functionality. Randolf allows you
+Randolf is a basic window manager for Windows 11 that provides window tiling-like functionality. Randolf allows you
 to:
 
 - `Win` + `\` - near-maximise the active window (maximise minus margin).
@@ -42,6 +39,7 @@ from C#/.NET to Rust, however contributions or suggestions are welcome.
 - Allow customising modifier keys and/or customising window/workspace management hotkeys
 - Allow auto-start application on startup
 - Group "snapped" window on a single screen and allow resizing them together
+- Animate window movement
 
 ## How to configure
 
