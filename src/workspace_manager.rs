@@ -349,7 +349,7 @@ mod tests {
   }
 
   #[test]
-  fn order_workspaces_left_to_right() {
+  fn get_ordered_workspace_ids_left_to_right() {
     MockWindowsApi::reset();
 
     let left_monitor = Monitor::new_test(1, Rect::new(0, 0, 99, 100));
@@ -369,7 +369,7 @@ mod tests {
   }
 
   #[test]
-  fn order_workspaces_top_to_bottom() {
+  fn get_ordered_workspace_ids_top_to_bottom() {
     MockWindowsApi::reset();
 
     let top_monitor = Monitor::new_test(1, Rect::new(0, 0, 100, 99));
@@ -389,7 +389,7 @@ mod tests {
   }
 
   #[test]
-  fn order_workspaces_with_multiple_workspaces_on_same_monitor() {
+  fn get_ordered_workspace_ids_with_multiple_workspaces_on_same_monitor() {
     MockWindowsApi::reset();
 
     let top_monitor = Monitor::new_test(1, Rect::new(0, 0, 100, 99));

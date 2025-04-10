@@ -191,6 +191,15 @@ mod tests {
   use std::io::Write;
   use tempfile::TempDir;
 
+  impl ConfigurationProvider {
+    pub fn default() -> Self {
+      Self {
+        config: Configuration::default(),
+        config_path: PathBuf::new(),
+      }
+    }
+  }
+
   fn create_temp_directory() -> TempDir {
     TempDir::new().expect("Failed to create temporary directory")
   }
