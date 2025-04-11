@@ -170,7 +170,9 @@ pub(crate) mod test {
     }
 
     fn do_restore_window_placement(&self, handle: WindowHandle, previous_placement: WindowPlacement) {
-      unimplemented!()
+      MOCK_STATE.with(|state| {
+        state.borrow_mut().window_placements.insert(handle, previous_placement);
+      })
     }
 
     fn get_cursor_position(&self) -> Point {
