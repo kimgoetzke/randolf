@@ -2,7 +2,7 @@ use crate::utils::{Point, Rect, Sizing};
 use windows::Win32::Foundation::POINT;
 use windows::Win32::UI::WindowsAndMessaging::{SW_SHOWNORMAL, WINDOWPLACEMENT, WINDOWPLACEMENT_FLAGS};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct WindowPlacement {
   pub length: u32,
   pub flags: u32,

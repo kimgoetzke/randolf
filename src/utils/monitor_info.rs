@@ -2,6 +2,7 @@ use crate::utils::{Monitor, Rect};
 use windows::Win32::Graphics::Gdi::MONITORINFO;
 
 #[allow(dead_code)]
+#[derive(Debug, Clone, Copy)]
 pub struct MonitorInfo {
   pub size: u32,
   /// Full monitor area including taskbar.

@@ -14,7 +14,7 @@ pub struct WindowManager<T: NativeApi> {
   configuration_provider: Arc<Mutex<ConfigurationProvider>>,
   known_windows: HashMap<String, WindowPlacement>,
   workspace_manager: WorkspaceManager<T>,
-  virtual_desktop_manager: IVirtualDesktopManager,
+  virtual_desktop_manager: Option<IVirtualDesktopManager>,
   windows_api: T,
 }
 
@@ -27,9 +27,11 @@ impl<T: NativeApi + Copy> WindowManager<T> {
     let workspace_manager = WorkspaceManager::new(additional_workspace_count, api);
     Self {
       known_windows: HashMap::new(),
-      virtual_desktop_manager: api
-        .get_virtual_desktop_manager()
-        .expect("Failed to get the virtual desktop manager"),
+      virtual_desktop_manager: Some(
+        api
+          .get_virtual_desktop_manager()
+          .expect("Failed to get the virtual desktop manager"),
+      ),
       workspace_manager,
       configuration_provider,
       windows_api: api,
@@ -41,7 +43,7 @@ impl<T: NativeApi + Copy> WindowManager<T> {
     self.workspace_manager.get_ordered_workspace_ids()
   }
 
-  pub fn margin(&self) -> i32 {
+  fn margin(&self) -> i32 {
     self.configuration_provider.lock().unwrap().get_i32(WINDOW_MARGIN)
   }
 
@@ -158,9 +160,11 @@ impl<T: NativeApi + Copy> WindowManager<T> {
       None => (cursor_position, None),
     };
 
-    if let Some(target_window) =
-      self.find_closest_window_in_direction(&ref_point, direction, &windows, &self.virtual_desktop_manager, ref_window)
-    {
+    if let Some(target_window) = if let Some(vdm) = &self.virtual_desktop_manager {
+      self.find_closest_window_in_direction(&ref_point, direction, &windows, vdm, ref_window)
+    } else {
+      None
+    } {
       let target_point = Point::from_center_of_rect(&target_window.rect);
       self.move_focus_to_window(direction, target_window, &target_point);
     } else {
@@ -391,4 +395,55 @@ fn log_actual_vs_expected(handle: &WindowHandle, sizing: &Sizing, rc: Rect) {
     rc.right - rc.left,
     rc.bottom - rc.top
   );
+}
+
+#[cfg(test)]
+mod tests {
+  use crate::api::{MockWindowsApi, NativeApi};
+  use crate::configuration_provider::ConfigurationProvider;
+  use crate::utils::{MonitorInfo, Rect, Sizing, WindowHandle, WindowPlacement};
+  use crate::window_manager::{WindowManager, is_of_expected_size};
+  use crate::workspace_manager::WorkspaceManager;
+  use std::sync::{Arc, Mutex};
+
+  #[test]
+  fn near_maximize_window_when_window_is_not_near_maximised() {
+    let handle = WindowHandle::new(1);
+    let placement = WindowPlacement::new_from_sizing(Sizing::new(0, 0, 100, 100));
+    let monitor_info = MonitorInfo {
+      size: 0,
+      monitor_area: Rect::new(0, 0, 200, 200),
+      work_area: Rect::new(0, 0, 200, 200),
+      flags: 0,
+    };
+    MockWindowsApi::set_foreground_window(handle);
+    MockWindowsApi::set_window_placement(handle, placement.clone());
+    MockWindowsApi::set_monitor_info_from_window(handle, monitor_info);
+    let api = MockWindowsApi;
+    let mut manager = WindowManager {
+      configuration_provider: Arc::new(Mutex::new(ConfigurationProvider::default())),
+      known_windows: Default::default(),
+      workspace_manager: WorkspaceManager::default(),
+      virtual_desktop_manager: None,
+      windows_api: api,
+    };
+
+    manager.near_maximise_or_restore();
+
+    let actual_placement = manager.windows_api.get_window_placement(handle);
+    let expected_placement = WindowPlacement::new_from_sizing(Sizing::new(20, 20, 160, 160));
+    assert!(actual_placement.is_some());
+    assert_eq!(actual_placement.unwrap(), expected_placement);
+  }
+
+  #[test]
+  fn is_of_expected_size_test() {
+    let handle = WindowHandle::new(1);
+    let placement = WindowPlacement::new_from_sizing(Sizing::new(0, 0, 100, 100));
+    let sizing = Sizing::new(0, 0, 100, 100);
+    assert!(is_of_expected_size(handle, &placement, &sizing));
+
+    let placement = WindowPlacement::new_from_sizing(Sizing::new(1, 0, 101, 100));
+    assert!(!is_of_expected_size(handle, &placement, &sizing));
+  }
 }

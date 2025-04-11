@@ -295,6 +295,14 @@ mod tests {
   use crate::utils::{Monitor, Point, Rect, WindowPlacement, Workspace, WorkspaceId};
 
   impl WorkspaceManager<MockWindowsApi> {
+    pub fn default() -> Self {
+      Self {
+        active_workspaces: Vec::new(),
+        workspaces: HashMap::new(),
+        windows_api: MockWindowsApi::new(),
+      }
+    }
+
     pub fn new_for_testing(target_workspace_id: WorkspaceId) -> Self {
       let foreground_window_handle = WindowHandle::new(1);
       let foreground_window_placement = WindowPlacement::new_from_rect(Rect::new(50, 50, 100, 100));
@@ -304,7 +312,7 @@ mod tests {
         foreground_window_placement.normal_position,
       );
       MockWindowsApi::set_foreground_window(foreground_window_handle);
-      MockWindowsApi::set_window_placement(Some(foreground_window_placement));
+      MockWindowsApi::set_window_placement(foreground_window_handle, foreground_window_placement);
       MockWindowsApi::set_window_title(foreground_window.title.to_string());
       MockWindowsApi::set_visible_windows(vec![foreground_window]);
 

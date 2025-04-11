@@ -1,7 +1,6 @@
 #[allow(unused_variables)]
 #[cfg(test)]
 pub(crate) mod test {
-
   use crate::api::NativeApi;
   use crate::utils::WindowHandle;
   use crate::utils::{Monitor, MonitorInfo, Monitors, Point, Rect, Window, WindowPlacement};
@@ -16,9 +15,10 @@ pub(crate) mod test {
   #[derive(Default, Clone)]
   struct MockState {
     foreground_window: Option<WindowHandle>,
-    window_placement: Option<WindowPlacement>,
+    window_placements: HashMap<WindowHandle, WindowPlacement>,
     window_title: String,
     monitors: Vec<Monitor>,
+    monitors_from_window: HashMap<WindowHandle, MonitorInfo>,
     visible_windows: Vec<Window>,
     cursor_position: Point,
     monitor_for_point: isize,
@@ -57,15 +57,21 @@ pub(crate) mod test {
       });
     }
 
-    pub fn set_window_placement(placement: Option<WindowPlacement>) {
+    pub fn set_window_placement(handle: WindowHandle, placement: WindowPlacement) {
       MOCK_STATE.with(|state| {
-        state.borrow_mut().window_placement = placement;
+        state.borrow_mut().window_placements.insert(handle, placement);
       });
     }
 
     pub fn set_monitors(monitors: Vec<Monitor>) {
       MOCK_STATE.with(|state| {
         state.borrow_mut().monitors = monitors;
+      });
+    }
+
+    pub fn set_monitor_info_from_window(handle: WindowHandle, monitor_info: MonitorInfo) {
+      MOCK_STATE.with(|state| {
+        state.borrow_mut().monitors_from_window.insert(handle, monitor_info);
       });
     }
 
@@ -142,7 +148,7 @@ pub(crate) mod test {
     }
 
     fn do_maximise_window(&self, handle: WindowHandle) {
-      unimplemented!()
+      info!("Maximising window: {handle}");
     }
 
     fn do_hide_window(&self, handle: WindowHandle) {
@@ -150,15 +156,17 @@ pub(crate) mod test {
     }
 
     fn do_close_window(&self, handle: WindowHandle) {
-      unimplemented!()
+      info!("Closing window: {handle}");
     }
 
     fn get_window_placement(&self, handle: WindowHandle) -> Option<WindowPlacement> {
-      MOCK_STATE.with(|state| state.borrow().window_placement.clone())
+      MOCK_STATE.with(|state| state.borrow().window_placements.get(&handle).cloned())
     }
 
     fn set_window_placement_and_force_repaint(&self, handle: WindowHandle, placement: WindowPlacement) {
-      unimplemented!()
+      MOCK_STATE.with(|state| {
+        state.borrow_mut().window_placements.insert(handle, placement);
+      });
     }
 
     fn do_restore_window_placement(&self, handle: WindowHandle, previous_placement: WindowPlacement) {
@@ -180,7 +188,13 @@ pub(crate) mod test {
     }
 
     fn get_monitor_info_from_window(&self, handle: WindowHandle) -> Option<MonitorInfo> {
-      unimplemented!()
+      MOCK_STATE.with(|state| {
+        if let Some(monitor_info) = state.borrow_mut().monitors_from_window.get(&handle) {
+          return Some(*monitor_info);
+        }
+
+        None
+      })
     }
 
     fn get_monitor_for_window_handle(&self, handle: WindowHandle) -> isize {
