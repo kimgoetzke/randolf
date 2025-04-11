@@ -89,7 +89,7 @@ mod tests {
       }
     }
 
-    pub fn new_for_testing() -> Self {
+    pub fn new_test() -> Self {
       WindowPlacement {
         length: 44,
         flags: 1,
@@ -141,7 +141,7 @@ mod tests {
 
   #[test]
   fn into_window_placement_converts_correctly() {
-    let placement = WindowPlacement::new_for_testing();
+    let placement = WindowPlacement::new_test();
     let wp: WINDOWPLACEMENT = placement.into();
 
     assert_eq!(wp.length, 44);
@@ -156,7 +156,7 @@ mod tests {
 
   #[test]
   fn into_pointer_creates_valid_pointer() {
-    let placement = WindowPlacement::new_for_testing();
+    let placement = WindowPlacement::new_test();
     let ptr: *const WINDOWPLACEMENT = placement.into();
 
     unsafe {

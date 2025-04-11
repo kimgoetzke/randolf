@@ -18,7 +18,8 @@ pub(crate) mod test {
     window_placements: HashMap<WindowHandle, WindowPlacement>,
     window_title: String,
     monitors: Vec<Monitor>,
-    monitors_from_window: HashMap<WindowHandle, MonitorInfo>,
+    monitors_for_window: HashMap<WindowHandle, Monitor>,
+    monitor_infos_for_window: HashMap<WindowHandle, MonitorInfo>,
     visible_windows: Vec<Window>,
     cursor_position: Point,
     monitor_for_point: isize,
@@ -69,9 +70,15 @@ pub(crate) mod test {
       });
     }
 
+    pub fn set_monitors_for_window(handle: WindowHandle, monitor: Monitor) {
+      MOCK_STATE.with(|state| {
+        state.borrow_mut().monitors_for_window.insert(handle, monitor);
+      });
+    }
+
     pub fn set_monitor_info_from_window(handle: WindowHandle, monitor_info: MonitorInfo) {
       MOCK_STATE.with(|state| {
-        state.borrow_mut().monitors_from_window.insert(handle, monitor_info);
+        state.borrow_mut().monitor_infos_for_window.insert(handle, monitor_info);
       });
     }
 
@@ -87,7 +94,6 @@ pub(crate) mod test {
       });
     }
 
-    // Helper method to reset all mock data
     pub fn reset() {
       MOCK_STATE.with(|state| {
         *state.borrow_mut() = MockState::default();
@@ -186,12 +192,15 @@ pub(crate) mod test {
     }
 
     fn get_all_monitors(&self) -> Monitors {
-      unimplemented!()
+      MOCK_STATE.with(|state| {
+        let monitors = state.borrow().monitors.clone();
+        Monitors::from(monitors)
+      })
     }
 
     fn get_monitor_info_from_window(&self, handle: WindowHandle) -> Option<MonitorInfo> {
       MOCK_STATE.with(|state| {
-        if let Some(monitor_info) = state.borrow_mut().monitors_from_window.get(&handle) {
+        if let Some(monitor_info) = state.borrow_mut().monitor_infos_for_window.get(&handle) {
           return Some(*monitor_info);
         }
 
@@ -200,7 +209,12 @@ pub(crate) mod test {
     }
 
     fn get_monitor_for_window_handle(&self, handle: WindowHandle) -> isize {
-      unimplemented!()
+      MOCK_STATE.with(|state| {
+        if let Some(monitor) = state.borrow_mut().monitors_for_window.get(&handle) {
+          return monitor.handle;
+        }
+        panic!("You forgot to set a monitor for for window {}", handle);
+      })
     }
 
     fn get_monitor_for_point(&self, point: &Point) -> isize {

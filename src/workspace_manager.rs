@@ -303,7 +303,7 @@ mod tests {
       }
     }
 
-    pub fn new_for_testing(target_workspace_id: WorkspaceId) -> Self {
+    pub fn new_test(target_workspace_id: WorkspaceId) -> Self {
       let foreground_window_handle = WindowHandle::new(1);
       let foreground_window_placement = WindowPlacement::new_from_rect(Rect::new(50, 50, 100, 100));
       let foreground_window = Window::new(
@@ -424,7 +424,7 @@ mod tests {
 
     // Given the current workspace has one window and target workspace is not active
     let target_workspace_id = WorkspaceId::from(1, 2);
-    let mut workspace_manager = WorkspaceManager::new_for_testing(target_workspace_id);
+    let mut workspace_manager = WorkspaceManager::new_test(target_workspace_id);
     assert_eq!(workspace_manager.active_workspaces.len(), 2);
     assert!(!workspace_manager.active_workspaces.contains(&target_workspace_id));
 
@@ -449,7 +449,7 @@ mod tests {
 
     // Given the target workspace as one window and is not active
     let workspace_id = WorkspaceId::from(1, 2);
-    let mut workspace_manager = WorkspaceManager::new_for_testing(workspace_id);
+    let mut workspace_manager = WorkspaceManager::new_test(workspace_id);
 
     // When the user moves a window to a different workspace on the same monitor
     workspace_manager.move_window_to_workspace(workspace_id);
