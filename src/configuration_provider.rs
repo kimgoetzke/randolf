@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::error::Error;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -20,10 +21,30 @@ struct Configuration {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct GeneralConfiguration {
+  #[serde(default = "default_window_margin")]
   window_margin: i32,
+  #[serde(default = "default_file_logging_enabled")]
   file_logging_enabled: bool,
+  #[serde(default = "default_allow_selecting_same_center_windows")]
   allow_selecting_same_center_windows: bool,
+  #[serde(default = "default_additional_workspace_count")]
   additional_workspace_count: i32,
+}
+
+fn default_window_margin() -> i32 {
+  DEFAULT_WINDOW_MARGIN_VALUE
+}
+
+fn default_file_logging_enabled() -> bool {
+  true
+}
+
+fn default_allow_selecting_same_center_windows() -> bool {
+  true
+}
+
+fn default_additional_workspace_count() -> i32 {
+  2
 }
 
 impl Default for GeneralConfiguration {
@@ -32,7 +53,7 @@ impl Default for GeneralConfiguration {
       window_margin: DEFAULT_WINDOW_MARGIN_VALUE,
       file_logging_enabled: true,
       allow_selecting_same_center_windows: true,
-      additional_workspace_count: 3,
+      additional_workspace_count: 2,
     }
   }
 }
@@ -64,7 +85,7 @@ impl ConfigurationProvider {
 
   /// Determines the appropriate path for the configuration file. First tries the executable directory, then falls back
   /// to the current directory.
-  fn get_path_to_config() -> Result<PathBuf, Box<dyn std::error::Error>> {
+  fn get_path_to_config() -> Result<PathBuf, Box<dyn Error>> {
     if let Ok(exe_path) = std::env::current_exe() {
       info!("Using current executable path: {}", exe_path.display());
       if let Some(exe_dir) = exe_path.parent() {
@@ -80,10 +101,8 @@ impl ConfigurationProvider {
     Ok(config_path)
   }
 
-  // TODO: Add missing configurations with default values when loading the configuration
   // TODO: Add validation e.g. desktop_container_count < x, paths for hotkeys, etc.
-  /// Loads configuration from file or creates a default one if the file doesn't exist.
-  fn load_or_create_config(config_path: &Path) -> Result<Configuration, Box<dyn std::error::Error>> {
+  fn load_or_create_config(config_path: &Path) -> Result<Configuration, Box<dyn Error>> {
     match fs::read_to_string(config_path) {
       Ok(contents) => {
         let config: Configuration = toml::from_str(&contents)?;
@@ -97,7 +116,7 @@ impl ConfigurationProvider {
           fs::write(config_path, toml_string)?;
           Ok(default_config)
         } else {
-          error!("Failed to load configuration: {}", error);
+          println!("Failed to load configuration ({}): {}", error.kind(), error);
 
           Err(Box::new(error))
         }
@@ -154,12 +173,21 @@ impl ConfigurationProvider {
     }
   }
 
+  /// Sets i32 value and saves the configuration to file.
   #[allow(clippy::single_match)]
   pub fn set_i32(&mut self, name: &str, value: i32) {
     match name {
       WINDOW_MARGIN => {
         if self.config.general.window_margin != value {
           self.config.general.window_margin = value;
+          if let Err(err) = self.save_config() {
+            error!("Failed to save configuration: {}", err);
+          }
+        }
+      }
+      ADDITIONAL_WORKSPACE_COUNT => {
+        if self.config.general.additional_workspace_count != value {
+          self.config.general.additional_workspace_count = value;
           if let Err(err) = self.save_config() {
             error!("Failed to save configuration: {}", err);
           }
@@ -175,8 +203,7 @@ impl ConfigurationProvider {
     &self.config.hotkey
   }
 
-  /// Saves the current configuration to file.
-  fn save_config(&self) -> Result<(), Box<dyn std::error::Error>> {
+  fn save_config(&self) -> Result<(), Box<dyn Error>> {
     let toml_string = toml::to_string_pretty(&self.config)?;
     fs::write(&self.config_path, toml_string)?;
 
@@ -216,7 +243,7 @@ mod tests {
     assert_eq!(config.general.window_margin, DEFAULT_WINDOW_MARGIN_VALUE);
     assert!(config.general.file_logging_enabled);
     assert!(config.general.allow_selecting_same_center_windows);
-    assert_eq!(config.general.additional_workspace_count, 3);
+    assert_eq!(config.general.additional_workspace_count, 2);
     assert!(config.hotkey.is_empty());
 
     assert!(path.exists(), "Config file should have been created");
@@ -270,5 +297,42 @@ mod tests {
     let result = ConfigurationProvider::load_or_create_config(&path);
 
     assert!(result.is_err(), "Should fail with invalid TOML");
+  }
+
+  #[test]
+  fn load_or_create_config_loads_file_with_missing_fields() {
+    let directory = create_temp_directory();
+    let path = directory.path().join(CONFIGURATION_FILE_NAME);
+    let toml_string = r#"
+      [general]
+      file_logging_enabled = false
+      
+      [[hotkey]]
+      name = "Test App"
+      path = "C:\\test.exe"
+      hotkey = "y"
+      execute_as_admin = true
+      "#;
+    fs::write(&path, toml_string).expect("Failed to write config file");
+
+    let result = ConfigurationProvider::load_or_create_config(&path);
+
+    assert!(result.is_ok(), "Should successfully load config");
+    let loaded_config = result.unwrap();
+    assert_eq!(loaded_config.general.window_margin, default_window_margin());
+    assert!(!loaded_config.general.file_logging_enabled);
+    assert_eq!(
+      loaded_config.general.allow_selecting_same_center_windows,
+      default_allow_selecting_same_center_windows(),
+      "Should use default value for [default_allow_selecting_same_center_windows]"
+    );
+    assert_eq!(
+      loaded_config.general.additional_workspace_count,
+      default_additional_workspace_count(),
+      "Should use default value for [default_additional_workspace_count]"
+    );
+    assert_eq!(loaded_config.hotkey.len(), 1);
+    assert_eq!(loaded_config.hotkey[0].name, "Test App");
+    assert!(loaded_config.hotkey[0].execute_as_admin);
   }
 }
