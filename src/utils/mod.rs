@@ -8,6 +8,7 @@ mod monitors;
 mod point;
 mod rect;
 mod sizing;
+mod test_utils;
 mod window;
 mod window_handle;
 mod window_placement;
@@ -27,3 +28,6 @@ pub use window::Window;
 pub use window_handle::WindowHandle;
 pub use window_placement::WindowPlacement;
 pub use workspace::{Workspace, WorkspaceId};
+
+#[cfg(test)]
+pub use test_utils::test_utils::with_test_logger;

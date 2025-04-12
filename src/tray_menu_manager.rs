@@ -1,7 +1,5 @@
 use crate::api::get_all_monitors;
-use crate::configuration_provider::{
-  ALLOW_SELECTING_SAME_CENTER_WINDOWS, ConfigurationProvider, FILE_LOGGING_ENABLED, WINDOW_MARGIN,
-};
+use crate::configuration_provider::{ALLOW_SELECTING_SAME_CENTER_WINDOWS, ConfigurationProvider, WINDOW_MARGIN};
 use crate::utils::CONFIGURATION_PROVIDER_LOCK;
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -20,7 +18,6 @@ enum Event {
   DoubleClickTrayIcon,
   Exit,
   DisabledItem,
-  ToggleLogging,
   SetMargin(i32),
   ToggleSelectingSameCenterWindows,
   LogMonitorLayout,
@@ -66,25 +63,19 @@ impl TrayMenuManager {
 
   fn menu_builder(&self, version: &str, config: MutexGuard<ConfigurationProvider>) -> MenuBuilder<Event> {
     let current_margin: i32 = config.get_i32(WINDOW_MARGIN);
+    let icon_bytes = include_bytes!("../assets/icon.ico");
 
     MenuBuilder::new()
       .with(MenuItem::Item {
         name: format!("Randolf v{version}"),
         disabled: true,
         id: Event::DisabledItem,
-        icon: None,
+        icon: Some(Icon::from_buffer(icon_bytes, Some(32), Some(32)).unwrap()),
       })
       .separator()
       .submenu(
         "Configure debug settings",
-        MenuBuilder::new()
-          .checkable(
-            "Enable file logging",
-            config.get_bool(FILE_LOGGING_ENABLED),
-            Event::ToggleLogging,
-          )
-          .separator()
-          .item("Print monitor layout to file", Event::LogMonitorLayout),
+        MenuBuilder::new().item("Print monitor layout to log file", Event::LogMonitorLayout),
       )
       .separator()
       .submenu(
@@ -156,19 +147,6 @@ impl TrayMenuManager {
           }
           config.set_bool(ALLOW_SELECTING_SAME_CENTER_WINDOWS, !is_enabled);
           debug!("Set [{:?}] to [{}]", Event::ToggleSelectingSameCenterWindows, !is_enabled);
-        }
-        Event::ToggleLogging => {
-          let mut config = unlocked_config_provider(&config_provider);
-          let is_enabled = config.get_bool(FILE_LOGGING_ENABLED);
-          if let Err(result) = tray_icon
-            .lock()
-            .expect("Failed to lock tray icon")
-            .set_menu_item_checkable(Event::ToggleLogging, !is_enabled)
-          {
-            error!("Failed to toggle menu item: {result}");
-          }
-          config.set_bool(FILE_LOGGING_ENABLED, !is_enabled);
-          debug!("Set [{:?}] to [{}] - REQUIRES RESTART", Event::ToggleLogging, !is_enabled);
         }
         Event::Exit => {
           info!("Exit application...");

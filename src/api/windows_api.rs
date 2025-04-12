@@ -130,14 +130,14 @@ impl NativeApi for WindowsApi {
       result = true;
     }
 
-    trace!(
-      "{}  {} {} being managed (class name [{}] and title [\"{}\"])",
-      if result { "⛔" } else { "✅" },
-      handle,
-      if result { "is NOT" } else { "is" },
-      class_name,
-      title,
-    );
+    // debug!(
+    //   "{}  {} {} being managed (class name [{}] and title [\"{}\"])",
+    //   if result { "⛔" } else { "✅" },
+    //   handle,
+    //   if result { "is NOT" } else { "is" },
+    //   class_name,
+    //   title,
+    // );
     result
   }
 

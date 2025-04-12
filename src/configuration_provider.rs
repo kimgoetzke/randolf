@@ -5,7 +5,6 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 pub const WINDOW_MARGIN: &str = "window_margin";
-pub const FILE_LOGGING_ENABLED: &str = "file_logging_enabled";
 pub const ALLOW_SELECTING_SAME_CENTER_WINDOWS: &str = "allow_selecting_same_center_windows";
 pub const ADDITIONAL_WORKSPACE_COUNT: &str = "additional_workspace_count";
 
@@ -23,8 +22,6 @@ struct Configuration {
 struct GeneralConfiguration {
   #[serde(default = "default_window_margin")]
   window_margin: i32,
-  #[serde(default = "default_file_logging_enabled")]
-  file_logging_enabled: bool,
   #[serde(default = "default_allow_selecting_same_center_windows")]
   allow_selecting_same_center_windows: bool,
   #[serde(default = "default_additional_workspace_count")]
@@ -35,23 +32,72 @@ fn default_window_margin() -> i32 {
   DEFAULT_WINDOW_MARGIN_VALUE
 }
 
-fn default_file_logging_enabled() -> bool {
-  true
+fn validate_window_margin(config_str: &str, configuration_provider: &mut ConfigurationProvider) {
+  if !config_str.contains(WINDOW_MARGIN) {
+    warn!(
+      "[{}] was missing; adding it now with default value: {}",
+      WINDOW_MARGIN, DEFAULT_WINDOW_MARGIN_VALUE
+    );
+    configuration_provider.set_i32(WINDOW_MARGIN, DEFAULT_WINDOW_MARGIN_VALUE);
+  } else if configuration_provider.config.general.window_margin <= 0 {
+    warn!(
+      "[{}] is 0 or negative, setting to default value: {}",
+      WINDOW_MARGIN, DEFAULT_WINDOW_MARGIN_VALUE
+    );
+    configuration_provider.set_i32(WINDOW_MARGIN, DEFAULT_WINDOW_MARGIN_VALUE);
+  }
 }
 
 fn default_allow_selecting_same_center_windows() -> bool {
   true
 }
 
+fn validate_allow_selecting_same_center_windows(config_str: &str, configuration_provider: &mut ConfigurationProvider) {
+  if !config_str.contains(ALLOW_SELECTING_SAME_CENTER_WINDOWS) {
+    warn!(
+      "[{}] was missing; adding it now with default value: {}",
+      ALLOW_SELECTING_SAME_CENTER_WINDOWS,
+      default_allow_selecting_same_center_windows()
+    );
+    configuration_provider.set_bool(
+      ALLOW_SELECTING_SAME_CENTER_WINDOWS,
+      default_allow_selecting_same_center_windows(),
+    );
+  }
+}
+
 fn default_additional_workspace_count() -> i32 {
   2
+}
+
+fn validate_workspace_count(config_str: &str, configuration_provider: &mut ConfigurationProvider) {
+  if !config_str.contains(ADDITIONAL_WORKSPACE_COUNT) {
+    warn!(
+      "[{}] was missing; adding it now with default value: [{}]",
+      ADDITIONAL_WORKSPACE_COUNT,
+      default_additional_workspace_count()
+    );
+    configuration_provider.set_i32(ADDITIONAL_WORKSPACE_COUNT, default_additional_workspace_count());
+  } else if configuration_provider.config.general.additional_workspace_count < 0 {
+    warn!(
+      "[{}] is negative, setting to default value: [{}]",
+      ADDITIONAL_WORKSPACE_COUNT,
+      default_additional_workspace_count()
+    );
+    configuration_provider.set_i32(ADDITIONAL_WORKSPACE_COUNT, default_additional_workspace_count());
+  } else if configuration_provider.config.general.additional_workspace_count > 8 {
+    warn!(
+      "[{}] is larger than 8 which is not permitted, setting to 8",
+      ADDITIONAL_WORKSPACE_COUNT,
+    );
+    configuration_provider.set_i32(ADDITIONAL_WORKSPACE_COUNT, 8);
+  }
 }
 
 impl Default for GeneralConfiguration {
   fn default() -> Self {
     Self {
       window_margin: DEFAULT_WINDOW_MARGIN_VALUE,
-      file_logging_enabled: true,
       allow_selecting_same_center_windows: true,
       additional_workspace_count: 2,
     }
@@ -69,54 +115,77 @@ pub struct CustomHotkey {
 pub struct ConfigurationProvider {
   config: Configuration,
   config_path: PathBuf,
+  config_string: Option<String>,
 }
 
 impl ConfigurationProvider {
   pub fn new() -> Self {
     let config_path = Self::get_path_to_config().expect("Failed to determine configuration path");
-    let config = Self::load_or_create_config(&config_path).expect("Failed to load configuration");
+    let (config, config_string) = Self::load_or_create_config(&config_path).expect("Failed to load configuration");
+    let mut configuration_provider = ConfigurationProvider {
+      config,
+      config_path,
+      config_string,
+    };
+    configuration_provider.validate_config();
 
-    Self { config, config_path }
+    configuration_provider
   }
 
   pub fn log_current_config(&self) {
     debug!("{:?}", self.config);
   }
 
-  /// Determines the appropriate path for the configuration file. First tries the executable directory, then falls back
-  /// to the current directory.
+  /// Determines the appropriate path for the configuration file. Tries the directory of the executable first, then
+  /// falls back to the current directory.
   fn get_path_to_config() -> Result<PathBuf, Box<dyn Error>> {
-    if let Ok(exe_path) = std::env::current_exe() {
-      info!("Using current executable path: {}", exe_path.display());
-      if let Some(exe_dir) = exe_path.parent() {
-        let config_path = exe_dir.join(CONFIGURATION_FILE_NAME);
+    if let Ok(executable_path) = std::env::current_exe() {
+      trace!(
+        "Using current executable path to load configuration file: {}",
+        executable_path.display()
+      );
+      if let Some(executable_directory) = executable_path.parent() {
+        let config_path = executable_directory.join(CONFIGURATION_FILE_NAME);
         return Ok(config_path);
       }
     }
 
-    info!("Using current directory path");
-    let current_dir = std::env::current_dir()?;
-    let config_path = current_dir.join(CONFIGURATION_FILE_NAME);
+    let current_directory = std::env::current_dir()?;
+    let config_path = current_directory.join(CONFIGURATION_FILE_NAME);
+    trace!(
+      "Using current directory path to load configuration file: {}",
+      current_directory.display()
+    );
 
     Ok(config_path)
   }
 
-  // TODO: Add validation e.g. desktop_container_count < x, paths for hotkeys, etc.
-  fn load_or_create_config(config_path: &Path) -> Result<Configuration, Box<dyn Error>> {
+  fn load_or_create_config(config_path: &Path) -> Result<(Configuration, Option<String>), Box<dyn Error>> {
     match fs::read_to_string(config_path) {
-      Ok(contents) => {
-        let config: Configuration = toml::from_str(&contents)?;
+      Ok(config_string) => {
+        let config: Configuration = match toml::from_str(&config_string) {
+          Ok(config) => config,
+          Err(error) => {
+            error!("Failed to parse configuration: {}", error);
+            return Err(Box::new(error));
+          }
+        };
 
-        Ok(config)
+        Ok((config, Some(config_string)))
       }
       Err(error) => {
         if error.kind() == ErrorKind::NotFound {
+          info!(
+            "Configuration file not found, writing default configuration to file: {}",
+            config_path.display()
+          );
           let default_config = Configuration::default();
           let toml_string = toml::to_string_pretty(&default_config)?;
           fs::write(config_path, toml_string)?;
-          Ok(default_config)
+
+          Ok((default_config, None))
         } else {
-          println!("Failed to load configuration ({}): {}", error.kind(), error);
+          error!("Failed to load configuration ({}): {}", error.kind(), error);
 
           Err(Box::new(error))
         }
@@ -124,9 +193,19 @@ impl ConfigurationProvider {
     }
   }
 
+  // TODO: Consider validating hotkeys
+  fn validate_config(&mut self) {
+    if let Some(config_as_string) = self.config_string.clone() {
+      validate_window_margin(&config_as_string, self);
+      validate_allow_selecting_same_center_windows(&config_as_string, self);
+      validate_workspace_count(&config_as_string, self);
+    } else {
+      warn!("Failed to validate configuration: configuration string not available");
+    }
+  }
+
   pub fn get_bool(&self, name: &str) -> bool {
     match name {
-      FILE_LOGGING_ENABLED => self.config.general.file_logging_enabled,
       ALLOW_SELECTING_SAME_CENTER_WINDOWS => self.config.general.allow_selecting_same_center_windows,
       &_ => {
         warn!("Failed to get configuration because [{name}] is unknown");
@@ -139,20 +218,10 @@ impl ConfigurationProvider {
   /// Sets bool value and saves the configuration to file.
   pub fn set_bool(&mut self, name: &str, value: bool) {
     match name {
-      FILE_LOGGING_ENABLED => {
-        if self.config.general.file_logging_enabled != value {
-          self.config.general.file_logging_enabled = value;
-          if let Err(err) = self.save_config() {
-            error!("Failed to save configuration: {}", err);
-          }
-        }
-      }
       ALLOW_SELECTING_SAME_CENTER_WINDOWS => {
-        if self.config.general.allow_selecting_same_center_windows != value {
-          self.config.general.allow_selecting_same_center_windows = value;
-          if let Err(err) = self.save_config() {
-            error!("Failed to save configuration: {}", err);
-          }
+        self.config.general.allow_selecting_same_center_windows = value;
+        if let Err(err) = self.save_config() {
+          error!("Failed to save configuration: {}", err);
         }
       }
       &_ => {
@@ -178,19 +247,15 @@ impl ConfigurationProvider {
   pub fn set_i32(&mut self, name: &str, value: i32) {
     match name {
       WINDOW_MARGIN => {
-        if self.config.general.window_margin != value {
-          self.config.general.window_margin = value;
-          if let Err(err) = self.save_config() {
-            error!("Failed to save configuration: {}", err);
-          }
+        self.config.general.window_margin = value;
+        if let Err(err) = self.save_config() {
+          error!("Failed to save configuration: {}", err);
         }
       }
       ADDITIONAL_WORKSPACE_COUNT => {
-        if self.config.general.additional_workspace_count != value {
-          self.config.general.additional_workspace_count = value;
-          if let Err(err) = self.save_config() {
-            error!("Failed to save configuration: {}", err);
-          }
+        self.config.general.additional_workspace_count = value;
+        if let Err(err) = self.save_config() {
+          error!("Failed to save configuration: {}", err);
         }
       }
       &_ => {
@@ -204,6 +269,7 @@ impl ConfigurationProvider {
   }
 
   fn save_config(&self) -> Result<(), Box<dyn Error>> {
+    info!("Saving configuration to file: {}", self.config_path.display());
     let toml_string = toml::to_string_pretty(&self.config)?;
     fs::write(&self.config_path, toml_string)?;
 
@@ -214,6 +280,7 @@ impl ConfigurationProvider {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::utils::with_test_logger;
   use std::fs::{self, File};
   use std::io::Write;
   use tempfile::TempDir;
@@ -223,6 +290,7 @@ mod tests {
       Self {
         config: Configuration::default(),
         config_path: PathBuf::new(),
+        config_string: None,
       }
     }
   }
@@ -239,9 +307,8 @@ mod tests {
     let result = ConfigurationProvider::load_or_create_config(&path);
 
     assert!(result.is_ok(), "Should successfully create default config");
-    let config = result.unwrap();
+    let config = result.unwrap().0;
     assert_eq!(config.general.window_margin, DEFAULT_WINDOW_MARGIN_VALUE);
-    assert!(config.general.file_logging_enabled);
     assert!(config.general.allow_selecting_same_center_windows);
     assert_eq!(config.general.additional_workspace_count, 2);
     assert!(config.hotkey.is_empty());
@@ -260,7 +327,6 @@ mod tests {
     let custom_config = Configuration {
       general: GeneralConfiguration {
         window_margin: 50,
-        file_logging_enabled: false,
         allow_selecting_same_center_windows: false,
         additional_workspace_count: 5,
       },
@@ -277,9 +343,8 @@ mod tests {
     let result = ConfigurationProvider::load_or_create_config(&path);
 
     assert!(result.is_ok(), "Should successfully load config");
-    let loaded_config = result.unwrap();
+    let loaded_config = result.unwrap().0;
     assert_eq!(loaded_config.general.window_margin, 50);
-    assert!(!loaded_config.general.file_logging_enabled);
     assert!(!loaded_config.general.allow_selecting_same_center_windows);
     assert_eq!(loaded_config.general.additional_workspace_count, 5);
     assert_eq!(loaded_config.hotkey.len(), 1);
@@ -289,6 +354,7 @@ mod tests {
 
   #[test]
   fn load_or_create_config_handles_invalid_toml() {
+    with_test_logger();
     let directory = create_temp_directory();
     let path = directory.path().join(CONFIGURATION_FILE_NAME);
     let mut file = File::create(&path).expect("Failed to create test file");
@@ -297,15 +363,16 @@ mod tests {
     let result = ConfigurationProvider::load_or_create_config(&path);
 
     assert!(result.is_err(), "Should fail with invalid TOML");
+    assert!(result.unwrap_err().to_string().contains("TOML parse error at line 1"));
   }
 
   #[test]
   fn load_or_create_config_loads_file_with_missing_fields() {
+    with_test_logger();
     let directory = create_temp_directory();
     let path = directory.path().join(CONFIGURATION_FILE_NAME);
     let toml_string = r#"
       [general]
-      file_logging_enabled = false
       
       [[hotkey]]
       name = "Test App"
@@ -318,9 +385,8 @@ mod tests {
     let result = ConfigurationProvider::load_or_create_config(&path);
 
     assert!(result.is_ok(), "Should successfully load config");
-    let loaded_config = result.unwrap();
+    let loaded_config = result.unwrap().0;
     assert_eq!(loaded_config.general.window_margin, default_window_margin());
-    assert!(!loaded_config.general.file_logging_enabled);
     assert_eq!(
       loaded_config.general.allow_selecting_same_center_windows,
       default_allow_selecting_same_center_windows(),
@@ -333,6 +399,96 @@ mod tests {
     );
     assert_eq!(loaded_config.hotkey.len(), 1);
     assert_eq!(loaded_config.hotkey[0].name, "Test App");
-    assert!(loaded_config.hotkey[0].execute_as_admin);
+  }
+
+  #[test]
+  fn validate_config_writes_missing_fields_to_file() {
+    with_test_logger();
+    let directory = create_temp_directory();
+    let path = directory.path().join(CONFIGURATION_FILE_NAME);
+    let toml_string = r#"
+      [general]
+      allow_selecting_same_center_windows = true
+
+      "#;
+    fs::write(&path, toml_string).expect("Failed to write config file");
+    let (config, config_string) = ConfigurationProvider::load_or_create_config(&path).expect("Failed to load config");
+    let mut configuration_provider = ConfigurationProvider {
+      config,
+      config_path: path.clone(),
+      config_string: config_string.clone(),
+    };
+    let window_margin = format!("{} = {}", WINDOW_MARGIN, DEFAULT_WINDOW_MARGIN_VALUE);
+    let allow_selecting_same_center_windows = format!(
+      "{} = {}",
+      ALLOW_SELECTING_SAME_CENTER_WINDOWS,
+      default_allow_selecting_same_center_windows()
+    );
+    let additional_workspace_count = format!("{} = {}", ADDITIONAL_WORKSPACE_COUNT, default_additional_workspace_count());
+
+    // Prior to validation, the config string does not contain the missing fields
+    let config_string = config_string.unwrap();
+    assert!(!config_string.contains(window_margin.as_str()));
+    assert!(config_string.contains(allow_selecting_same_center_windows.as_str()));
+    assert!(!config_string.contains(additional_workspace_count.as_str()));
+
+    // Validate the config
+    configuration_provider.validate_config();
+    let (_, config_string) = ConfigurationProvider::load_or_create_config(&path).expect("Failed to load config");
+
+    // After validation, the missing fields were added to the config string
+    let config_string = config_string.unwrap();
+    assert!(config_string.contains(window_margin.as_str()));
+    assert!(config_string.contains(allow_selecting_same_center_windows.as_str()));
+    assert!(config_string.contains(additional_workspace_count.as_str()));
+  }
+
+  #[test]
+  fn validate_config_updates_window_margin_if_negative_value_loaded() {
+    with_test_logger();
+    let directory = create_temp_directory();
+    let path = directory.path().join(CONFIGURATION_FILE_NAME);
+    let toml_string = r#"
+      [general]
+      window_margin = -10
+      "#;
+    fs::write(&path, toml_string).expect("Failed to write config file");
+    let (config, config_string) = ConfigurationProvider::load_or_create_config(&path).expect("Failed to load config");
+    let mut configuration_provider = ConfigurationProvider {
+      config,
+      config_path: path,
+      config_string: config_string.clone(),
+    };
+
+    configuration_provider.validate_config();
+
+    assert!(config_string.unwrap().contains("window_margin = -10"));
+    assert_eq!(
+      configuration_provider.config.general.window_margin,
+      DEFAULT_WINDOW_MARGIN_VALUE
+    );
+  }
+
+  #[test]
+  fn validate_config_updates_additional_workspace_count_if_loaded_value_exceeds_max() {
+    with_test_logger();
+    let directory = create_temp_directory();
+    let path = directory.path().join(CONFIGURATION_FILE_NAME);
+    let toml_string = r#"
+      [general]
+      additional_workspace_count = 15
+      "#;
+    fs::write(&path, toml_string).expect("Failed to write config file");
+    let (config, config_string) = ConfigurationProvider::load_or_create_config(&path).expect("Failed to load config");
+    let mut configuration_provider = ConfigurationProvider {
+      config,
+      config_path: path,
+      config_string: config_string.clone(),
+    };
+
+    configuration_provider.validate_config();
+
+    assert!(config_string.unwrap().contains("additional_workspace_count = 15"));
+    assert_eq!(configuration_provider.config.general.additional_workspace_count, 8);
   }
 }

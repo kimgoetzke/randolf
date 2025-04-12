@@ -1,23 +1,20 @@
 #![allow(unused_imports)]
 
-use crate::configuration_provider::{ConfigurationProvider, FILE_LOGGING_ENABLED};
+use crate::configuration_provider::ConfigurationProvider;
 use log::LevelFilter;
 use simplelog::{ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode, WriteLogger};
 use std::fs::File;
 use std::sync::{Arc, Mutex};
 
-pub struct LogManager {
-  #[allow(unused)]
-  configuration_provider: Arc<Mutex<ConfigurationProvider>>,
-}
+pub struct LogManager;
 
 impl LogManager {
-  fn new(configuration_provider: Arc<Mutex<ConfigurationProvider>>) -> Self {
-    Self { configuration_provider }
+  fn new() -> Self {
+    Self {}
   }
 
-  pub fn new_initialised(configuration_provider: Arc<Mutex<ConfigurationProvider>>) -> Self {
-    let log_manager = Self::new(configuration_provider);
+  pub fn new_initialised() -> Self {
+    let log_manager = Self::new();
     log_manager.initialise();
 
     log_manager
@@ -37,25 +34,30 @@ impl LogManager {
     )];
 
     #[cfg(not(debug_assertions))]
-    if self
-      .configuration_provider
-      .lock()
-      .expect("Log manager failed to read [is_logging_enabled] because configuration provider is locked")
-      .get_bool(FILE_LOGGING_ENABLED)
-    {
-      match File::create("randolf.log") {
-        Ok(log_file) => {
-          let write_logger = WriteLogger::new(LevelFilter::Trace, config, log_file);
-          loggers.push(write_logger);
-        }
-        Err(err) => {
-          eprintln!("Failed to create log file: {}", err);
-        }
+    match File::create("randolf.log") {
+      Ok(log_file) => {
+        let write_logger = WriteLogger::new(LevelFilter::Trace, config, log_file);
+        loggers.push(write_logger);
+      }
+      Err(err) => {
+        eprintln!("Failed to create log file: {}", err);
       }
     }
 
     let count = loggers.len();
     CombinedLogger::init(loggers).expect("Failed to initialise logger");
     info!("Initialised [{}] logger(s)", count);
+  }
+}
+
+#[cfg(test)]
+pub mod test {
+  use crate::utils::with_test_logger;
+
+  #[test]
+  fn your_test() {
+    with_test_logger();
+
+    debug!("This debug message should now be visible");
   }
 }

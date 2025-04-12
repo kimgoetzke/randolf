@@ -32,8 +32,8 @@ const EVENT_LOOP_SLEEP_DURATION: Duration = Duration::from_millis(20);
 const HEART_BEAT_DURATION: Duration = Duration::from_secs(5);
 
 fn main() {
+  LogManager::new_initialised();
   let configuration_manager = Arc::new(Mutex::new(ConfigurationProvider::new()));
-  LogManager::new_initialised(configuration_manager.clone());
   TrayMenuManager::new_initialised(configuration_manager.clone());
   let launcher = Rc::new(RefCell::new(ApplicationLauncher::new_initialised(
     configuration_manager.clone(),
