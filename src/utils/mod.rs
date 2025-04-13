@@ -30,4 +30,4 @@ pub use window_placement::WindowPlacement;
 pub use workspace::{Workspace, WorkspaceId};
 
 #[cfg(test)]
-pub use test_utils::test_utils::with_test_logger;
+pub use test_utils::*;

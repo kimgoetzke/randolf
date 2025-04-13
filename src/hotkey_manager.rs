@@ -207,3 +207,93 @@ impl HotkeyManager {
       .unwrap_or_else(|err| panic!("Failed to register hotkey for {:?}: {err}", Command::MoveWindow(direction)));
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::configuration_provider::CustomHotkey;
+  use crate::utils::WorkspaceId;
+  use log::Level::{Debug, Warn};
+
+  #[test]
+  fn registers_switch_workspace_hotkeys_for_valid_workspace_ids() {
+    testing_logger::setup();
+    let mut hotkey_manager = HotkeyManager::new(Arc::new(Mutex::new(ConfigurationProvider::default())));
+    let workspace_ids = vec![WorkspaceId::from(1, 1), WorkspaceId::from(1, 2), WorkspaceId::from(1, 3)];
+
+    hotkey_manager.register_switch_workspace_hotkeys(&workspace_ids);
+
+    testing_logger::validate(|captured_logs| {
+      assert_eq!(captured_logs.len(), 3);
+      for (i, _) in captured_logs.iter().enumerate() {
+        assert_eq!(
+          captured_logs[i].body,
+          format!(
+            "Registered hotkey [{}] + [{}] to switch to workspace [s#1-{}]",
+            MAIN_MOD,
+            i + 1,
+            i + 1
+          )
+        );
+      }
+    });
+  }
+
+  #[test]
+  fn register_switch_workspace_hotkeys_skips_workspace_ids_greater_than_9() {
+    testing_logger::setup();
+    let mut hotkey_manager = HotkeyManager::new(Arc::new(Mutex::new(ConfigurationProvider::default())));
+    let mut workspace_ids = vec![];
+    for i in 1..=9 {
+      workspace_ids.push(WorkspaceId::from(1, i));
+    }
+
+    hotkey_manager.register_switch_workspace_hotkeys(&workspace_ids);
+
+    testing_logger::validate(|captured_logs| {
+      assert_eq!(captured_logs.len(), 9);
+      assert_eq!(
+        captured_logs[8].body,
+        "Cannot bind workspace number [9] to a hotkey because it is greater than 9"
+      );
+      assert_eq!(captured_logs[8].level, Warn);
+    });
+  }
+
+  #[test]
+  fn register_application_hotkeys_test() {
+    testing_logger::setup();
+    let hotkeys = vec![
+      CustomHotkey {
+        name: "Test App 1".to_string(),
+        path: "C:\\test1.exe".to_string(),
+        hotkey: "y".to_string(),
+        execute_as_admin: true,
+      },
+      CustomHotkey {
+        name: "Test App 2".to_string(),
+        path: "C:\\test2.exe".to_string(),
+        hotkey: "invalid".to_string(),
+        execute_as_admin: true,
+      },
+    ];
+    let custom_config = ConfigurationProvider::default_with_hotkeys(hotkeys);
+    let mut hotkey_manager = HotkeyManager::new(Arc::new(Mutex::new(custom_config)));
+
+    hotkey_manager.register_application_hotkeys();
+
+    testing_logger::validate(|captured_logs| {
+      assert_eq!(captured_logs.len(), 2);
+      assert_eq!(
+        captured_logs[0].body,
+        "Registered hotkey for [Test App 1] to open [C:\\test1.exe] as admin [true]"
+      );
+      assert_eq!(captured_logs[0].level, Debug);
+      assert_eq!(
+        captured_logs[1].body,
+        "Failed to parse hotkey [invalid] for [Test App 2]: Invalid key name `INVALID`"
+      );
+      assert_eq!(captured_logs[1].level, Warn);
+    });
+  }
+}

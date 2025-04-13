@@ -160,6 +160,8 @@ impl ConfigurationProvider {
     Ok(config_path)
   }
 
+  /// Loads the configuration from the specified path. If the file does not exist, it creates a new one with default
+  /// values.
   fn load_or_create_config(config_path: &Path) -> Result<(Configuration, Option<String>), Box<dyn Error>> {
     match fs::read_to_string(config_path) {
       Ok(config_string) => {
@@ -289,6 +291,17 @@ mod tests {
     pub fn default() -> Self {
       Self {
         config: Configuration::default(),
+        config_path: PathBuf::new(),
+        config_string: None,
+      }
+    }
+
+    pub fn default_with_hotkeys(hotkeys: Vec<CustomHotkey>) -> Self {
+      Self {
+        config: Configuration {
+          general: GeneralConfiguration::default(),
+          hotkey: hotkeys,
+        },
         config_path: PathBuf::new(),
         config_string: None,
       }
