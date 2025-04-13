@@ -3,8 +3,10 @@
 use simplelog::*;
 use std::sync::Once;
 
+#[allow(dead_code)]
 static INIT: Once = Once::new();
 
+#[allow(dead_code)]
 pub fn with_test_logger() {
   INIT.call_once(|| {
     TermLogger::init(LevelFilter::Trace, Config::default(), TerminalMode::Mixed, ColorChoice::Auto)

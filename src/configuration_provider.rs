@@ -133,7 +133,7 @@ impl ConfigurationProvider {
   }
 
   pub fn log_current_config(&self) {
-    debug!("{:?}", self.config);
+    info!("{:?}", self.config);
   }
 
   /// Determines the appropriate path for the configuration file. Tries the directory of the executable first, then
@@ -245,7 +245,6 @@ impl ConfigurationProvider {
   }
 
   /// Sets i32 value and saves the configuration to file.
-  #[allow(clippy::single_match)]
   pub fn set_i32(&mut self, name: &str, value: i32) {
     match name {
       WINDOW_MARGIN => {
@@ -282,7 +281,6 @@ impl ConfigurationProvider {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::utils::with_test_logger;
   use std::fs::{self, File};
   use std::io::Write;
   use tempfile::TempDir;
@@ -367,7 +365,6 @@ mod tests {
 
   #[test]
   fn load_or_create_config_handles_invalid_toml() {
-    with_test_logger();
     let directory = create_temp_directory();
     let path = directory.path().join(CONFIGURATION_FILE_NAME);
     let mut file = File::create(&path).expect("Failed to create test file");
@@ -381,7 +378,6 @@ mod tests {
 
   #[test]
   fn load_or_create_config_loads_file_with_missing_fields() {
-    with_test_logger();
     let directory = create_temp_directory();
     let path = directory.path().join(CONFIGURATION_FILE_NAME);
     let toml_string = r#"
@@ -416,7 +412,6 @@ mod tests {
 
   #[test]
   fn validate_config_writes_missing_fields_to_file() {
-    with_test_logger();
     let directory = create_temp_directory();
     let path = directory.path().join(CONFIGURATION_FILE_NAME);
     let toml_string = r#"
@@ -458,7 +453,6 @@ mod tests {
 
   #[test]
   fn validate_config_updates_window_margin_if_negative_value_loaded() {
-    with_test_logger();
     let directory = create_temp_directory();
     let path = directory.path().join(CONFIGURATION_FILE_NAME);
     let toml_string = r#"
@@ -484,7 +478,6 @@ mod tests {
 
   #[test]
   fn validate_config_updates_additional_workspace_count_if_loaded_value_exceeds_max() {
-    with_test_logger();
     let directory = create_temp_directory();
     let path = directory.path().join(CONFIGURATION_FILE_NAME);
     let toml_string = r#"

@@ -56,7 +56,7 @@ pub mod test {
 
   #[test]
   fn your_test() {
-    with_test_logger();
+    // with_test_logger();
 
     debug!("This debug message should now be visible");
   }
