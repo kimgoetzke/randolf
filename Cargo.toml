@@ -10,7 +10,7 @@ win-hotkeys = "0.5"
 log = "0.4.27"
 trayicon = "0.2.0"
 simplelog = "0.12.2"
-crossbeam-channel = "0.5.14"
+crossbeam-channel = "0.5.15"
 serde = { version = "1.0.219", features = ["derive"] }
 toml = "0.8.20"
 
