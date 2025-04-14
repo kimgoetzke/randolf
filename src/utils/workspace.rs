@@ -77,6 +77,10 @@ impl Workspace {
     self.window_state_info.clear();
   }
 
+  pub fn get_largest_window(&self) -> Option<Window> {
+    self.windows.iter().max_by_key(|w| w.rect.area()).cloned().to_owned()
+  }
+
   pub fn restore_windows(&mut self, api: &impl NativeApi) {
     if self.windows.is_empty() && self.window_state_info.is_empty() {
       debug!("No windows to restore for workspace {}", self.id);

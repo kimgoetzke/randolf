@@ -158,9 +158,16 @@ impl<T: NativeApi + Copy> WorkspaceManager<T> {
     }
 
     // Restore windows for the new workspace and set the cursor position
+    let largest_window = if let Some(new_workspace) = self.workspaces.get(&target_workspace_id) {
+      new_workspace.get_largest_window()
+    } else {
+      None
+    };
     if let Some(new_workspace) = self.workspaces.get_mut(&target_workspace_id) {
-      new_workspace.restore_windows(&self.windows_api);
       self.windows_api.set_cursor_position(&new_workspace.monitor.center);
+      if let Some(largest_window) = largest_window {
+        self.windows_api.set_foreground_window(largest_window.handle);
+      }
     } else {
       // Restore the original workspace
       warn!(
@@ -434,6 +441,11 @@ mod tests {
     // Then the active workspace for the relevant monitor is updated
     assert_eq!(workspace_manager.active_workspaces.len(), 2);
     assert!(workspace_manager.active_workspaces.contains(&target_workspace_id));
+    assert_eq!(
+      workspace_manager.windows_api.get_foreground_window().unwrap(),
+      WindowHandle::new(1),
+      "The foreground window should not be changed because the target workspace doesn't have any windows"
+    );
 
     // And the window on the original workspace has been stored
     let original_workspace = workspace_manager
@@ -441,6 +453,36 @@ mod tests {
       .get(&WorkspaceId::from(1, 1))
       .expect("Original workspace not found");
     assert_eq!(original_workspace.get_windows().len(), 1);
+  }
+
+  #[test]
+  fn switch_workspace_sets_largest_window_as_foreground_window() {
+    MockWindowsApi::reset();
+
+    // Given the current workspace has one window and target workspace is not active
+    let target_workspace_id = WorkspaceId::from(1, 2);
+    let mut workspace_manager = WorkspaceManager::new_test(target_workspace_id);
+    assert_eq!(workspace_manager.active_workspaces.len(), 2);
+    assert!(!workspace_manager.active_workspaces.contains(&target_workspace_id));
+
+    // Given the target workspace has a small and a large window
+    if let Some(target_workspace) = workspace_manager.workspaces.get_mut(&target_workspace_id) {
+      let small_window = Window::from(2, "Small Window".to_string(), Rect::new(0, 0, 50, 50));
+      let large_window = Window::from(3, "Large Window".to_string(), Rect::new(0, 0, 500, 500));
+      target_workspace.store_and_hide_windows(vec![small_window, large_window], &workspace_manager.windows_api);
+    }
+
+    // When the user switches to the target workspace
+    workspace_manager.switch_workspace(target_workspace_id);
+
+    // Then the active workspace for the relevant monitor is updated and the large window is brought to the foreground
+    assert_eq!(workspace_manager.active_workspaces.len(), 2);
+    assert!(workspace_manager.active_workspaces.contains(&target_workspace_id));
+    assert_eq!(
+      workspace_manager.windows_api.get_foreground_window().unwrap(),
+      WindowHandle::new(3),
+      "The foreground window should not be changed because the target workspace doesn't have any windows"
+    );
   }
 
   #[test]

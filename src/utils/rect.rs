@@ -17,6 +17,10 @@ impl Rect {
       bottom,
     }
   }
+
+  pub fn area(&self) -> i32 {
+    (self.right - self.left) * (self.bottom - self.top)
+  }
 }
 
 impl From<RECT> for Rect {
@@ -93,5 +97,25 @@ mod tests {
     assert_eq!(windows_rect.top, 10);
     assert_eq!(windows_rect.right, 11);
     assert_eq!(windows_rect.bottom, 12);
+  }
+
+  #[test]
+  fn area_calculates_correctly_for_positive_coordinates() {
+    let rect = Rect::new(0, 0, 5, 5);
+    assert_eq!(rect.area(), 25);
+  }
+
+  #[test]
+  fn area_is_zero_when_width_or_height_is_zero() {
+    let rect_zero_width = Rect::new(1, 2, 1, 6);
+    let rect_zero_height = Rect::new(1, 2, 4, 2);
+    assert_eq!(rect_zero_width.area(), 0);
+    assert_eq!(rect_zero_height.area(), 0);
+  }
+
+  #[test]
+  fn area_handles_negative_coordinates_correctly() {
+    let rect = Rect::new(-3, -2, 1, 2);
+    assert_eq!(rect.area(), 16);
   }
 }
