@@ -34,6 +34,13 @@ from C#/.NET to Rust, however contributions or suggestions are welcome.
     - Allows customising the window margin
     - Allows closing the application
 
+## Demo
+
+Selecting and moving windows using shortcuts:
+![Demo GIF 1](assets/demo_1.gif)
+
+(More GIFs to follow...)
+
 #### Features currently under consideration
 
 - Allow customising modifier keys and/or customising window/workspace management hotkeys
