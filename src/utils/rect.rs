@@ -35,6 +35,15 @@ impl Rect {
   pub fn center(&self) -> Point {
     Point::new((self.left + self.right) / 2, (self.top + self.bottom) / 2)
   }
+
+  pub fn clamp(&self, other: &Self, margin: i32) -> Self {
+    Self {
+      left: self.left.max(other.left + margin),
+      top: self.top.max(other.top + margin),
+      right: self.right.min(other.right - (2 * margin)),
+      bottom: self.bottom.min(other.bottom - (2 * margin)),
+    }
+  }
 }
 
 impl From<RECT> for Rect {

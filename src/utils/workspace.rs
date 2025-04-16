@@ -17,6 +17,7 @@ impl WorkspaceId {
     }
   }
 
+  #[allow(unused)]
   pub fn is_same_monitor(&self, other: &Self) -> bool {
     self.monitor_handle == other.monitor_handle
   }
@@ -64,6 +65,10 @@ impl Workspace {
     );
   }
 
+  pub fn stores(&self, handle: &WindowHandle) -> bool {
+    self.windows.iter().any(|window| window.handle == *handle)
+  }
+
   pub fn store_and_hide_window(&mut self, mut window: Window, current_monitor: isize, windows_api: &impl WindowsApi) {
     if !self.windows.iter().any(|w| w.handle == window.handle) {
       if windows_api.is_window_minimised(window.handle) {
@@ -80,7 +85,6 @@ impl Workspace {
   }
 
   // TODO: Check if window is snapped by Randolf - if yes, replicate on new monitor
-  // TODO: Make sure rect is clamped to the monitor area minus margins
   fn update_window_rect_if_required(
     &mut self,
     mut window: Window,
@@ -94,7 +98,7 @@ impl Workspace {
       let left = target_monitor_work_area_center.x() - (width / 2);
       let top = target_monitor_work_area_center.y() - (height / 2);
       let old_rect = window.rect;
-      window.rect = Rect::new(left, top, left + width, top + height);
+      window.rect = Rect::new(left, top, left + width, top + height).clamp(&self.monitor.work_area, 10);
       window.center = window.rect.center();
 
       debug!(
