@@ -1,9 +1,9 @@
-mod mock_api;
-mod native_api;
+mod mock_windows_api;
+mod real_windows_api;
 mod windows_api;
 
-pub use native_api::NativeApi;
-pub use windows_api::{WindowsApi, do_process_windows_messages, get_all_monitors};
+pub use real_windows_api::{RealWindowsApi, do_process_windows_messages, get_all_monitors};
+pub use windows_api::WindowsApi;
 
 #[cfg(test)]
-pub use mock_api::test::MockWindowsApi;
+pub use mock_windows_api::test::MockWindowsApi;

@@ -1,14 +1,14 @@
-use crate::api::NativeApi;
+use crate::api::WindowsApi;
 use crate::configuration_provider::ConfigurationProvider;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
-pub struct ApplicationLauncher<T: NativeApi> {
+pub struct ApplicationLauncher<T: WindowsApi> {
   _configuration_provider: Arc<Mutex<ConfigurationProvider>>,
   windows_api: T,
 }
 
-impl<T: NativeApi> ApplicationLauncher<T> {
+impl<T: WindowsApi> ApplicationLauncher<T> {
   pub fn new_initialised(configuration_provider: Arc<Mutex<ConfigurationProvider>>, windows_api: T) -> Self {
     Self {
       _configuration_provider: configuration_provider.clone(),

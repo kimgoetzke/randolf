@@ -14,7 +14,7 @@ mod workspace_manager;
 extern crate log;
 extern crate simplelog;
 
-use crate::api::WindowsApi;
+use crate::api::RealWindowsApi;
 use crate::application_launcher::ApplicationLauncher;
 use crate::configuration_provider::ConfigurationProvider;
 use crate::hotkey_manager::HotkeyManager;
@@ -33,10 +33,14 @@ const HEART_BEAT_DURATION: Duration = Duration::from_secs(5);
 
 fn main() {
   LogManager::new_initialised();
+  let windows_api = RealWindowsApi::new();
+
+  // Create configuration manager and tray menu
   let configuration_manager = Arc::new(Mutex::new(ConfigurationProvider::new()));
   TrayMenuManager::new_initialised(configuration_manager.clone());
   let launcher = Rc::new(RefCell::new(ApplicationLauncher::new_initialised(
     configuration_manager.clone(),
+    windows_api,
   )));
   configuration_manager
     .lock()
@@ -44,7 +48,6 @@ fn main() {
     .log_current_config();
 
   // Create window manager and register hotkeys
-  let windows_api = WindowsApi::new();
   let wm = Rc::new(RefCell::new(WindowManager::new(configuration_manager.clone(), windows_api)));
   let workspace_ids = wm.borrow().get_ordered_workspace_ids();
   let hkm = HotkeyManager::new_with_hotkeys(configuration_manager.clone(), workspace_ids);

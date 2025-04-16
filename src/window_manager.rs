@@ -1,4 +1,4 @@
-use crate::api::NativeApi;
+use crate::api::WindowsApi;
 use crate::configuration_provider::{
   ADDITIONAL_WORKSPACE_COUNT, ALLOW_SELECTING_SAME_CENTER_WINDOWS, ConfigurationProvider, WINDOW_MARGIN,
 };
@@ -10,7 +10,7 @@ use windows::Win32::UI::Shell::IVirtualDesktopManager;
 
 const TOLERANCE_IN_PX: i32 = 2;
 
-pub struct WindowManager<T: NativeApi> {
+pub struct WindowManager<T: WindowsApi> {
   configuration_provider: Arc<Mutex<ConfigurationProvider>>,
   known_windows: HashMap<String, WindowPlacement>,
   workspace_manager: WorkspaceManager<T>,
@@ -18,7 +18,7 @@ pub struct WindowManager<T: NativeApi> {
   windows_api: T,
 }
 
-impl<T: NativeApi + Copy> WindowManager<T> {
+impl<T: WindowsApi + Copy> WindowManager<T> {
   pub fn new(configuration_provider: Arc<Mutex<ConfigurationProvider>>, api: T) -> Self {
     let additional_workspace_count = configuration_provider
       .lock()
@@ -314,7 +314,7 @@ impl<T: NativeApi + Copy> WindowManager<T> {
   fn get_window_and_monitor_info(&self) -> Option<(WindowHandle, WindowPlacement, MonitorInfo)> {
     let window = self.windows_api.get_foreground_window()?;
     let placement = self.windows_api.get_window_placement(window)?;
-    let monitor_info = self.windows_api.get_monitor_info_from_window(window)?;
+    let monitor_info = self.windows_api.get_monitor_info_for_window(window)?;
     Some((window, placement, monitor_info))
   }
 
@@ -399,7 +399,7 @@ fn log_actual_vs_expected(handle: &WindowHandle, sizing: &Sizing, rc: Rect) {
 
 #[cfg(test)]
 mod tests {
-  use crate::api::{MockWindowsApi, NativeApi};
+  use crate::api::{MockWindowsApi, WindowsApi};
   use crate::configuration_provider::ConfigurationProvider;
   use crate::utils::{Direction, Monitor, MonitorInfo, Point, Rect, Sizing, WindowHandle, WindowPlacement};
   use crate::window_manager::{WindowManager, is_of_expected_size};
@@ -436,7 +436,7 @@ mod tests {
     let monitor_info = MonitorInfo::new_test();
     MockWindowsApi::set_foreground_window(handle);
     MockWindowsApi::set_window_placement(handle, initial_placement.clone());
-    MockWindowsApi::set_monitor_info_from_window(handle, monitor_info);
+    MockWindowsApi::set_monitor_info(handle, 1, monitor_info);
     let mut manager = WindowManager::new_test(MockWindowsApi);
 
     manager.near_maximise_or_restore();
@@ -459,7 +459,7 @@ mod tests {
     let monitor_info = MonitorInfo::new_test();
     MockWindowsApi::set_foreground_window(handle);
     MockWindowsApi::set_window_placement(handle, placement.clone());
-    MockWindowsApi::set_monitor_info_from_window(handle, monitor_info);
+    MockWindowsApi::set_monitor_info(handle, 1, monitor_info);
     let mut manager = WindowManager::new_test(MockWindowsApi);
     let previous_placement = WindowPlacement::new_test();
     manager
@@ -480,7 +480,7 @@ mod tests {
     let monitor_info = MonitorInfo::new_test();
     MockWindowsApi::set_foreground_window(handle);
     MockWindowsApi::set_window_placement(handle, placement.clone());
-    MockWindowsApi::set_monitor_info_from_window(handle, monitor_info);
+    MockWindowsApi::set_monitor_info(handle, 1, monitor_info);
     let mut manager = WindowManager::new_test(MockWindowsApi);
 
     manager.move_window(Direction::Right);
@@ -503,8 +503,8 @@ mod tests {
     let monitor = Monitor::new_test(1, monitor_info.work_area);
     MockWindowsApi::set_foreground_window(handle);
     MockWindowsApi::set_window_placement(handle, placement.clone());
-    MockWindowsApi::set_monitor_info_from_window(handle, monitor_info);
-    MockWindowsApi::set_monitors_for_window(handle, monitor.clone());
+    MockWindowsApi::set_monitor_info(handle, 1, monitor_info);
+    MockWindowsApi::set_monitor_for_window(handle, monitor.clone());
     MockWindowsApi::set_monitors(vec![monitor]);
     let mut manager = WindowManager::new_test(MockWindowsApi);
 

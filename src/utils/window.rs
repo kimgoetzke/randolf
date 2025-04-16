@@ -42,7 +42,7 @@ impl Window {
 
 impl PartialEq for Window {
   fn eq(&self, other: &Self) -> bool {
-    self.handle == other.handle
+    self.handle == other.handle && self.title == other.title && self.rect == other.rect
   }
 }
 

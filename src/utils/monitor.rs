@@ -86,8 +86,8 @@ mod tests {
         handle: 2,
         size: 0,
         is_primary: false,
-        monitor_area: Rect::new(-800, 600, 0, 0),
-        work_area: Rect::new(-800, 550, 0, 0),
+        monitor_area: Rect::new(-800, 0, 0, 600),
+        work_area: Rect::new(-800, 0, 0, 550),
         center: Point::new(-400, 300),
       }
     }
