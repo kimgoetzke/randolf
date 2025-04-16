@@ -155,7 +155,13 @@ pub(crate) mod test {
     }
 
     fn set_window_position(&self, handle: WindowHandle, rect: Rect) {
-      unimplemented!()
+      MOCK_STATE.with(|state| {
+        if let Some((window_handle, placement)) =
+          state.borrow_mut().window_placements.iter_mut().find(|(w, p)| *w == &handle)
+        {
+          placement.normal_position = rect;
+        }
+      });
     }
 
     fn do_restore_window(&self, window: &Window, is_minimised: &bool) {

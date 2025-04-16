@@ -52,6 +52,18 @@ impl Workspace {
     }
   }
 
+  pub fn move_window(&mut self, mut window: Window, current_monitor: isize, windows_api: &impl WindowsApi) {
+    window = self.update_window_rect_if_required(window, current_monitor, windows_api);
+    windows_api.set_window_position(window.handle, window.rect);
+    windows_api.set_cursor_position(&window.rect.center());
+    debug!(
+      "Moved {} {} to active workspace {}",
+      window.handle,
+      window.title_trunc(),
+      self.id
+    );
+  }
+
   pub fn store_and_hide_window(&mut self, mut window: Window, current_monitor: isize, windows_api: &impl WindowsApi) {
     if !self.windows.iter().any(|w| w.handle == window.handle) {
       if windows_api.is_window_minimised(window.handle) {
@@ -68,6 +80,7 @@ impl Workspace {
   }
 
   // TODO: Check if window is snapped by Randolf - if yes, replicate on new monitor
+  // TODO: Make sure rect is clamped to the monitor area minus margins
   fn update_window_rect_if_required(
     &mut self,
     mut window: Window,
@@ -80,7 +93,6 @@ impl Workspace {
       let target_monitor_work_area_center = self.monitor.work_area.center();
       let left = target_monitor_work_area_center.x() - (width / 2);
       let top = target_monitor_work_area_center.y() - (height / 2);
-
       let old_rect = window.rect;
       window.rect = Rect::new(left, top, left + width, top + height);
       window.center = window.rect.center();
