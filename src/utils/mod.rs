@@ -14,6 +14,7 @@ mod window;
 mod window_handle;
 mod window_placement;
 mod workspace;
+mod workspace_id;
 
 pub use command::Command;
 pub use constants::*;
@@ -29,7 +30,8 @@ pub use sizing::Sizing;
 pub use window::Window;
 pub use window_handle::WindowHandle;
 pub use window_placement::WindowPlacement;
-pub use workspace::{Workspace, WorkspaceId};
+pub use workspace::Workspace;
+pub use workspace_id::WorkspaceId;
 
 #[cfg(test)]
 pub use test_utils::*;

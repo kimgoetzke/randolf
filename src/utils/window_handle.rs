@@ -2,6 +2,8 @@ use crate::utils::Window;
 use std::fmt::Formatter;
 use windows::Win32::Foundation::HWND;
 
+/// A simple wrapper around a window handle. Its purpose is simply to standardise the
+/// handle type across the codebase and provide a few utility methods.
 #[derive(Eq, Hash, PartialEq, Copy, Clone, Debug)]
 pub struct WindowHandle {
   pub hwnd: isize,
@@ -82,5 +84,19 @@ mod tests {
     let handle: WindowHandle = window.into();
 
     assert_eq!(handle.hwnd, 54321);
+  }
+
+  #[test]
+  fn window_handle_display_handles_large_values() {
+    let handle = WindowHandle::new(6235641152123349);
+
+    assert_eq!(handle.to_string(), "w#6235641152123349");
+  }
+
+  #[test]
+  fn window_handle_display_handles_negative_values() {
+    let handle = WindowHandle::new(-1);
+
+    assert_eq!(handle.to_string(), "w#-1");
   }
 }
