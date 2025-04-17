@@ -2,8 +2,8 @@
 #[cfg(test)]
 pub(crate) mod test {
   use crate::api::WindowsApi;
-  use crate::utils::WindowHandle;
   use crate::utils::{Monitor, MonitorInfo, Monitors, Point, Rect, Window, WindowPlacement};
+  use crate::utils::{MonitorHandle, WindowHandle};
   use std::cell::RefCell;
   use std::collections::HashMap;
   use windows::Win32::UI::Shell::IVirtualDesktopManager;
@@ -20,10 +20,10 @@ pub(crate) mod test {
     monitors: Vec<Monitor>,
     monitors_for_window: HashMap<WindowHandle, Monitor>,
     monitor_infos_for_window: HashMap<WindowHandle, MonitorInfo>,
-    monitor_infos_for_monitor: HashMap<isize, MonitorInfo>,
+    monitor_infos_for_monitor: HashMap<MonitorHandle, MonitorInfo>,
     visible_windows: Vec<Window>,
     cursor_position: Point,
-    monitor_for_point: isize,
+    monitor_for_point: MonitorHandle,
     hidden_windows: HashMap<WindowHandle, bool>,
   }
 
@@ -77,7 +77,7 @@ pub(crate) mod test {
       });
     }
 
-    pub fn set_monitor_info(window_handle: WindowHandle, monitor_handle: isize, monitor_info: MonitorInfo) {
+    pub fn set_monitor_info(window_handle: WindowHandle, monitor_handle: MonitorHandle, monitor_info: MonitorInfo) {
       MOCK_STATE.with(|state| {
         state
           .borrow_mut()
@@ -96,7 +96,7 @@ pub(crate) mod test {
       });
     }
 
-    pub fn set_monitor_for_point(handle: isize) {
+    pub fn set_monitor_for_point(handle: MonitorHandle) {
       MOCK_STATE.with(|state| {
         state.borrow_mut().monitor_for_point = handle;
       });
@@ -223,7 +223,7 @@ pub(crate) mod test {
       })
     }
 
-    fn get_monitor_info_for_monitor(&self, handle: isize) -> Option<MonitorInfo> {
+    fn get_monitor_info_for_monitor(&self, handle: MonitorHandle) -> Option<MonitorInfo> {
       MOCK_STATE.with(|state| {
         if let Some(monitor_info) = state.borrow_mut().monitor_infos_for_monitor.get(&handle) {
           return Some(*monitor_info);
@@ -233,7 +233,7 @@ pub(crate) mod test {
       })
     }
 
-    fn get_monitor_for_window_handle(&self, handle: WindowHandle) -> isize {
+    fn get_monitor_for_window_handle(&self, handle: WindowHandle) -> MonitorHandle {
       MOCK_STATE.with(|state| {
         if let Some(monitor) = state.borrow_mut().monitors_for_window.get(&handle) {
           return monitor.handle;
@@ -242,7 +242,7 @@ pub(crate) mod test {
       })
     }
 
-    fn get_monitor_for_point(&self, point: &Point) -> isize {
+    fn get_monitor_for_point(&self, point: &Point) -> MonitorHandle {
       MOCK_STATE.with(|state| state.borrow().monitor_for_point)
     }
 

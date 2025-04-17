@@ -1,4 +1,4 @@
-use crate::utils::WindowHandle;
+use crate::utils::{MonitorHandle, WindowHandle};
 use crate::utils::{MonitorInfo, Monitors, Point, Rect, Window, WindowPlacement};
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
 
@@ -25,9 +25,9 @@ pub trait WindowsApi {
   fn get_all_monitors(&self) -> Monitors;
   fn get_monitor_info_for_window(&self, handle: WindowHandle) -> Option<MonitorInfo>;
   #[allow(unused)]
-  fn get_monitor_info_for_monitor(&self, handle: isize) -> Option<MonitorInfo>;
-  fn get_monitor_for_window_handle(&self, handle: WindowHandle) -> isize;
-  fn get_monitor_for_point(&self, point: &Point) -> isize;
+  fn get_monitor_info_for_monitor(&self, handle: MonitorHandle) -> Option<MonitorInfo>;
+  fn get_monitor_for_window_handle(&self, handle: WindowHandle) -> MonitorHandle;
+  fn get_monitor_for_point(&self, point: &Point) -> MonitorHandle;
   fn get_virtual_desktop_manager(&self) -> Option<IVirtualDesktopManager>;
   fn is_window_on_current_desktop(&self, vdm: &IVirtualDesktopManager, window: &Window) -> Option<bool>;
 }

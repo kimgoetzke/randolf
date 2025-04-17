@@ -436,7 +436,7 @@ mod tests {
     let monitor_info = MonitorInfo::new_test();
     MockWindowsApi::set_foreground_window(handle);
     MockWindowsApi::set_window_placement(handle, initial_placement.clone());
-    MockWindowsApi::set_monitor_info(handle, 1, monitor_info);
+    MockWindowsApi::set_monitor_info(handle, 1.into(), monitor_info);
     let mut manager = WindowManager::new_test(MockWindowsApi);
 
     manager.near_maximise_or_restore();
@@ -459,7 +459,7 @@ mod tests {
     let monitor_info = MonitorInfo::new_test();
     MockWindowsApi::set_foreground_window(handle);
     MockWindowsApi::set_window_placement(handle, placement.clone());
-    MockWindowsApi::set_monitor_info(handle, 1, monitor_info);
+    MockWindowsApi::set_monitor_info(handle, 1.into(), monitor_info);
     let mut manager = WindowManager::new_test(MockWindowsApi);
     let previous_placement = WindowPlacement::new_test();
     manager
@@ -480,7 +480,7 @@ mod tests {
     let monitor_info = MonitorInfo::new_test();
     MockWindowsApi::set_foreground_window(handle);
     MockWindowsApi::set_window_placement(handle, placement.clone());
-    MockWindowsApi::set_monitor_info(handle, 1, monitor_info);
+    MockWindowsApi::set_monitor_info(handle, 1.into(), monitor_info);
     let mut manager = WindowManager::new_test(MockWindowsApi);
 
     manager.move_window(Direction::Right);
@@ -503,7 +503,7 @@ mod tests {
     let monitor = Monitor::new_test(1, monitor_info.work_area);
     MockWindowsApi::set_foreground_window(handle);
     MockWindowsApi::set_window_placement(handle, placement.clone());
-    MockWindowsApi::set_monitor_info(handle, 1, monitor_info);
+    MockWindowsApi::set_monitor_info(handle, 1.into(), monitor_info);
     MockWindowsApi::set_monitor_for_window(handle, monitor.clone());
     MockWindowsApi::set_monitors(vec![monitor]);
     let mut manager = WindowManager::new_test(MockWindowsApi);

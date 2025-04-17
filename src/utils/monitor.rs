@@ -1,10 +1,11 @@
+use crate::utils::MonitorHandle;
 use crate::utils::{Direction, Point, Rect};
 use std::fmt::Display;
 use windows::Win32::Graphics::Gdi::{HMONITOR, MONITORINFO};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Monitor {
-  pub handle: isize,
+  pub handle: MonitorHandle,
   pub size: u32,
   pub is_primary: bool,
   /// Full monitor area including taskbar.
@@ -16,10 +17,10 @@ pub struct Monitor {
 }
 
 impl Monitor {
-  pub fn new(handle: HMONITOR, monitor_info: MONITORINFO) -> Self {
+  pub fn new(h_monitor: HMONITOR, monitor_info: MONITORINFO) -> Self {
     let monitor_area = Rect::from(monitor_info.rcMonitor);
     Self {
-      handle: handle.0 as isize,
+      handle: MonitorHandle::from(h_monitor),
       size: monitor_info.cbSize,
       work_area: Rect::from(monitor_info.rcWork),
       is_primary: monitor_info.dwFlags & 1 != 0,
@@ -43,7 +44,7 @@ impl Display for Monitor {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(
       f,
-      "{} m#{} at ({}, {}) to ({}, {})",
+      "{} {} at ({}, {}) to ({}, {})",
       if self.is_primary { "Primary monitor" } else { "Monitor" },
       self.handle,
       self.monitor_area.left,
@@ -56,12 +57,12 @@ impl Display for Monitor {
 
 #[cfg(test)]
 mod tests {
-  use crate::utils::{Direction, Monitor, Point, Rect};
+  use crate::utils::{Direction, Monitor, MonitorHandle, Point, Rect};
 
   impl Monitor {
     pub fn new_test(handle: isize, monitor_area: Rect) -> Self {
       Self {
-        handle,
+        handle: handle.into(),
         size: 0,
         is_primary: false,
         monitor_area,
@@ -72,7 +73,7 @@ mod tests {
 
     pub fn mock_1() -> Self {
       Monitor {
-        handle: 1,
+        handle: MonitorHandle::from(1),
         size: 0,
         is_primary: false,
         monitor_area: Rect::new(0, 0, 1920, 1080),
@@ -83,7 +84,7 @@ mod tests {
 
     pub fn mock_2() -> Self {
       Monitor {
-        handle: 2,
+        handle: MonitorHandle::from(2),
         size: 0,
         is_primary: false,
         monitor_area: Rect::new(-800, 0, 0, 600),

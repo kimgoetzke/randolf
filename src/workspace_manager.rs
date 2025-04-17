@@ -1,5 +1,5 @@
 use crate::api::WindowsApi;
-use crate::utils::{Window, Workspace, WorkspaceId};
+use crate::utils::{MonitorHandle, Window, Workspace, WorkspaceId};
 use std::collections::HashMap;
 
 pub struct WorkspaceManager<T: WindowsApi> {
@@ -28,7 +28,7 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
       let monitor_handle = monitor.handle;
       if monitor.is_primary {
         for layer in 1..=additional_workspace_count as usize + 1 {
-          let id = WorkspaceId::from(monitor_handle, layer);
+          let id = WorkspaceId::new(monitor_handle, layer);
           let container = Workspace::from(id, monitor);
           if layer == 1 {
             active_workspace_ids.push(id);
@@ -36,7 +36,7 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
           workspaces.insert(id, container);
         }
       } else {
-        let id = WorkspaceId::from(monitor_handle, 1);
+        let id = WorkspaceId::new(monitor_handle, 1);
         workspaces.insert(id, Workspace::from(id, monitor));
         active_workspace_ids.push(id);
       }
@@ -145,7 +145,7 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
         let current_windows = self
           .windows_api
           .get_all_visible_windows_within_area(target_monitor_active_workspace.monitor.monitor_area);
-        let current_monitor = target_monitor_active_workspace.monitor_handle as isize;
+        let current_monitor = MonitorHandle::from(target_monitor_active_workspace.monitor_handle);
         target_monitor_active_workspace.store_and_hide_windows(current_windows, current_monitor, &self.windows_api);
       } else {
         warn!(
@@ -357,19 +357,19 @@ mod tests {
   }
 
   fn primary_active_workspace() -> &'static WorkspaceId {
-    PRIMARY_ACTIVE_WORKSPACE.get_or_init(|| WorkspaceId::from(primary_monitor().handle, 1))
+    PRIMARY_ACTIVE_WORKSPACE.get_or_init(|| WorkspaceId::new(primary_monitor().handle, 1))
   }
 
   fn primary_inactive_workspace() -> &'static WorkspaceId {
-    PRIMARY_INACTIVE_WORKSPACE.get_or_init(|| WorkspaceId::from(primary_monitor().handle, 2))
+    PRIMARY_INACTIVE_WORKSPACE.get_or_init(|| WorkspaceId::new(primary_monitor().handle, 2))
   }
 
   fn secondary_active_workspace() -> &'static WorkspaceId {
-    SECONDARY_ACTIVE_WORKSPACE.get_or_init(|| WorkspaceId::from(secondary_monitor().handle, 1))
+    SECONDARY_ACTIVE_WORKSPACE.get_or_init(|| WorkspaceId::new(secondary_monitor().handle, 1))
   }
 
   fn secondary_inactive_workspace() -> &'static WorkspaceId {
-    SECONDARY_INACTIVE_WORKSPACE.get_or_init(|| WorkspaceId::from(secondary_monitor().handle, 2))
+    SECONDARY_INACTIVE_WORKSPACE.get_or_init(|| WorkspaceId::new(secondary_monitor().handle, 2))
   }
 
   impl WorkspaceManager<MockWindowsApi> {
@@ -451,9 +451,9 @@ mod tests {
     let left_monitor = Monitor::new_test(1, Rect::new(0, 0, 99, 100));
     let center_monitor = Monitor::new_test(2, Rect::new(100, 0, 199, 100));
     let right_monitor = Monitor::new_test(3, Rect::new(200, 0, 299, 100));
-    let left_workspace = Workspace::from(WorkspaceId::from(left_monitor.handle, 1), &left_monitor);
-    let center_workspace = Workspace::from(WorkspaceId::from(center_monitor.handle, 1), &center_monitor);
-    let right_workspace = Workspace::from(WorkspaceId::from(right_monitor.handle, 1), &right_monitor);
+    let left_workspace = Workspace::from(WorkspaceId::new(left_monitor.handle, 1), &left_monitor);
+    let center_workspace = Workspace::from(WorkspaceId::new(center_monitor.handle, 1), &center_monitor);
+    let right_workspace = Workspace::from(WorkspaceId::new(right_monitor.handle, 1), &right_monitor);
     let workspace_manager = WorkspaceManager::from_workspaces(&[&left_workspace, &center_workspace, &right_workspace]);
 
     let ordered_workspaces = workspace_manager.get_ordered_workspace_ids();
@@ -469,9 +469,9 @@ mod tests {
     let top_monitor = Monitor::new_test(1, Rect::new(0, 0, 100, 99));
     let center_monitor = Monitor::new_test(2, Rect::new(0, 100, 100, 199));
     let bottom_monitor = Monitor::new_test(3, Rect::new(0, 200, 100, 299));
-    let top_workspace = Workspace::from(WorkspaceId::from(top_monitor.handle, 1), &top_monitor);
-    let center_workspace = Workspace::from(WorkspaceId::from(center_monitor.handle, 1), &center_monitor);
-    let bottom_workspace = Workspace::from(WorkspaceId::from(bottom_monitor.handle, 1), &bottom_monitor);
+    let top_workspace = Workspace::from(WorkspaceId::new(top_monitor.handle, 1), &top_monitor);
+    let center_workspace = Workspace::from(WorkspaceId::new(center_monitor.handle, 1), &center_monitor);
+    let bottom_workspace = Workspace::from(WorkspaceId::new(bottom_monitor.handle, 1), &bottom_monitor);
     let workspace_manager = WorkspaceManager::from_workspaces(&[&top_workspace, &center_workspace, &bottom_workspace]);
 
     let ordered_workspaces = workspace_manager.get_ordered_workspace_ids();
@@ -486,10 +486,10 @@ mod tests {
   fn get_ordered_workspace_ids_with_multiple_workspaces_on_same_monitor() {
     let top_monitor = Monitor::new_test(1, Rect::new(0, 0, 100, 99));
     let bottom_monitor = Monitor::new_test(3, Rect::new(0, 200, 100, 299));
-    let top_workspace_1 = Workspace::from(WorkspaceId::from(top_monitor.handle, 1), &top_monitor);
-    let top_workspace_2 = Workspace::from(WorkspaceId::from(top_monitor.handle, 2), &top_monitor);
-    let bottom_workspace_1 = Workspace::from(WorkspaceId::from(bottom_monitor.handle, 1), &bottom_monitor);
-    let bottom_workspace_2 = Workspace::from(WorkspaceId::from(bottom_monitor.handle, 2), &bottom_monitor);
+    let top_workspace_1 = Workspace::from(WorkspaceId::new(top_monitor.handle, 1), &top_monitor);
+    let top_workspace_2 = Workspace::from(WorkspaceId::new(top_monitor.handle, 2), &top_monitor);
+    let bottom_workspace_1 = Workspace::from(WorkspaceId::new(bottom_monitor.handle, 1), &bottom_monitor);
+    let bottom_workspace_2 = Workspace::from(WorkspaceId::new(bottom_monitor.handle, 2), &bottom_monitor);
     let workspace_manager =
       WorkspaceManager::from_workspaces(&[&top_workspace_1, &top_workspace_2, &bottom_workspace_1, &bottom_workspace_2]);
 
@@ -557,7 +557,7 @@ mod tests {
     if let Some(target_workspace) = workspace_manager.workspaces.get_mut(target_workspace_id) {
       let small_window = Window::from(2, "Small Window".to_string(), Rect::new(0, 0, 50, 50));
       let large_window = Window::from(3, "Large Window".to_string(), Rect::new(0, 0, 500, 500));
-      target_workspace.store_and_hide_windows(vec![small_window, large_window], 1, &workspace_manager.windows_api);
+      target_workspace.store_and_hide_windows(vec![small_window, large_window], 1.into(), &workspace_manager.windows_api);
     }
 
     // When the user switches to the target workspace

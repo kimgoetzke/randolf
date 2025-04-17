@@ -1,4 +1,4 @@
-use crate::utils::{Direction, Monitor, print_monitor_layout_to_canvas};
+use crate::utils::{Direction, Monitor, MonitorHandle, print_monitor_layout_to_canvas};
 
 pub struct Monitors {
   monitors: Vec<Monitor>,
@@ -10,13 +10,13 @@ impl Monitors {
     Self { monitors }
   }
 
-  pub fn get(&self, direction: Direction, reference_handle: isize) -> Option<&Monitor> {
+  pub fn get(&self, direction: Direction, reference_handle: MonitorHandle) -> Option<&Monitor> {
     let monitor = self.get_by_handle(reference_handle)?;
 
     self.get_direction_of(monitor, direction)
   }
 
-  pub fn get_by_handle(&self, handle: isize) -> Option<&Monitor> {
+  pub fn get_by_handle(&self, handle: MonitorHandle) -> Option<&Monitor> {
     self.monitors.iter().find(|m| m.handle == handle)
   }
 
@@ -85,7 +85,7 @@ mod tests {
     let monitor2 = Monitor::new_test(2, Rect::new(1920, 0, 3840, 1080));
     let monitors = Monitors::from(vec![monitor1.clone(), monitor2.clone()]);
 
-    let result = monitors.get_by_handle(2);
+    let result = monitors.get_by_handle(2.into());
 
     assert_eq!(result, Some(&monitor2));
   }
@@ -95,7 +95,7 @@ mod tests {
     let monitor1 = Monitor::new_test(1, Rect::new(0, 0, 1920, 1080));
     let monitors = Monitors::from(vec![monitor1.clone()]);
 
-    let result = monitors.get_by_handle(99);
+    let result = monitors.get_by_handle(99.into());
 
     assert!(result.is_none());
   }

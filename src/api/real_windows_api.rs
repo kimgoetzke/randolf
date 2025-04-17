@@ -1,6 +1,6 @@
 use crate::api::WindowsApi;
-use crate::utils::WindowHandle;
 use crate::utils::{Monitor, MonitorInfo, Monitors, Point, Rect, Window, WindowPlacement};
+use crate::utils::{MonitorHandle, WindowHandle};
 use std::mem::MaybeUninit;
 use std::{mem, ptr};
 use windows::Win32::Foundation::{HWND, LPARAM, POINT, RECT, WPARAM};
@@ -280,11 +280,10 @@ impl WindowsApi for RealWindowsApi {
     Some(MonitorInfo::from(monitor_info))
   }
 
-  // TODO: Use dedicated MonitorHandle struct and stop using isize everywhere
-  fn get_monitor_info_for_monitor(&self, handle: isize) -> Option<MonitorInfo> {
+  fn get_monitor_info_for_monitor(&self, handle: MonitorHandle) -> Option<MonitorInfo> {
     let mut monitor_info = empty_monitor_info();
     unsafe {
-      let monitor = HMONITOR(handle as *mut _);
+      let monitor = HMONITOR(handle.handle as *mut _);
       if !GetMonitorInfoW(monitor, &mut monitor_info).as_bool() {
         warn!("Failed to get monitor info for monitor that contains window {handle}");
         return None;
@@ -294,12 +293,12 @@ impl WindowsApi for RealWindowsApi {
     Some(MonitorInfo::from(monitor_info))
   }
 
-  fn get_monitor_for_window_handle(&self, handle: WindowHandle) -> isize {
-    unsafe { MonitorFromWindow(handle.as_hwnd(), MONITOR_DEFAULTTONEAREST) }.0 as isize
+  fn get_monitor_for_window_handle(&self, handle: WindowHandle) -> MonitorHandle {
+    unsafe { MonitorFromWindow(handle.as_hwnd(), MONITOR_DEFAULTTONEAREST) }.into()
   }
 
-  fn get_monitor_for_point(&self, point: &Point) -> isize {
-    unsafe { MonitorFromPoint(point.into(), MONITOR_DEFAULTTONEAREST) }.0 as isize
+  fn get_monitor_for_point(&self, point: &Point) -> MonitorHandle {
+    unsafe { MonitorFromPoint(point.into(), MONITOR_DEFAULTTONEAREST).into() }
   }
 
   fn get_virtual_desktop_manager(&self) -> Option<IVirtualDesktopManager> {

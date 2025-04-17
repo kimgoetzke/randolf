@@ -1,18 +1,25 @@
 use crate::api::WindowsApi;
 use crate::utils::window_handle::WindowHandle;
-use crate::utils::{Monitor, Rect, Window};
+use crate::utils::{Monitor, MonitorHandle, Rect, Window};
 use std::fmt::Display;
 
 #[derive(Debug, Copy, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct WorkspaceId {
-  pub monitor_handle: isize,
+  pub monitor_handle: MonitorHandle,
   pub workspace: usize,
 }
 
 impl WorkspaceId {
-  pub fn from(monitor_handle: isize, workspace: usize) -> Self {
+  pub fn new(monitor_handle: MonitorHandle, workspace: usize) -> Self {
     WorkspaceId {
       monitor_handle,
+      workspace,
+    }
+  }
+
+  pub fn from(monitor_handle: isize, workspace: usize) -> Self {
+    WorkspaceId {
+      monitor_handle: MonitorHandle::from(monitor_handle),
       workspace,
     }
   }
@@ -29,7 +36,7 @@ impl WorkspaceId {
 
 impl Display for WorkspaceId {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    write!(f, "s#{}-{}", self.monitor_handle, self.workspace)
+    write!(f, "s#{}-{}", self.monitor_handle.handle, self.workspace)
   }
 }
 
@@ -46,14 +53,14 @@ impl Workspace {
   pub fn from(id: WorkspaceId, monitor: &Monitor) -> Self {
     Workspace {
       id,
-      monitor_handle: monitor.handle as i64,
+      monitor_handle: monitor.handle.handle as i64,
       monitor: monitor.clone(),
       windows: vec![],
       window_state_info: vec![],
     }
   }
 
-  pub fn move_window(&mut self, mut window: Window, current_monitor: isize, windows_api: &impl WindowsApi) {
+  pub fn move_window(&mut self, mut window: Window, current_monitor: MonitorHandle, windows_api: &impl WindowsApi) {
     window = self.update_window_rect_if_required(window, current_monitor, windows_api);
     windows_api.set_window_position(window.handle, window.rect);
     windows_api.set_cursor_position(&window.rect.center());
@@ -69,7 +76,12 @@ impl Workspace {
     self.windows.iter().any(|window| window.handle == *handle)
   }
 
-  pub fn store_and_hide_window(&mut self, mut window: Window, current_monitor: isize, windows_api: &impl WindowsApi) {
+  pub fn store_and_hide_window(
+    &mut self,
+    mut window: Window,
+    current_monitor: MonitorHandle,
+    windows_api: &impl WindowsApi,
+  ) {
     if !self.windows.iter().any(|w| w.handle == window.handle) {
       if windows_api.is_window_minimised(window.handle) {
         debug!("{} is minimised, ignoring it for workspace {}", window.handle, self.id);
@@ -88,10 +100,10 @@ impl Workspace {
   fn update_window_rect_if_required(
     &mut self,
     mut window: Window,
-    current_monitor: isize,
+    current_monitor: MonitorHandle,
     _windows_api: &impl WindowsApi,
   ) -> Window {
-    if self.monitor_handle as isize != current_monitor {
+    if self.monitor_handle != current_monitor.as_i64() {
       let width = window.rect.width();
       let height = window.rect.height();
       let target_monitor_work_area_center = self.monitor.work_area.center();
@@ -110,7 +122,12 @@ impl Workspace {
     window
   }
 
-  pub fn store_and_hide_windows(&mut self, windows: Vec<Window>, current_monitor: isize, windows_api: &impl WindowsApi) {
+  pub fn store_and_hide_windows(
+    &mut self,
+    windows: Vec<Window>,
+    current_monitor: MonitorHandle,
+    windows_api: &impl WindowsApi,
+  ) {
     self.clear_windows();
     for window in windows.iter() {
       self.store_and_hide_window(window.clone(), current_monitor, windows_api);
@@ -196,13 +213,25 @@ mod tests {
   }
 
   #[test]
+  fn workspace_id_display_formats_correctly() {
+    let id = WorkspaceId::from(1, 2);
+    assert_eq!(id.to_string(), "s#1-2");
+  }
+
+  #[test]
+  fn workspace_id_display_handles_large_values() {
+    let id = WorkspaceId::from(123456789, 987654321);
+    assert_eq!(id.to_string(), "s#123456789-987654321");
+  }
+
+  #[test]
   fn workspace_can_store_window() {
     let monitor = Monitor::new_test(1, Rect::default());
     let workspace_id = WorkspaceId::from(1, 1);
     let mut workspace = Workspace::from(workspace_id, &monitor);
 
     let window = Window::from(1, "Test Window".to_string(), Rect::new(0, 0, 100, 100));
-    workspace.store_and_hide_window(window.clone(), 1, &MockWindowsApi::new());
+    workspace.store_and_hide_window(window.clone(), 1.into(), &MockWindowsApi::new());
 
     assert_eq!(workspace.windows.len(), 1);
     assert_eq!(workspace.windows[0].title, "Test Window");
@@ -249,7 +278,7 @@ mod tests {
     let mut workspace = Workspace::from(WorkspaceId::from(1, 1), &Monitor::mock_1());
     let window = Window::from(1, "Test Window".to_string(), Rect::new(0, 0, 100, 100));
 
-    workspace.store_and_hide_window(window.clone(), 1, &MockWindowsApi);
+    workspace.store_and_hide_window(window.clone(), 1.into(), &MockWindowsApi);
 
     assert_eq!(workspace.get_windows().len(), 1);
     assert_eq!(workspace.get_windows()[0].handle, window.handle);
@@ -261,8 +290,8 @@ mod tests {
     let window = Window::from(1, "Test Window".to_string(), Rect::new(0, 0, 100, 100));
     let mock_api = MockWindowsApi;
 
-    workspace.store_and_hide_window(window.clone(), 1, &mock_api);
-    workspace.store_and_hide_window(window.clone(), 1, &mock_api);
+    workspace.store_and_hide_window(window.clone(), 1.into(), &mock_api);
+    workspace.store_and_hide_window(window.clone(), 1.into(), &mock_api);
 
     assert_eq!(workspace.get_windows().len(), 1);
   }
@@ -274,7 +303,7 @@ mod tests {
     let window_2 = Window::from(2, "Test Window 2".to_string(), Rect::new(100, 100, 200, 200));
     let mock_api = MockWindowsApi;
 
-    workspace.store_and_hide_windows(vec![window_1.clone(), window_2.clone()], 1, &mock_api);
+    workspace.store_and_hide_windows(vec![window_1.clone(), window_2.clone()], 1.into(), &mock_api);
 
     assert_eq!(workspace.get_windows().len(), 2);
     assert!(workspace.get_windows().contains(&window_1));
@@ -290,7 +319,7 @@ mod tests {
     MockWindowsApi::set_is_window_hidden(window_2.handle, false);
     let mock_api = MockWindowsApi;
 
-    workspace.store_and_hide_windows(vec![window_1.clone(), window_2.clone()], 1, &mock_api);
+    workspace.store_and_hide_windows(vec![window_1.clone(), window_2.clone()], 1.into(), &mock_api);
     workspace.restore_windows(&mock_api);
 
     assert!(workspace.get_windows().is_empty());
