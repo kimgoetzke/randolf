@@ -401,13 +401,13 @@ fn log_actual_vs_expected(handle: &WindowHandle, sizing: &Sizing, rc: Rect) {
 mod tests {
   use crate::api::{MockWindowsApi, WindowsApi};
   use crate::configuration_provider::ConfigurationProvider;
-  use crate::utils::{Direction, Monitor, MonitorInfo, Point, Rect, Sizing, WindowHandle, WindowPlacement};
+  use crate::utils::{Direction, MonitorHandle, Point, Rect, Sizing, WindowHandle, WindowPlacement};
   use crate::window_manager::{WindowManager, is_of_expected_size};
   use crate::workspace_manager::WorkspaceManager;
   use std::sync::{Arc, Mutex};
 
   impl WindowManager<MockWindowsApi> {
-    pub fn new_test(api: MockWindowsApi) -> Self {
+    pub fn default(api: MockWindowsApi) -> Self {
       WindowManager {
         configuration_provider: Arc::new(Mutex::new(ConfigurationProvider::default())),
         known_windows: Default::default(),
@@ -418,74 +418,68 @@ mod tests {
     }
   }
 
-  impl MonitorInfo {
-    pub fn new_test() -> Self {
-      MonitorInfo {
-        size: 0,
-        monitor_area: Rect::new(0, 0, 200, 200),
-        work_area: Rect::new(0, 0, 200, 180),
-        flags: 0,
-      }
-    }
-  }
-
   #[test]
   fn near_maximize_window_when_window_is_not_near_maximised() {
-    let handle = WindowHandle::new(1);
-    let initial_placement = WindowPlacement::new_from_sizing(Sizing::new(0, 0, 100, 100));
-    let monitor_info = MonitorInfo::new_test();
-    MockWindowsApi::set_foreground_window(handle);
-    MockWindowsApi::set_window_placement(handle, initial_placement.clone());
-    MockWindowsApi::set_monitor_info(handle, 1.into(), monitor_info);
-    let mut manager = WindowManager::new_test(MockWindowsApi);
+    let monitor_handle = MonitorHandle::from(1);
+    let window_handle = WindowHandle::new(1);
+    let sizing = Sizing::new(0, 0, 100, 100);
+    let initial_placement = WindowPlacement::new_from_sizing(sizing.clone());
+    MockWindowsApi::add_or_update_window(window_handle, "Test Window".to_string(), sizing, false, false, true);
+    MockWindowsApi::add_or_update_monitor(monitor_handle, Rect::new(0, 0, 200, 200), true);
+    MockWindowsApi::place_window(window_handle, monitor_handle);
+    let mut manager = WindowManager::default(MockWindowsApi);
 
     manager.near_maximise_or_restore();
 
-    let actual_placement = manager.windows_api.get_window_placement(handle);
+    let actual_placement = manager.windows_api.get_window_placement(window_handle);
     let expected_placement = WindowPlacement::new_from_sizing(Sizing::new(20, 20, 160, 140));
     assert!(actual_placement.is_some());
     assert_eq!(actual_placement.unwrap(), expected_placement);
-    assert!(manager.known_windows.contains_key(&format!("{:?}", handle.hwnd)));
+    assert!(manager.known_windows.contains_key(&format!("{:?}", window_handle.hwnd)));
     assert_eq!(
-      *manager.known_windows.get(&format!("{:?}", handle.hwnd)).unwrap(),
+      *manager.known_windows.get(&format!("{:?}", window_handle.hwnd)).unwrap(),
       initial_placement
     );
   }
 
   #[test]
   fn restore_window_when_window_is_near_maximised() {
-    let handle = WindowHandle::new(1);
-    let placement = WindowPlacement::new_from_sizing(Sizing::new(20, 20, 160, 140));
-    let monitor_info = MonitorInfo::new_test();
-    MockWindowsApi::set_foreground_window(handle);
-    MockWindowsApi::set_window_placement(handle, placement.clone());
-    MockWindowsApi::set_monitor_info(handle, 1.into(), monitor_info);
-    let mut manager = WindowManager::new_test(MockWindowsApi);
+    let monitor_handle = MonitorHandle::from(1);
+    let window_handle = WindowHandle::new(1);
+    let sizing = Sizing::new(20, 20, 160, 140);
+    MockWindowsApi::add_or_update_window(window_handle, "Test Window".to_string(), sizing, false, false, true);
+    MockWindowsApi::add_or_update_monitor(monitor_handle, Rect::new(0, 0, 200, 200), true);
+    MockWindowsApi::place_window(window_handle, monitor_handle);
+    let mut manager = WindowManager::default(MockWindowsApi);
     let previous_placement = WindowPlacement::new_test();
     manager
       .known_windows
-      .insert(format!("{:?}", handle.hwnd), previous_placement.clone());
+      .insert(format!("{:?}", window_handle.hwnd), previous_placement.clone());
 
     manager.near_maximise_or_restore();
 
-    let actual_placement = manager.windows_api.get_window_placement(handle);
+    let actual_placement = manager.windows_api.get_window_placement(window_handle);
     assert!(actual_placement.is_some());
     assert_eq!(actual_placement.unwrap(), previous_placement);
   }
 
   #[test]
   fn move_window_on_the_same_monitor() {
-    let handle = WindowHandle::new(1);
-    let placement = WindowPlacement::new_from_sizing(Sizing::new(20, 20, 160, 160));
-    let monitor_info = MonitorInfo::new_test();
-    MockWindowsApi::set_foreground_window(handle);
-    MockWindowsApi::set_window_placement(handle, placement.clone());
-    MockWindowsApi::set_monitor_info(handle, 1.into(), monitor_info);
-    let mut manager = WindowManager::new_test(MockWindowsApi);
+    let monitor_handle = MonitorHandle::from(1);
+    let window_handle = WindowHandle::new(1);
+    let sizing = Sizing::new(20, 20, 160, 160);
+    MockWindowsApi::add_or_update_window(window_handle, "Test Window".to_string(), sizing, false, false, true);
+    MockWindowsApi::add_or_update_monitor(monitor_handle, Rect::new(0, 0, 200, 200), true);
+    MockWindowsApi::place_window(window_handle, monitor_handle);
+    let mock_api = MockWindowsApi;
+    let mut manager = WindowManager::default(mock_api);
 
     manager.move_window(Direction::Right);
 
-    let actual_placement = manager.windows_api.get_window_placement(handle);
+    let actual_placement = manager.windows_api.get_window_placement(window_handle);
+    let monitor_info = mock_api
+      .get_monitor_info_for_monitor(monitor_handle)
+      .expect("Failed to get monitor info");
     let expected_sizing = Sizing::right_half_of_screen(monitor_info.work_area, 20);
     let expected_cursor_position = Point::from_center_of_sizing(&expected_sizing);
     let expected_placement = WindowPlacement::new_from_sizing(expected_sizing);
@@ -496,21 +490,17 @@ mod tests {
 
   #[test]
   fn move_window_when_window_is_already_at_target_location() {
-    let handle = WindowHandle::new(1);
-    let monitor_info = MonitorInfo::new_test();
-    let sizing = Sizing::left_half_of_screen(monitor_info.work_area, 20);
-    let placement = WindowPlacement::new_from_sizing(sizing.clone());
-    let monitor = Monitor::new_test(1, monitor_info.work_area);
-    MockWindowsApi::set_foreground_window(handle);
-    MockWindowsApi::set_window_placement(handle, placement.clone());
-    MockWindowsApi::set_monitor_info(handle, 1.into(), monitor_info);
-    MockWindowsApi::set_monitor_for_window(handle, monitor.clone());
-    MockWindowsApi::set_monitors(vec![monitor]);
-    let mut manager = WindowManager::new_test(MockWindowsApi);
+    let monitor_handle = MonitorHandle::from(1);
+    let window_handle = WindowHandle::new(1);
+    let sizing = Sizing::left_half_of_screen(Rect::new(0, 0, 200, 180), 20);
+    MockWindowsApi::add_or_update_window(window_handle, "Test Window".to_string(), sizing.clone(), false, false, true);
+    MockWindowsApi::add_or_update_monitor(monitor_handle, Rect::new(0, 0, 200, 200), true);
+    MockWindowsApi::place_window(window_handle, monitor_handle);
+    let mut manager = WindowManager::default(MockWindowsApi);
 
     manager.move_window(Direction::Left);
 
-    let actual_placement = manager.windows_api.get_window_placement(handle);
+    let actual_placement = manager.windows_api.get_window_placement(window_handle);
     let expected_placement = WindowPlacement::new_from_sizing(sizing);
     assert!(actual_placement.is_some());
     assert_eq!(actual_placement.unwrap(), expected_placement);

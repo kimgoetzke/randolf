@@ -33,6 +33,12 @@ impl From<&Window> for WindowHandle {
   }
 }
 
+impl From<i32> for WindowHandle {
+  fn from(value: i32) -> Self {
+    Self { hwnd: value as isize }
+  }
+}
+
 #[allow(clippy::from_over_into)]
 impl Into<HWND> for WindowHandle {
   fn into(self) -> HWND {

@@ -86,7 +86,7 @@ impl Display for Rect {
 
 #[cfg(test)]
 mod tests {
-  use crate::utils::Rect;
+  use crate::utils::{Point, Rect};
   use windows::Win32::Foundation::RECT;
 
   impl Rect {
@@ -97,6 +97,14 @@ mod tests {
         right: 0,
         bottom: 0,
       }
+    }
+
+    pub fn contains(&self, point: &Point) -> bool {
+      point.x() >= self.left && point.x() <= self.right && point.y() >= self.top && point.y() <= self.bottom
+    }
+
+    pub fn intersects(&self, other: &Self) -> bool {
+      self.left < other.right && self.right > other.left && self.top < other.bottom && self.bottom > other.top
     }
   }
 

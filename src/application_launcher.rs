@@ -75,7 +75,7 @@ mod tests {
   use super::*;
   use crate::api::MockWindowsApi;
   use crate::configuration_provider::ConfigurationProvider;
-  use crate::utils::{Point, Rect, Window, WindowHandle, WindowPlacement};
+  use crate::utils::{Point, Sizing, WindowHandle};
   use log::Level::Warn;
 
   #[test]
@@ -83,9 +83,9 @@ mod tests {
     testing_logger::setup();
     let cursor_position = Point::new(-1, -1);
     MockWindowsApi::set_cursor_position(cursor_position);
-    let api = MockWindowsApi;
+    let mock_api = MockWindowsApi;
     let configuration_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
-    let launcher = ApplicationLauncher::new_initialised(configuration_provider.clone(), api);
+    let launcher = ApplicationLauncher::new_initialised(configuration_provider.clone(), mock_api);
 
     launcher.launch("C:\\does\\not\\exist.exe".to_string(), false);
     launcher.launch("not an executable".to_string(), false);
@@ -106,20 +106,20 @@ mod tests {
       assert_eq!(captured_logs[2].body, "Path to executable is empty".to_string());
       assert_eq!(captured_logs[2].level, Warn);
     });
-    assert_eq!(api.get_cursor_position(), cursor_position);
+    assert_eq!(mock_api.get_cursor_position(), cursor_position);
   }
 
   #[test]
   fn set_cursor_position_does_nothing_when_foreground_window_is_none() {
     let cursor_position = Point::new(-1, -1);
     MockWindowsApi::set_cursor_position(cursor_position);
-    let api = MockWindowsApi;
+    let mock_api = MockWindowsApi;
     let config_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
-    let launcher = ApplicationLauncher::new_initialised(config_provider, api);
+    let launcher = ApplicationLauncher::new_initialised(config_provider, mock_api);
 
     launcher.set_cursor_position();
 
-    assert_eq!(api.get_cursor_position(), cursor_position);
+    assert_eq!(mock_api.get_cursor_position(), cursor_position);
   }
 
   #[test]
@@ -128,34 +128,26 @@ mod tests {
     let foreground_window_handle = WindowHandle::new(1);
     MockWindowsApi::set_cursor_position(cursor_position);
     MockWindowsApi::set_foreground_window(foreground_window_handle);
-    let api = MockWindowsApi;
+    let mock_api = MockWindowsApi;
     let config_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
-    let launcher = ApplicationLauncher::new_initialised(config_provider, api);
+    let launcher = ApplicationLauncher::new_initialised(config_provider, mock_api);
 
     launcher.set_cursor_position();
 
-    assert_eq!(api.get_cursor_position(), cursor_position);
+    assert_eq!(mock_api.get_cursor_position(), cursor_position);
   }
 
   #[test]
   fn set_cursor_position_sets_correct_position_when_valid() {
-    let foreground_window_handle = WindowHandle::new(1);
-    let foreground_window_placement = WindowPlacement::new_from_rect(Rect::new(50, 50, 100, 100));
-    let foreground_window = Window::new(
-      foreground_window_handle.as_hwnd(),
-      "Test Window".to_string(),
-      foreground_window_placement.normal_position,
-    );
-    MockWindowsApi::set_foreground_window(foreground_window_handle);
-    MockWindowsApi::set_window_placement(foreground_window_handle, foreground_window_placement);
-    MockWindowsApi::set_window_title(foreground_window.title.to_string());
-    MockWindowsApi::set_visible_windows(vec![foreground_window]);
-    let api = MockWindowsApi;
+    let handle = WindowHandle::new(1);
+    let sizing = Sizing::new(50, 50, 50, 50);
+    MockWindowsApi::add_or_update_window(handle, "Test Window".to_string(), sizing, false, false, true);
+    let mock_api = MockWindowsApi;
     let config_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
-    let launcher = ApplicationLauncher::new_initialised(config_provider, api);
+    let launcher = ApplicationLauncher::new_initialised(config_provider, mock_api);
 
     launcher.set_cursor_position();
 
-    assert_eq!(api.get_cursor_position(), Point::new(75, 75));
+    assert_eq!(mock_api.get_cursor_position(), Point::new(75, 75));
   }
 }

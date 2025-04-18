@@ -59,6 +59,23 @@ impl Sizing {
   }
 }
 
+impl From<Rect> for Sizing {
+  fn from(rect: Rect) -> Self {
+    Sizing {
+      x: rect.left,
+      y: rect.top,
+      width: rect.width(),
+      height: rect.height(),
+    }
+  }
+}
+
+impl From<Sizing> for Rect {
+  fn from(sizing: Sizing) -> Self {
+    Rect::new(sizing.x, sizing.y, sizing.x + sizing.width, sizing.y + sizing.height)
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;

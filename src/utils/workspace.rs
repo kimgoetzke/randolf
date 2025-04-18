@@ -162,7 +162,7 @@ impl Display for Workspace {
 mod tests {
   use super::*;
   use crate::api::MockWindowsApi;
-  use crate::utils::{Monitor, Rect, Window};
+  use crate::utils::{Monitor, Rect, Sizing, Window};
 
   impl Workspace {
     pub fn get_windows(&self) -> Vec<Window> {
@@ -179,8 +179,9 @@ mod tests {
     let monitor = Monitor::new_test(1, Rect::default());
     let workspace_id = WorkspaceId::from(1, 1);
     let mut workspace = Workspace::from(workspace_id, &monitor);
-
     let window = Window::from(1, "Test Window".to_string(), Rect::new(0, 0, 100, 100));
+    MockWindowsApi::add_or_update_window(window.handle, window.title.clone(), window.rect.into(), false, false, true);
+
     workspace.store_and_hide_window(window.clone(), 1.into(), &MockWindowsApi::new());
 
     assert_eq!(workspace.windows.len(), 1);
@@ -195,6 +196,7 @@ mod tests {
   fn store_and_hide_window_adds_window_to_workspace() {
     let mut workspace = Workspace::from(WorkspaceId::from(1, 1), &Monitor::mock_1());
     let window = Window::from(1, "Test Window".to_string(), Rect::new(0, 0, 100, 100));
+    MockWindowsApi::add_or_update_window(window.handle, window.title.clone(), window.rect.into(), false, false, true);
 
     workspace.store_and_hide_window(window.clone(), 1.into(), &MockWindowsApi);
 
@@ -206,6 +208,7 @@ mod tests {
   fn store_and_hide_window_does_not_add_duplicate_window() {
     let mut workspace = Workspace::from(WorkspaceId::from(1, 1), &Monitor::mock_1());
     let window = Window::from(1, "Test Window".to_string(), Rect::new(0, 0, 100, 100));
+    MockWindowsApi::add_or_update_window(window.handle, window.title.clone(), window.rect.into(), false, false, true);
     let mock_api = MockWindowsApi;
 
     workspace.store_and_hide_window(window.clone(), 1.into(), &mock_api);
@@ -220,6 +223,22 @@ mod tests {
     let window_1 = Window::from(1, "Test Window 1".to_string(), Rect::new(0, 0, 100, 100));
     let window_2 = Window::from(2, "Test Window 2".to_string(), Rect::new(100, 100, 200, 200));
     let mock_api = MockWindowsApi;
+    MockWindowsApi::add_or_update_window(
+      window_1.handle,
+      window_1.title.clone(),
+      window_1.rect.into(),
+      false,
+      false,
+      true,
+    );
+    MockWindowsApi::add_or_update_window(
+      window_2.handle,
+      window_2.title.clone(),
+      window_2.rect.into(),
+      false,
+      false,
+      true,
+    );
 
     workspace.store_and_hide_windows(vec![window_1.clone(), window_2.clone()], 1.into(), &mock_api);
 
@@ -231,13 +250,14 @@ mod tests {
   #[test]
   fn restore_windows_restores_all_windows() {
     let mut workspace = Workspace::from(WorkspaceId::from(1, 1), &Monitor::mock_1());
-    let window_1 = Window::from(1, "Test Window 1".to_string(), Rect::new(0, 0, 100, 100));
-    let window_2 = Window::from(2, "Test Window 2".to_string(), Rect::new(100, 100, 200, 200));
-    MockWindowsApi::set_is_window_hidden(window_1.handle, false);
-    MockWindowsApi::set_is_window_hidden(window_2.handle, false);
+    let sizing_window_1 = Sizing::new(0, 0, 100, 100);
+    let sizing_window_2 = Sizing::new(100, 100, 100, 100);
+    MockWindowsApi::add_or_update_window(1.into(), "Test Window 1".to_string(), sizing_window_1, false, false, true);
+    MockWindowsApi::add_or_update_window(2.into(), "Test Window 2".to_string(), sizing_window_2, false, false, true);
     let mock_api = MockWindowsApi;
+    let windows = mock_api.get_all_visible_windows();
 
-    workspace.store_and_hide_windows(vec![window_1.clone(), window_2.clone()], 1.into(), &mock_api);
+    workspace.store_and_hide_windows(windows, 1.into(), &mock_api);
     workspace.restore_windows(&mock_api);
 
     assert!(workspace.get_windows().is_empty());

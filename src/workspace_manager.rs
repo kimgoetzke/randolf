@@ -337,8 +337,8 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
 mod tests {
   use super::*;
   use crate::api::MockWindowsApi;
-  use crate::utils::WindowHandle;
-  use crate::utils::{Monitor, Point, Rect, WindowPlacement, Workspace, WorkspaceId};
+  use crate::utils::{Monitor, Point, Rect, Workspace, WorkspaceId};
+  use crate::utils::{Sizing, WindowHandle};
   use std::sync::OnceLock;
 
   static PRIMARY_MONITOR: OnceLock<Monitor> = OnceLock::new();
@@ -381,26 +381,18 @@ mod tests {
       }
     }
 
+    /// Creates a new `WorkspaceManager` with a test window, two monitors, and two workspaces on each monitor.
     pub fn new_test() -> Self {
-      MockWindowsApi::set_cursor_position(Point::new(-1, -1));
-
-      let foreground_window_handle = WindowHandle::new(1);
-      let foreground_window_placement = WindowPlacement::new_from_rect(Rect::new(50, 50, 100, 100));
-      let foreground_window = Window::new(
-        foreground_window_handle.as_hwnd(),
-        "Test Window".to_string(),
-        foreground_window_placement.normal_position,
-      );
-      MockWindowsApi::set_foreground_window(foreground_window_handle);
-      MockWindowsApi::set_window_placement(foreground_window_handle, foreground_window_placement);
-      MockWindowsApi::set_window_title(foreground_window.title.to_string());
-      MockWindowsApi::set_visible_windows(vec![foreground_window]);
+      let window_handle = WindowHandle::new(1);
+      let sizing = Sizing::new(50, 50, 50, 50);
+      MockWindowsApi::add_or_update_window(window_handle, "Test Window".to_string(), sizing, false, false, true);
 
       let primary_monitor = primary_monitor();
       let secondary_monitor = secondary_monitor();
+      MockWindowsApi::place_window(window_handle, primary_monitor.handle);
       MockWindowsApi::set_cursor_position(Point::new(50, 50));
-      MockWindowsApi::set_monitor_for_point(primary_monitor.handle);
-      MockWindowsApi::set_monitors(vec![primary_monitor.clone(), secondary_monitor.clone()]);
+      MockWindowsApi::add_or_update_monitor(primary_monitor.handle, primary_monitor.monitor_area, true);
+      MockWindowsApi::add_or_update_monitor(secondary_monitor.handle, secondary_monitor.monitor_area, false);
 
       let mock_api = MockWindowsApi;
       let primary_active_workspace_id = *primary_active_workspace();
@@ -547,18 +539,32 @@ mod tests {
 
   #[test]
   fn switch_workspace_sets_largest_target_workspace_window_as_foreground_window() {
-    // Given the current workspace has one window and target workspace is not active
+    // Given the current workspace has one window and the target workspace, which has two windows, is not active
+    let small_window = Window::from(2, "Small Window".to_string(), Rect::new(0, 0, 50, 50));
+    let large_window = Window::from(3, "Large Window".to_string(), Rect::new(0, 0, 500, 500));
+    MockWindowsApi::add_or_update_window(
+      small_window.handle,
+      small_window.title.clone(),
+      small_window.rect.into(),
+      false,
+      false,
+      true,
+    );
+    MockWindowsApi::add_or_update_window(
+      large_window.handle,
+      large_window.title.clone(),
+      large_window.rect.into(),
+      false,
+      false,
+      true,
+    );
     let mut workspace_manager = WorkspaceManager::new_test();
     let target_workspace_id = primary_inactive_workspace();
-    assert_eq!(workspace_manager.active_workspaces.len(), 2);
-    assert!(!workspace_manager.active_workspaces.contains(target_workspace_id));
-
-    // Given the target workspace has a small and a large window
     if let Some(target_workspace) = workspace_manager.workspaces.get_mut(target_workspace_id) {
-      let small_window = Window::from(2, "Small Window".to_string(), Rect::new(0, 0, 50, 50));
-      let large_window = Window::from(3, "Large Window".to_string(), Rect::new(0, 0, 500, 500));
       target_workspace.store_and_hide_windows(vec![small_window, large_window], 1.into(), &workspace_manager.windows_api);
     }
+    assert_eq!(workspace_manager.active_workspaces.len(), 2);
+    assert!(!workspace_manager.active_workspaces.contains(target_workspace_id));
 
     // When the user switches to the target workspace
     workspace_manager.switch_workspace(*target_workspace_id);
@@ -586,7 +592,7 @@ mod tests {
   #[test]
   fn move_window_to_different_workspace_on_same_monitor() {
     // Given the target workspace has one window and is not active
-    MockWindowsApi::set_monitor_for_window(WindowHandle::new(1), primary_monitor().clone());
+    MockWindowsApi::place_window(WindowHandle::new(1), primary_monitor().handle);
     let workspace_id = primary_inactive_workspace();
     let mut workspace_manager = WorkspaceManager::new_test();
 
@@ -603,7 +609,11 @@ mod tests {
     let windows = target_workspace.get_windows();
     let window = windows.first().expect("Failed to retrieve window title");
     assert_eq!(window.title, "Test Window");
-    assert_eq!(window.center, Point::new(75, 75));
+    assert_eq!(
+      window.center,
+      Point::new(75, 75),
+      "Window center should not be updated since it wasn't moved to a different monitor"
+    );
 
     // But the active workspace has not changed
     let active_workspaces = workspace_manager.active_workspaces;
@@ -616,7 +626,7 @@ mod tests {
   #[test]
   fn move_window_to_active_workspace_on_different_monitor() {
     // Given the target workspace has one window and is not active
-    MockWindowsApi::set_monitor_for_window(WindowHandle::new(1), primary_monitor().clone());
+    MockWindowsApi::place_window(WindowHandle::new(1), primary_monitor().handle);
     let mut workspace_manager = WorkspaceManager::new_test();
 
     // When the user moves a window to a different workspace on a different monitor
@@ -655,7 +665,7 @@ mod tests {
   #[test]
   fn move_window_to_inactive_workspace_on_different_monitor() {
     // Given the target workspace has one window and is not active
-    MockWindowsApi::set_monitor_for_window(WindowHandle::new(1), primary_monitor().clone());
+    MockWindowsApi::place_window(WindowHandle::new(1), primary_monitor().handle);
     let mut workspace_manager = WorkspaceManager::new_test();
 
     // When the user moves a window to a different workspace on a different monitor

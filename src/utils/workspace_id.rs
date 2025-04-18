@@ -46,7 +46,8 @@ mod tests {
 
   #[test]
   fn workspace_id_display_handles_negative_values() {
-    let id = WorkspaceId::from(-1, 2);
+    let handle = MonitorHandle::from(-1);
+    let id = WorkspaceId::new(handle, 2);
 
     assert_eq!(id.to_string(), "s#-1-2");
   }
