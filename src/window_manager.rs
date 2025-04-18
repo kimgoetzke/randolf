@@ -43,8 +43,89 @@ impl<T: WindowsApi + Copy> WindowManager<T> {
     self.workspace_manager.get_ordered_workspace_ids()
   }
 
-  fn margin(&self) -> i32 {
-    self.configuration_provider.lock().unwrap().get_i32(WINDOW_MARGIN)
+  pub fn close_window(&mut self) {
+    let Some(window) = self.windows_api.get_foreground_window() else {
+      return;
+    };
+
+    self.windows_api.do_close_window(window);
+  }
+
+  pub fn switch_workspace(&mut self, id: WorkspaceId) {
+    self.workspace_manager.switch_workspace(id);
+  }
+
+  pub fn move_window_to_workspace(&mut self, id: WorkspaceId) {
+    self.workspace_manager.move_window_to_workspace(id);
+  }
+
+  pub fn move_window(&mut self, direction: Direction) {
+    let (handle, placement, monitor_info) = match self.get_window_and_monitor_info() {
+      Some(value) => value,
+      None => return,
+    };
+    let sizing = match direction {
+      Direction::Left => Sizing::left_half_of_screen(monitor_info.work_area, self.margin()),
+      Direction::Right => Sizing::right_half_of_screen(monitor_info.work_area, self.margin()),
+      Direction::Up => Sizing::top_half_of_screen(monitor_info.work_area, self.margin()),
+      Direction::Down => Sizing::bottom_half_of_screen(monitor_info.work_area, self.margin()),
+    };
+
+    match is_of_expected_size(handle, &placement, &sizing) {
+      true => {
+        let all_monitors = self.windows_api.get_all_monitors();
+        let this_monitor = self.windows_api.get_monitor_for_window_handle(handle);
+        let target_monitor = all_monitors.get(direction, this_monitor);
+        if let Some(target_monitor) = target_monitor {
+          debug!("Moving window to [{}]", target_monitor);
+          self.windows_api.set_window_position(handle, target_monitor.work_area);
+          self.near_maximize_window(handle, MonitorInfo::from(target_monitor), self.margin());
+          self.windows_api.set_cursor_position(&target_monitor.center);
+        } else {
+          debug!("No monitor found in [{:?}] direction, did not move window", direction);
+        }
+      }
+      false => {
+        let cursor_target_point = Point::from_center_of_sizing(&sizing);
+        self.execute_window_resizing(handle, sizing);
+        self.windows_api.set_cursor_position(&cursor_target_point);
+      }
+    }
+  }
+
+  pub fn move_cursor(&mut self, direction: Direction) {
+    let windows = self.windows_api.get_all_visible_windows();
+    let cursor_position = self.windows_api.get_cursor_position();
+    let (ref_point, ref_window) = match self.find_window_at_cursor(&cursor_position, &windows) {
+      Some(window_info) => (Point::from_center_of_rect(&window_info.rect), Some(window_info)),
+      None => (cursor_position, None),
+    };
+    info!(
+      "Found cursor {} window(s) and cursor is at {cursor_position} with reference point {ref_point}",
+      windows.len()
+    );
+
+    if let Some(target_window) = if let Some(vdm) = &self.virtual_desktop_manager {
+      self.find_closest_window_in_direction(&ref_point, direction, &windows, vdm, ref_window)
+    } else {
+      None
+    } {
+      let target_point = Point::from_center_of_rect(&target_window.rect);
+      self.move_focus_to_window(direction, target_window, &target_point);
+    } else {
+      trace!("No window found in [{:?}] direction, attempting to find monitor", direction);
+      let all_monitors = self.windows_api.get_all_monitors();
+      let this_monitor = self.windows_api.get_monitor_for_point(&cursor_position);
+      match all_monitors.get(direction, this_monitor) {
+        Some(target_monitor) => self.move_focus_to_monitor(direction, target_monitor),
+        None => {
+          info!(
+            "No window or monitor found in [{:?}] direction, did not move cursor",
+            direction
+          );
+        }
+      }
+    };
   }
 
   pub fn near_maximise_or_restore(&mut self) {
@@ -60,6 +141,10 @@ impl<T: WindowsApi + Copy> WindowManager<T> {
         self.near_maximize_window(handle, monitor_info, self.margin());
       }
     }
+  }
+
+  fn margin(&self) -> i32 {
+    self.configuration_provider.lock().unwrap().get_i32(WINDOW_MARGIN)
   }
 
   fn restore_previous_placement(&self, known_windows: &HashMap<String, WindowPlacement>, handle: WindowHandle) {
@@ -108,83 +193,6 @@ impl<T: WindowsApi + Copy> WindowManager<T> {
     let work_area = monitor_info.work_area;
     let sizing = Sizing::near_maximised(work_area, margin);
     self.execute_window_resizing(handle, sizing);
-  }
-
-  pub fn move_window(&mut self, direction: Direction) {
-    let (handle, placement, monitor_info) = match self.get_window_and_monitor_info() {
-      Some(value) => value,
-      None => return,
-    };
-    let sizing = match direction {
-      Direction::Left => Sizing::left_half_of_screen(monitor_info.work_area, self.margin()),
-      Direction::Right => Sizing::right_half_of_screen(monitor_info.work_area, self.margin()),
-      Direction::Up => Sizing::top_half_of_screen(monitor_info.work_area, self.margin()),
-      Direction::Down => Sizing::bottom_half_of_screen(monitor_info.work_area, self.margin()),
-    };
-
-    match is_of_expected_size(handle, &placement, &sizing) {
-      true => {
-        let all_monitors = self.windows_api.get_all_monitors();
-        let this_monitor = self.windows_api.get_monitor_for_window_handle(handle);
-        let target_monitor = all_monitors.get(direction, this_monitor);
-        if let Some(target_monitor) = target_monitor {
-          debug!("Moving window to [{}]", target_monitor);
-          self.windows_api.set_window_position(handle, target_monitor.work_area);
-          self.near_maximize_window(handle, MonitorInfo::from(target_monitor), self.margin());
-          self.windows_api.set_cursor_position(&target_monitor.center);
-        } else {
-          debug!("No monitor found in [{:?}] direction, did not move window", direction);
-        }
-      }
-      false => {
-        let cursor_target_point = Point::from_center_of_sizing(&sizing);
-        self.execute_window_resizing(handle, sizing);
-        self.windows_api.set_cursor_position(&cursor_target_point);
-      }
-    }
-  }
-
-  pub fn close(&mut self) {
-    let Some(window) = self.windows_api.get_foreground_window() else {
-      return;
-    };
-
-    self.windows_api.do_close_window(window);
-  }
-
-  pub fn move_cursor(&mut self, direction: Direction) {
-    let windows = self.windows_api.get_all_visible_windows();
-    let cursor_position = self.windows_api.get_cursor_position();
-    let (ref_point, ref_window) = match self.find_window_at_cursor(&cursor_position, &windows) {
-      Some(window_info) => (Point::from_center_of_rect(&window_info.rect), Some(window_info)),
-      None => (cursor_position, None),
-    };
-    info!(
-      "Found cursor {} window(s) and cursor is at {cursor_position} with reference point {ref_point}",
-      windows.len()
-    );
-
-    if let Some(target_window) = if let Some(vdm) = &self.virtual_desktop_manager {
-      self.find_closest_window_in_direction(&ref_point, direction, &windows, vdm, ref_window)
-    } else {
-      None
-    } {
-      let target_point = Point::from_center_of_rect(&target_window.rect);
-      self.move_focus_to_window(direction, target_window, &target_point);
-    } else {
-      trace!("No window found in [{:?}] direction, attempting to find monitor", direction);
-      let all_monitors = self.windows_api.get_all_monitors();
-      let this_monitor = self.windows_api.get_monitor_for_point(&cursor_position);
-      match all_monitors.get(direction, this_monitor) {
-        Some(target_monitor) => self.move_focus_to_monitor(direction, target_monitor),
-        None => {
-          info!(
-            "No window or monitor found in [{:?}] direction, did not move cursor",
-            direction
-          );
-        }
-      }
-    };
   }
 
   fn find_closest_window_in_direction<'a>(
@@ -339,14 +347,6 @@ impl<T: WindowsApi + Copy> WindowManager<T> {
       "Moved cursor in direction [{:?}] to {} on [{}]",
       direction, monitor.center, monitor
     );
-  }
-
-  pub fn switch_workspace(&mut self, id: WorkspaceId) {
-    self.workspace_manager.switch_workspace(id);
-  }
-
-  pub fn move_window_to_workspace(&mut self, id: WorkspaceId) {
-    self.workspace_manager.move_window_to_workspace(id);
   }
 }
 
@@ -568,7 +568,7 @@ mod tests {
     MockWindowsApi::place_window(window_handle, monitor_handle);
     let mut manager = WindowManager::default(MockWindowsApi);
 
-    manager.close();
+    manager.close_window();
 
     assert!(
       !manager
@@ -584,7 +584,7 @@ mod tests {
     let mut manager = WindowManager::default(MockWindowsApi);
     assert!(manager.windows_api.get_all_visible_windows().is_empty());
 
-    manager.close();
+    manager.close_window();
 
     assert!(manager.windows_api.get_all_visible_windows().is_empty());
   }
