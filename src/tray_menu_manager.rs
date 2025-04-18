@@ -43,7 +43,7 @@ impl TrayMenuManager {
   }
 
   fn create_tray_icon(&mut self, tx: Sender<Event>) -> TrayIcon<Event> {
-    let icon_bytes = include_bytes!("../assets/icon.ico");
+    let icon_bytes = include_bytes!("../assets/randolf.ico");
     let version = env!("CARGO_PKG_VERSION");
     let configuration = self.configuration_provider.lock().expect(CONFIGURATION_PROVIDER_LOCK);
 
@@ -63,7 +63,7 @@ impl TrayMenuManager {
 
   fn menu_builder(&self, version: &str, config: MutexGuard<ConfigurationProvider>) -> MenuBuilder<Event> {
     let current_margin: i32 = config.get_i32(WINDOW_MARGIN);
-    let icon_bytes = include_bytes!("../assets/icon.ico");
+    let icon_bytes = include_bytes!("../assets/randolf.ico");
 
     MenuBuilder::new()
       .with(MenuItem::Item {
