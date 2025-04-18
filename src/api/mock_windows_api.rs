@@ -26,6 +26,7 @@ pub(crate) mod test {
     window_placement: WindowPlacement,
     is_minimised: bool,
     is_hidden: bool,
+    is_closed: bool,
   }
 
   #[derive(Clone)]
@@ -61,6 +62,7 @@ pub(crate) mod test {
             window_placement,
             is_minimised,
             is_hidden,
+            is_closed: false,
           },
         );
         if is_foreground {
@@ -138,7 +140,7 @@ pub(crate) mod test {
           .borrow()
           .windows
           .values()
-          .filter(|ws| !ws.is_hidden)
+          .filter(|ws| !ws.is_hidden && !ws.is_closed)
           .map(|ws| ws.window.clone())
           .collect()
       })
@@ -235,7 +237,23 @@ pub(crate) mod test {
     }
 
     fn do_close_window(&self, handle: WindowHandle) {
-      info!("Mock windows API closed window {handle} - not implemented yet");
+      MOCK_STATE.with(|state| {
+        if let Some(window_state) = state.borrow_mut().windows.get_mut(&handle) {
+          window_state.is_closed = true;
+          window_state.is_hidden = true;
+        } else {
+          panic!("Window with handle {handle} not found - did you forget to add it?");
+        }
+        let is_foreground = state.borrow().foreground_window == Some(handle);
+        if is_foreground {
+          state.borrow_mut().foreground_window = None;
+        }
+        let monitor_handle = self.get_monitor_for_window_handle(handle);
+        if let Some(windows) = state.borrow_mut().monitor_windows.get_mut(&monitor_handle) {
+          windows.retain(|&w| w != handle);
+        }
+      });
+      trace!("Mock windows API closed window {handle}");
     }
 
     fn get_window_placement(&self, handle: WindowHandle) -> Option<WindowPlacement> {

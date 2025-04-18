@@ -159,6 +159,10 @@ impl<T: WindowsApi + Copy> WindowManager<T> {
       Some(window_info) => (Point::from_center_of_rect(&window_info.rect), Some(window_info)),
       None => (cursor_position, None),
     };
+    info!(
+      "Found cursor {} window(s) and cursor is at {cursor_position} with reference point {ref_point}",
+      windows.len()
+    );
 
     if let Some(target_window) = if let Some(vdm) = &self.virtual_desktop_manager {
       self.find_closest_window_in_direction(&ref_point, direction, &windows, vdm, ref_window)
@@ -419,6 +423,17 @@ mod tests {
   }
 
   #[test]
+  fn is_of_expected_size_test() {
+    let handle = WindowHandle::new(1);
+    let placement = WindowPlacement::new_from_sizing(Sizing::new(0, 0, 100, 100));
+    let sizing = Sizing::new(0, 0, 100, 100);
+    assert!(is_of_expected_size(handle, &placement, &sizing));
+
+    let placement = WindowPlacement::new_from_sizing(Sizing::new(1, 0, 101, 100));
+    assert!(!is_of_expected_size(handle, &placement, &sizing));
+  }
+
+  #[test]
   fn near_maximize_window_when_window_is_not_near_maximised() {
     let monitor_handle = MonitorHandle::from(1);
     let window_handle = WindowHandle::new(1);
@@ -508,13 +523,69 @@ mod tests {
   }
 
   #[test]
-  fn is_of_expected_size_test() {
-    let handle = WindowHandle::new(1);
-    let placement = WindowPlacement::new_from_sizing(Sizing::new(0, 0, 100, 100));
-    let sizing = Sizing::new(0, 0, 100, 100);
-    assert!(is_of_expected_size(handle, &placement, &sizing));
+  fn move_window_to_another_monitor() {
+    let monitor_handle_1 = MonitorHandle::from(1);
+    let window_handle = WindowHandle::new(1);
+    let sizing = Sizing::right_half_of_screen(Rect::new(0, 0, 200, 180), 20);
+    MockWindowsApi::add_or_update_window(window_handle, "Test Window".to_string(), sizing.clone(), false, false, true);
+    MockWindowsApi::add_or_update_monitor(monitor_handle_1, Rect::new(0, 0, 200, 200), true);
+    MockWindowsApi::add_or_update_monitor(2.into(), Rect::new(200, 0, 400, 200), false);
+    MockWindowsApi::place_window(window_handle, monitor_handle_1);
+    let mut manager = WindowManager::default(MockWindowsApi);
 
-    let placement = WindowPlacement::new_from_sizing(Sizing::new(1, 0, 101, 100));
-    assert!(!is_of_expected_size(handle, &placement, &sizing));
+    manager.move_window(Direction::Right);
+
+    let actual_placement = manager.windows_api.get_window_placement(window_handle);
+    let expected_placement = WindowPlacement::new_from_sizing(Sizing::near_maximised(Rect::new(200, 0, 400, 180), 20));
+    assert!(actual_placement.is_some());
+    assert_eq!(actual_placement.unwrap(), expected_placement);
+    assert_eq!(manager.windows_api.get_cursor_position(), Point::new(300, 100))
+  }
+
+  #[test]
+  fn move_cursor_does_nothing_when_there_is_no_window_or_monitor_to_move_to() {
+    let monitor_handle = MonitorHandle::from(1);
+    let window_handle_1 = WindowHandle::new(1);
+    let left_sizing = Sizing::left_half_of_screen(Rect::new(0, 0, 200, 180), 20);
+    let initial_cursor_position = Point::new(0, 0);
+    MockWindowsApi::set_cursor_position(initial_cursor_position);
+    MockWindowsApi::add_or_update_window(window_handle_1, "Test".to_string(), left_sizing.clone(), false, false, true);
+    MockWindowsApi::add_or_update_monitor(monitor_handle, Rect::new(0, 0, 200, 200), true);
+    MockWindowsApi::place_window(window_handle_1, monitor_handle);
+    let mut manager = WindowManager::default(MockWindowsApi);
+
+    manager.move_cursor(Direction::Right);
+
+    assert_eq!(manager.windows_api.get_cursor_position(), initial_cursor_position);
+  }
+
+  #[test]
+  fn close_window() {
+    let window_handle = WindowHandle::new(1);
+    let monitor_handle = MonitorHandle::from(1);
+    MockWindowsApi::add_or_update_window(window_handle, "Test".to_string(), Sizing::default(), false, false, true);
+    MockWindowsApi::add_or_update_monitor(monitor_handle, Rect::new(0, 0, 200, 200), true);
+    MockWindowsApi::place_window(window_handle, monitor_handle);
+    let mut manager = WindowManager::default(MockWindowsApi);
+
+    manager.close();
+
+    assert!(
+      !manager
+        .windows_api
+        .get_all_visible_windows()
+        .iter()
+        .any(|w| w.handle == window_handle)
+    );
+  }
+
+  #[test]
+  fn close_window_fails_silently() {
+    let mut manager = WindowManager::default(MockWindowsApi);
+    assert!(manager.windows_api.get_all_visible_windows().is_empty());
+
+    manager.close();
+
+    assert!(manager.windows_api.get_all_visible_windows().is_empty());
   }
 }
