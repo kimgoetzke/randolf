@@ -24,7 +24,11 @@ impl<T: WindowsApi + Copy> WindowManager<T> {
       .lock()
       .expect(CONFIGURATION_PROVIDER_LOCK)
       .get_i32(ADDITIONAL_WORKSPACE_COUNT);
-    let workspace_manager = WorkspaceManager::new(additional_workspace_count, api);
+    let window_margin = configuration_provider
+      .lock()
+      .expect(CONFIGURATION_PROVIDER_LOCK)
+      .get_i32(WINDOW_MARGIN);
+    let workspace_manager = WorkspaceManager::new(additional_workspace_count, window_margin, api);
     Self {
       known_windows: HashMap::new(),
       virtual_desktop_manager: Some(

@@ -24,7 +24,6 @@ pub trait WindowsApi {
   fn set_cursor_position(&self, target_point: &Point);
   fn get_all_monitors(&self) -> Monitors;
   fn get_monitor_info_for_window(&self, handle: WindowHandle) -> Option<MonitorInfo>;
-  #[allow(unused)]
   fn get_monitor_info_for_monitor(&self, handle: MonitorHandle) -> Option<MonitorInfo>;
   fn get_monitor_for_window_handle(&self, handle: WindowHandle) -> MonitorHandle;
   fn get_monitor_for_point(&self, point: &Point) -> MonitorHandle;
