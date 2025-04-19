@@ -2,13 +2,14 @@ use crate::api::WindowsApi;
 use crate::utils::{Monitor, MonitorHandle, Rect, Window, WindowHandle, WorkspaceId};
 use std::fmt::Display;
 
+// TODO: Store active/inactive state of the workspace to simplify the logic
 #[derive(Debug, Clone)]
 pub struct Workspace {
   pub id: WorkspaceId,
   pub monitor_handle: i64,
   pub monitor: Monitor,
   windows: Vec<Window>,
-  window_state_info: Vec<(WindowHandle, bool)>, // (window_handle, is_minimised)
+  minimised_windows: Vec<(WindowHandle, bool)>, // (window_handle, is_minimised)
 }
 
 impl Workspace {
@@ -18,11 +19,91 @@ impl Workspace {
       monitor_handle: monitor.handle.handle as i64,
       monitor: monitor.clone(),
       windows: vec![],
-      window_state_info: vec![],
+      minimised_windows: vec![],
     }
   }
 
-  pub fn move_window(&mut self, mut window: Window, current_monitor: MonitorHandle, windows_api: &impl WindowsApi) {
+  pub fn get_largest_window(&self) -> Option<Window> {
+    self.windows.iter().max_by_key(|w| w.rect.area()).cloned().to_owned()
+  }
+
+  /// Moves the window if the workspace is active, otherwise stores and hides it, so that it can be restored later,
+  /// when the workspace is activated, so that an active workspace must never store windows.
+  pub fn move_or_store_and_hide_window(
+    &mut self,
+    is_active_workspace: bool,
+    window: Window,
+    current_monitor: MonitorHandle,
+    windows_api: &impl WindowsApi,
+  ) {
+    if is_active_workspace {
+      self.move_window(window, current_monitor, windows_api);
+    } else {
+      self.store_and_hide_window(window, current_monitor, windows_api);
+    }
+  }
+
+  pub fn stores(&self, handle: &WindowHandle) -> bool {
+    self.windows.iter().any(|window| window.handle == *handle)
+  }
+
+  pub fn store_and_hide_windows(
+    &mut self,
+    windows: Vec<Window>,
+    current_monitor: MonitorHandle,
+    windows_api: &impl WindowsApi,
+  ) {
+    self.clear_windows();
+    for window in windows.iter() {
+      self.store_and_hide_window(window.clone(), current_monitor, windows_api);
+    }
+  }
+
+  /// Restores all windows that were stored in this workspace by unhiding them. Clears the list of stored windows
+  /// after restoring.
+  pub fn restore_windows(&mut self, api: &impl WindowsApi) {
+    if self.windows.is_empty() && self.minimised_windows.is_empty() {
+      debug!("No windows to restore for workspace {}", self.id);
+      return;
+    }
+    if !(!self.windows.is_empty() && !self.minimised_windows.is_empty()) {
+      warn!(
+        "Data inconsistency detected: {} stores [{}] window(s) but [{}] window state(s)",
+        self.id,
+        self.windows.len(),
+        self.minimised_windows.len()
+      );
+      return;
+    }
+    let mut i = 0;
+    for (window_handle, is_minimised) in self.minimised_windows.iter() {
+      i += 1;
+      if !*is_minimised {
+        match self.windows.iter().find(|w| w.handle == *window_handle) {
+          Some(window) => {
+            if api.is_window_hidden(&window.handle) {
+              debug!(
+                "Restoring {} {} on workspace {}",
+                window.handle,
+                window.title_trunc(),
+                self.id
+              );
+              api.do_restore_window(window, is_minimised);
+            } else {
+              debug!("Attempted to restore window {} but it is already visible", window_handle);
+            }
+          }
+          None => {
+            warn!("Attempted to restore window {window_handle} but workspace manager doesn't recognise it");
+          }
+        }
+      }
+    }
+    debug!("Restored [{}] window(s) on workspace {}", i, self.id);
+    self.clear_windows();
+  }
+
+  fn move_window(&mut self, mut window: Window, current_monitor: MonitorHandle, windows_api: &impl WindowsApi) {
     window = self.update_window_rect_if_required(window, current_monitor, windows_api);
     windows_api.set_window_position(window.handle, window.rect);
     windows_api.set_cursor_position(&window.rect.center());
@@ -34,16 +115,7 @@ impl Workspace {
     );
   }
 
-  pub fn stores(&self, handle: &WindowHandle) -> bool {
-    self.windows.iter().any(|window| window.handle == *handle)
-  }
-
-  pub fn store_and_hide_window(
-    &mut self,
-    mut window: Window,
-    current_monitor: MonitorHandle,
-    windows_api: &impl WindowsApi,
-  ) {
+  fn store_and_hide_window(&mut self, mut window: Window, current_monitor: MonitorHandle, windows_api: &impl WindowsApi) {
     if !self.windows.iter().any(|w| w.handle == window.handle) {
       if windows_api.is_window_minimised(window.handle) {
         debug!("{} is minimised, ignoring it for workspace {}", window.handle, self.id);
@@ -51,7 +123,7 @@ impl Workspace {
       }
       window = self.update_window_rect_if_required(window, current_monitor, windows_api);
       windows_api.do_hide_window(window.handle);
-      self.window_state_info.push((window.handle, false));
+      self.minimised_windows.push((window.handle, false));
       self.windows.push(window);
     } else {
       warn!("{} already exists in workspace {}", window.handle, self.id);
@@ -84,67 +156,9 @@ impl Workspace {
     window
   }
 
-  pub fn store_and_hide_windows(
-    &mut self,
-    windows: Vec<Window>,
-    current_monitor: MonitorHandle,
-    windows_api: &impl WindowsApi,
-  ) {
-    self.clear_windows();
-    for window in windows.iter() {
-      self.store_and_hide_window(window.clone(), current_monitor, windows_api);
-    }
-  }
-
   fn clear_windows(&mut self) {
     self.windows.clear();
-    self.window_state_info.clear();
-  }
-
-  pub fn get_largest_window(&self) -> Option<Window> {
-    self.windows.iter().max_by_key(|w| w.rect.area()).cloned().to_owned()
-  }
-
-  pub fn restore_windows(&mut self, api: &impl WindowsApi) {
-    if self.windows.is_empty() && self.window_state_info.is_empty() {
-      debug!("No windows to restore for workspace {}", self.id);
-      return;
-    }
-    if !(!self.windows.is_empty() && !self.window_state_info.is_empty()) {
-      warn!(
-        "Data inconsistency detected: {} stores [{}] window(s) but [{}] window state(s)",
-        self.id,
-        self.windows.len(),
-        self.window_state_info.len()
-      );
-      return;
-    }
-    let mut i = 0;
-    for (window_handle, is_minimised) in self.window_state_info.iter() {
-      i += 1;
-      if !*is_minimised {
-        match self.windows.iter().find(|w| w.handle == *window_handle) {
-          Some(window) => {
-            if api.is_window_hidden(&window.handle) {
-              debug!(
-                "Restoring {} {} on workspace {}",
-                window.handle,
-                window.title_trunc(),
-                self.id
-              );
-              api.do_restore_window(window, is_minimised);
-            } else {
-              debug!("Attempted to restore window {} but it is already visible", window_handle);
-            }
-          }
-          None => {
-            warn!("Attempted to restore window {window_handle} but workspace manager doesn't recognise it");
-          }
-        }
-      }
-    }
-    debug!("Restored [{}] window(s) on workspace {}", i, self.id);
-    self.clear_windows();
+    self.minimised_windows.clear();
   }
 }
 
@@ -170,7 +184,7 @@ mod tests {
     }
 
     pub fn get_window_state_info(&self) -> Vec<(WindowHandle, bool)> {
-      self.window_state_info.clone()
+      self.minimised_windows.clone()
     }
   }
 
@@ -188,8 +202,8 @@ mod tests {
     assert_eq!(workspace.windows[0].title, "Test Window");
     assert_eq!(workspace.windows[0].handle, window.handle);
     assert_eq!(workspace.windows[0].rect, Rect::new(0, 0, 100, 100));
-    assert_eq!(workspace.window_state_info[0].0, window.handle);
-    assert!(!workspace.window_state_info[0].1);
+    assert_eq!(workspace.minimised_windows[0].0, window.handle);
+    assert!(!workspace.minimised_windows[0].1);
   }
 
   #[test]

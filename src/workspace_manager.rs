@@ -247,11 +247,12 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
 
     // Move or store the window
     if let Some(target_workspace) = self.workspaces.get_mut(&target_workspace_id) {
-      if is_target_workspace_active {
-        target_workspace.move_window(window.clone(), current_monitor, &self.windows_api);
-      } else {
-        target_workspace.store_and_hide_window(window.clone(), current_monitor, &self.windows_api);
-      }
+      target_workspace.move_or_store_and_hide_window(
+        is_target_workspace_active,
+        window.clone(),
+        current_monitor,
+        &self.windows_api,
+      );
     } else {
       warn!(
         "Failed to move window to workspace because: The target workspace ({}) does not exist",
@@ -591,7 +592,7 @@ mod tests {
 
   #[test]
   fn move_window_to_different_workspace_on_same_monitor() {
-    // Given the target workspace has one window and is not active
+    // Given the primary monitor has an active workspace with one, visible foreground window
     MockWindowsApi::place_window(WindowHandle::new(1), primary_monitor().handle);
     let workspace_id = primary_inactive_workspace();
     let mut workspace_manager = WorkspaceManager::new_test();
@@ -625,7 +626,7 @@ mod tests {
 
   #[test]
   fn move_window_to_active_workspace_on_different_monitor() {
-    // Given the target workspace has one window and is not active
+    // Given the primary monitor has an active workspace with one, visible foreground window
     MockWindowsApi::place_window(WindowHandle::new(1), primary_monitor().handle);
     let mut workspace_manager = WorkspaceManager::new_test();
 
@@ -664,9 +665,10 @@ mod tests {
 
   #[test]
   fn move_window_to_inactive_workspace_on_different_monitor() {
-    // Given the target workspace has one window and is not active
+    // Given the primary monitor has an active workspace with one, visible foreground window
     MockWindowsApi::place_window(WindowHandle::new(1), primary_monitor().handle);
     let mut workspace_manager = WorkspaceManager::new_test();
+    assert_eq!(workspace_manager.windows_api.get_all_visible_windows().len(), 1);
 
     // When the user moves a window to a different workspace on a different monitor
     let target_workspace_id = secondary_inactive_workspace();
@@ -683,6 +685,9 @@ mod tests {
     let window = windows.first().expect("Failed to retrieve window title");
     assert_eq!(window.title, "Test Window");
     assert_eq!(window.center, Point::new(-400, 275));
+
+    // And the window is no longer visible
+    assert!(workspace_manager.windows_api.get_all_visible_windows().is_empty());
 
     // But the active workspace has not changed
     let active_workspaces = workspace_manager.active_workspaces;
