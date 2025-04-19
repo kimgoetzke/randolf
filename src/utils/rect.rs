@@ -40,8 +40,8 @@ impl Rect {
     Self {
       left: self.left.max(other.left + margin),
       top: self.top.max(other.top + margin),
-      right: self.right.min(other.right - (2 * margin)),
-      bottom: self.bottom.min(other.bottom - (2 * margin)),
+      right: self.right.min(other.right - margin),
+      bottom: self.bottom.min(other.bottom - margin),
     }
   }
 }
@@ -200,5 +200,44 @@ mod tests {
 
     assert_eq!(center.x(), 0);
     assert_eq!(center.y(), 0);
+  }
+
+  #[test]
+  fn clamp_restricts_rect_within_bounds() {
+    let rect = Rect::new(0, 0, 1920, 1080);
+    let bounds = Rect::new(0, 0, 1024, 768);
+
+    let clamped = rect.clamp(&bounds, 0);
+
+    assert_eq!(clamped.left, 0);
+    assert_eq!(clamped.top, 0);
+    assert_eq!(clamped.right, 1024);
+    assert_eq!(clamped.bottom, 768);
+  }
+
+  #[test]
+  fn clamp_applies_margin() {
+    let rect = Rect::new(0, 0, 1920, 1080);
+    let bounds = Rect::new(0, 0, 1024, 768);
+
+    let clamped = rect.clamp(&bounds, 20);
+
+    assert_eq!(clamped.left, 20);
+    assert_eq!(clamped.top, 20);
+    assert_eq!(clamped.right, 1004);
+    assert_eq!(clamped.bottom, 748);
+  }
+
+  #[test]
+  fn clamp_handles_negative_values() {
+    let rect = Rect::new(-1920, -1080, 0, 0);
+    let bounds = Rect::new(-800, -600, 0, 0);
+
+    let clamped = rect.clamp(&bounds, 20);
+
+    assert_eq!(clamped.left, -780);
+    assert_eq!(clamped.top, -580);
+    assert_eq!(clamped.right, -20);
+    assert_eq!(clamped.bottom, -20);
   }
 }

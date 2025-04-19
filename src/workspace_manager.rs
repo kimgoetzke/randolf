@@ -383,10 +383,17 @@ mod tests {
     }
 
     /// Creates a new `WorkspaceManager` with a test window, two monitors, and two workspaces on each monitor.
-    pub fn new_test() -> Self {
+    pub fn new_test(is_test_window_in_foreground: bool) -> Self {
       let window_handle = WindowHandle::new(1);
       let sizing = Sizing::new(50, 50, 50, 50);
-      MockWindowsApi::add_or_update_window(window_handle, "Test Window".to_string(), sizing, false, false, true);
+      MockWindowsApi::add_or_update_window(
+        window_handle,
+        "Test Window".to_string(),
+        sizing,
+        false,
+        false,
+        is_test_window_in_foreground,
+      );
 
       let primary_monitor = primary_monitor();
       let secondary_monitor = secondary_monitor();
@@ -498,7 +505,7 @@ mod tests {
   #[test]
   fn switch_workspace_when_target_workspace_has_no_windows() {
     // Given the current workspace has one window and target workspace is not active
-    let mut workspace_manager = WorkspaceManager::new_test();
+    let mut workspace_manager = WorkspaceManager::new_test(true);
     let target_workspace_id = primary_inactive_workspace();
     assert_eq!(workspace_manager.active_workspaces.len(), 2);
     assert!(workspace_manager.active_workspaces.contains(primary_active_workspace()));
@@ -559,7 +566,7 @@ mod tests {
       false,
       true,
     );
-    let mut workspace_manager = WorkspaceManager::new_test();
+    let mut workspace_manager = WorkspaceManager::new_test(true);
     let target_workspace_id = primary_inactive_workspace();
     if let Some(target_workspace) = workspace_manager.workspaces.get_mut(target_workspace_id) {
       target_workspace.store_and_hide_windows(vec![small_window, large_window], 1.into(), &workspace_manager.windows_api);
@@ -595,7 +602,7 @@ mod tests {
     // Given the primary monitor has an active workspace with one, visible foreground window
     MockWindowsApi::place_window(WindowHandle::new(1), primary_monitor().handle);
     let workspace_id = primary_inactive_workspace();
-    let mut workspace_manager = WorkspaceManager::new_test();
+    let mut workspace_manager = WorkspaceManager::new_test(true);
 
     // When the user moves a window to a different workspace on the same monitor
     workspace_manager.move_window_to_workspace(*workspace_id);
@@ -628,19 +635,21 @@ mod tests {
   fn move_window_to_active_workspace_on_different_monitor() {
     // Given the primary monitor has an active workspace with one, visible foreground window
     MockWindowsApi::place_window(WindowHandle::new(1), primary_monitor().handle);
-    let mut workspace_manager = WorkspaceManager::new_test();
+    let mut workspace_manager = WorkspaceManager::new_test(true);
 
     // When the user moves a window to a different workspace on a different monitor
     let target_workspace_id = secondary_active_workspace();
     workspace_manager.move_window_to_workspace(*target_workspace_id);
 
-    // Then the window appears in the target workspace
+    // Then the window is not stored in the target workspace
     let target_workspace = workspace_manager
       .workspaces
       .get(target_workspace_id)
       .expect("Target workspace not found");
     assert_eq!(target_workspace.get_windows().len(), 0);
     assert_eq!(target_workspace.get_window_state_info().len(), 0);
+
+    // But the window is still in the foreground and was moved to the target workspace
     let active_window = workspace_manager
       .windows_api
       .get_foreground_window()
@@ -656,7 +665,10 @@ mod tests {
       "Window placement should be updated since it was moved to a different monitor"
     );
 
-    // But the active workspace has not changed
+    // And the cursor position is set to the center of the target workspace (excl. taskbar)
+    assert_eq!(workspace_manager.windows_api.get_cursor_position(), Point::new(-400, 275));
+
+    // And the active workspaces have not changed
     let active_workspaces = workspace_manager.active_workspaces;
     assert_eq!(active_workspaces.len(), 2);
     assert!(active_workspaces.contains(target_workspace_id));
@@ -667,7 +679,7 @@ mod tests {
   fn move_window_to_inactive_workspace_on_different_monitor() {
     // Given the primary monitor has an active workspace with one, visible foreground window
     MockWindowsApi::place_window(WindowHandle::new(1), primary_monitor().handle);
-    let mut workspace_manager = WorkspaceManager::new_test();
+    let mut workspace_manager = WorkspaceManager::new_test(true);
     assert_eq!(workspace_manager.windows_api.get_all_visible_windows().len(), 1);
 
     // When the user moves a window to a different workspace on a different monitor
@@ -694,5 +706,48 @@ mod tests {
     assert_eq!(active_workspaces.len(), 2);
     assert!(active_workspaces.contains(primary_active_workspace()));
     assert!(active_workspaces.contains(secondary_active_workspace()));
+  }
+
+  #[test]
+  fn move_window_clamps_size_of_large_window_when_moving_to_another_active_workspace() {
+    // Given the primary monitor has an active workspace with two, visible windows, one of which is the foreground
+    // window, and it is too large to fit in the target workspace
+    let large_window = Window::from(2, "Large Window".to_string(), Rect::new(0, 0, 1920, 1080));
+    MockWindowsApi::add_or_update_window(
+      large_window.handle,
+      large_window.title.clone(),
+      large_window.rect.into(),
+      false,
+      false,
+      true,
+    );
+    MockWindowsApi::place_window(large_window.handle, primary_monitor().handle);
+    let mut workspace_manager = WorkspaceManager::new_test(false);
+
+    // When the user moves a window to a different workspace on a different monitor
+    let target_workspace_id = secondary_active_workspace();
+    workspace_manager.move_window_to_workspace(*target_workspace_id);
+
+    // Then the window was moved to the target workspace, is still in the foreground, and its size was clamped to
+    // fit within the target workspace
+    let active_window = workspace_manager
+      .windows_api
+      .get_foreground_window()
+      .expect("Failed to retrieve window");
+    let window_title = workspace_manager.windows_api.get_window_title(&active_window);
+    let window_placement = workspace_manager
+      .windows_api
+      .get_window_placement(active_window)
+      .expect("Failed to retrieve window placement");
+    assert_eq!(window_title, large_window.title);
+    assert_eq!(active_window, large_window.handle);
+    assert_eq!(
+      window_placement.normal_position,
+      Rect::new(-790, 10, -10, 540),
+      "Window placement should be updated since it was moved to a different monitor"
+    );
+
+    // And the cursor position is set to the center of the target workspace (excl. taskbar)
+    assert_eq!(workspace_manager.windows_api.get_cursor_position(), Point::new(-400, 275));
   }
 }
