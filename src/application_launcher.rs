@@ -92,19 +92,19 @@ mod tests {
     launcher.launch("".to_string(), false);
 
     testing_logger::validate(|captured_logs| {
-      assert_eq!(captured_logs.len(), 3);
-      assert_eq!(
-        captured_logs[0].body,
-        "Failed to launch application: C:\\does\\not\\exist.exe".to_string()
-      );
-      assert_eq!(captured_logs[0].level, Warn);
+      assert_eq!(captured_logs.len(), 4);
       assert_eq!(
         captured_logs[1].body,
-        "Path to executable is not a valid executable".to_string()
+        "Failed to launch application: C:\\does\\not\\exist.exe".to_string()
       );
       assert_eq!(captured_logs[1].level, Warn);
-      assert_eq!(captured_logs[2].body, "Path to executable is empty".to_string());
+      assert_eq!(
+        captured_logs[2].body,
+        "Path to executable is not a valid executable".to_string()
+      );
       assert_eq!(captured_logs[2].level, Warn);
+      assert_eq!(captured_logs[3].body, "Path to executable is empty".to_string());
+      assert_eq!(captured_logs[3].level, Warn);
     });
     assert_eq!(mock_api.get_cursor_position(), cursor_position);
   }
