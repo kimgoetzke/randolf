@@ -361,5 +361,15 @@ pub(crate) mod test {
     fn is_window_on_current_desktop(&self, vdm: &IVirtualDesktopManager, window: &Window) -> Option<bool> {
       unimplemented!()
     }
+
+    fn set_window_position_with_dpi_adjustment(
+      &self,
+      window_handle: WindowHandle,
+      source_monitor_handle: MonitorHandle,
+      target_monitor_handle: MonitorHandle,
+      rect: Rect,
+    ) {
+      unimplemented!()
+    }
   }
 }

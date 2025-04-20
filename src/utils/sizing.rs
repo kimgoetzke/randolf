@@ -1,6 +1,6 @@
 use crate::utils::Rect;
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, PartialEq, Eq, Debug)]
 pub struct Sizing {
   pub x: i32,
   pub y: i32,

@@ -53,9 +53,18 @@ mod tests {
   use crate::utils::{Point, Rect, Window};
 
   impl Window {
-    pub fn from(window_handle: isize, title: String, rect: Rect) -> Self {
+    pub fn new_test(isize: isize, rect: Rect) -> Self {
       Window {
-        handle: WindowHandle::new(window_handle),
+        handle: WindowHandle::new(isize),
+        title: format!("Test Window {}", isize),
+        center: Point::from_center_of_rect(&rect),
+        rect,
+      }
+    }
+
+    pub fn new_test_with_title(isize: isize, title: String, rect: Rect) -> Self {
+      Window {
+        handle: WindowHandle::new(isize),
         title,
         center: Point::from_center_of_rect(&rect),
         rect,
@@ -65,15 +74,15 @@ mod tests {
 
   #[test]
   fn title_trunc_returns_full_title_when_within_limit() {
-    let window = Window::from(1, "Short Title".to_string(), Rect::default());
+    let window = Window::new_test(2, Rect::default());
 
-    assert_eq!(window.title_trunc(), "Short Title");
+    assert_eq!(window.title_trunc(), "Test Window 2");
   }
 
   #[test]
   fn title_trunc_truncates_long_title_correctly() {
     let long_title = "This is a very long window title that exceeds the character limit".to_string();
-    let window = Window::from(1, long_title, Rect::default());
+    let window = Window::new_test_with_title(1, long_title, Rect::default());
 
     assert_eq!(window.title_trunc(), "This is a very...character limit");
   }
@@ -81,14 +90,14 @@ mod tests {
   #[test]
   fn title_trunc_handles_exactly_double_char_limit() {
     let exact_title = "A".repeat(CHAR_LIMIT * 2);
-    let window = Window::from(1, exact_title.clone(), Rect::default());
+    let window = Window::new_test_with_title(1, exact_title.clone(), Rect::default());
 
     assert_eq!(window.title_trunc(), exact_title);
   }
 
   #[test]
   fn title_trunc_handles_empty_title() {
-    let window = Window::from(1, "".to_string(), Rect::default());
+    let window = Window::new_test_with_title(1, "".into(), Rect::default());
 
     assert_eq!(window.title_trunc(), "");
   }

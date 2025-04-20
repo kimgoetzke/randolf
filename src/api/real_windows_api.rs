@@ -9,6 +9,7 @@ use windows::Win32::Graphics::Gdi::{
   MonitorFromWindow,
 };
 use windows::Win32::System::Com::{CLSCTX_ALL, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx};
+use windows::Win32::UI::HiDpi::{GetDpiForMonitor, PROCESS_PER_MONITOR_DPI_AWARE, SetProcessDpiAwareness};
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
 use windows::Win32::UI::WindowsAndMessaging::{
   DispatchMessageA, EnumWindows, GetClassNameW, GetCursorPos, GetForegroundWindow, GetWindowInfo, GetWindowPlacement,
@@ -145,6 +146,7 @@ impl WindowsApi for RealWindowsApi {
     unsafe { !IsWindowVisible(handle.as_hwnd()).as_bool() }
   }
 
+  /// Sets the window position on the same monitor as the given rectangle. WARNING: Does not adjust for DPI scaling.
   fn set_window_position(&self, handle: WindowHandle, rect: Rect) {
     unsafe {
       if let Err(err) = SetWindowPos(
@@ -158,6 +160,97 @@ impl WindowsApi for RealWindowsApi {
       ) {
         warn!("Failed to set window position for window {handle}: {}", err.message());
       }
+    }
+  }
+
+  // TODO: Try fixing the method below which aims to adjust the window position based on the DPI of the source and
+  //   target monitors
+  // This does not work yet and it turned out to be much easier to simply call SetWindowPos twice in a row which always
+  // works because the second call will use the context of the target monitor.
+  // Example of moving a near-maximised window from a 100% monitor to a 125% monitor:
+  // Should be: Rect[(-1420, -367)-(-20, 2153), width: 1400, height: 2520]
+  // But is:    Rect[(-1420, -367)-(-30, 2143), width: 1390, height: 2510] when using PROCESS_PER_MONITOR_DPI_AWARE and new code
+  // Or is:     Rect[(-1420, -367)-(-308, 1641), width: 1112, height: 2008] when using DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 without new code
+  fn set_window_position_with_dpi_adjustment(
+    &self,
+    window_handle: WindowHandle,
+    source_monitor_handle: MonitorHandle,
+    target_monitor_handle: MonitorHandle,
+    rect: Rect,
+  ) {
+    unsafe {
+      // let old_context = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+      let _ = SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE);
+
+      let mut source_dpi_x = MaybeUninit::<u32>::uninit();
+      let mut source_dpi_y = MaybeUninit::<u32>::uninit();
+      if let Err(err) = GetDpiForMonitor(
+        source_monitor_handle.as_h_monitor(),
+        windows::Win32::UI::HiDpi::MDT_EFFECTIVE_DPI,
+        source_dpi_x.as_mut_ptr(),
+        source_dpi_y.as_mut_ptr(),
+      ) {
+        error!("Failed to get DPI for monitor {source_monitor_handle}: {}", err.message());
+        return;
+      }
+
+      let source_dpi_x = source_dpi_x.assume_init();
+      let source_dpi_y = source_dpi_y.assume_init();
+      let source_scale_factor = source_dpi_x as f32 / 96.0;
+      warn!(
+        "DPI for source monitor {source_monitor_handle}: {source_scale_factor} with x={:?}dpi & y={:?}dpi",
+        source_dpi_x, source_dpi_y
+      );
+
+      let mut target_dpi_x = MaybeUninit::<u32>::uninit();
+      let mut target_dpi_y = MaybeUninit::<u32>::uninit();
+      if let Err(err) = GetDpiForMonitor(
+        target_monitor_handle.as_h_monitor(),
+        windows::Win32::UI::HiDpi::MDT_EFFECTIVE_DPI,
+        target_dpi_x.as_mut_ptr(),
+        target_dpi_y.as_mut_ptr(),
+      ) {
+        error!("Failed to get DPI for monitor {target_monitor_handle}: {}", err.message());
+        return;
+      }
+
+      let target_dpi_x = target_dpi_x.assume_init();
+      let target_dpi_y = target_dpi_y.assume_init();
+      let target_scale_factor = target_dpi_x as f32 / 96.0;
+      warn!(
+        "DPI for target monitor {target_monitor_handle}: {target_scale_factor} with x={:?}dpi & y={:?}dpi",
+        target_dpi_x, target_dpi_y
+      );
+
+      let relative_scale = (target_scale_factor / source_scale_factor).clamp(0.1, 1.0);
+      warn!(
+        "Relative scale factor from source to target monitor: {relative_scale} (target: {target_scale_factor} / source: {source_scale_factor})"
+      );
+
+      let logical_left = rect.left;
+      let logical_top = rect.top;
+      let logical_width = ((rect.right - rect.left) as f32 / relative_scale).round() as i32 - 10;
+      let logical_height = ((rect.bottom - rect.top) as f32 / relative_scale).round() as i32 - 10;
+
+      warn!(
+        "Adjusted to logical coordinates: {}, width={logical_width}, height={logical_height}",
+        Point::new(logical_left, logical_top),
+      );
+
+      if let Err(err) = SetWindowPos(
+        window_handle.as_hwnd(),
+        Some(HWND(ptr::null_mut())),
+        logical_left,
+        logical_top,
+        logical_width,
+        logical_height,
+        SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+      ) {
+        warn!("Failed to set window position for window {window_handle}: {}", err.message());
+      }
+
+      // self.set_window_position(window_handle, rect);
+      // SetThreadDpiAwarenessContext(old_context);
     }
   }
 

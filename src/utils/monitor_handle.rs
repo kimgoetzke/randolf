@@ -12,6 +12,10 @@ impl MonitorHandle {
   pub fn as_i64(&self) -> i64 {
     self.handle as i64
   }
+
+  pub fn as_h_monitor(&self) -> HMONITOR {
+    HMONITOR(self.handle as *mut core::ffi::c_void)
+  }
 }
 
 impl From<isize> for MonitorHandle {
@@ -50,6 +54,12 @@ impl Display for MonitorHandle {
 mod tests {
   use crate::utils::MonitorHandle;
   use windows::Win32::Graphics::Gdi::HMONITOR;
+
+  impl MonitorHandle {
+    pub fn as_isize(&self) -> isize {
+      self.handle
+    }
+  }
 
   #[test]
   fn monitor_handle_display_handles_large_i32_values() {

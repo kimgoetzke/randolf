@@ -13,6 +13,15 @@ pub trait WindowsApi {
   fn is_not_a_managed_window(&self, handle: &WindowHandle) -> bool;
   fn is_window_hidden(&self, handle: &WindowHandle) -> bool;
   fn set_window_position(&self, handle: WindowHandle, rect: Rect);
+  /// Sets the window position on the same monitor as the given rectangle. WARNING: Does not adjust for DPI scaling.
+  #[allow(dead_code)]
+  fn set_window_position_with_dpi_adjustment(
+    &self,
+    window_handle: WindowHandle,
+    source_monitor_handle: MonitorHandle,
+    target_monitor_handle: MonitorHandle,
+    rect: Rect,
+  );
   fn do_restore_window(&self, window: &Window, is_minimised: &bool);
   fn do_maximise_window(&self, handle: WindowHandle);
   fn do_hide_window(&self, handle: WindowHandle);

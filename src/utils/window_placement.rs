@@ -78,17 +78,6 @@ mod tests {
   use windows::Win32::UI::WindowsAndMessaging::{SW_SHOWNORMAL, WINDOWPLACEMENT, WINDOWPLACEMENT_FLAGS};
 
   impl WindowPlacement {
-    pub fn new_from_rect(rect: Rect) -> Self {
-      Self {
-        length: size_of::<WINDOWPLACEMENT>() as u32,
-        flags: 0,
-        show_cmd: SW_SHOWNORMAL.0 as u32,
-        min_position: Point::new(0, 0),
-        max_position: Point::new(-1, -1),
-        normal_position: rect,
-      }
-    }
-
     pub fn new_test() -> Self {
       WindowPlacement {
         length: 44,
@@ -97,6 +86,17 @@ mod tests {
         min_position: Point::new(5, 10),
         max_position: Point::new(-5, -10),
         normal_position: Rect::new(10, 20, 30, 40),
+      }
+    }
+
+    pub fn new_from_rect(rect: Rect) -> Self {
+      Self {
+        length: size_of::<WINDOWPLACEMENT>() as u32,
+        flags: 0,
+        show_cmd: SW_SHOWNORMAL.0 as u32,
+        min_position: Point::new(0, 0),
+        max_position: Point::new(-1, -1),
+        normal_position: rect,
       }
     }
   }

@@ -89,7 +89,7 @@ impl Workspace {
       return;
     }
     if !(!self.windows.is_empty() && !self.minimised_windows.is_empty()) {
-      warn!(
+      error!(
         "Data inconsistency detected: {} stores [{}] window(s) but [{}] window state(s)",
         self.id,
         self.windows.len(),
@@ -125,12 +125,16 @@ impl Workspace {
     self.clear_windows();
   }
 
-  fn move_window(&mut self, mut window: Window, current_monitor: MonitorHandle, windows_api: &impl WindowsApi) {
-    window = self.update_window_rect_if_required(window, current_monitor, windows_api);
+  fn move_window(&mut self, mut window: Window, current_monitor_handle: MonitorHandle, windows_api: &impl WindowsApi) {
+    window = self.update_window_rect_if_required(window, current_monitor_handle, windows_api);
+    if current_monitor_handle != self.monitor.handle {
+      windows_api.set_window_position(window.handle, window.rect);
+      std::thread::sleep(std::time::Duration::from_millis(10));
+    }
     windows_api.set_window_position(window.handle, window.rect);
     windows_api.set_cursor_position(&window.rect.center());
-    debug!(
-      "Moved {} {} to active workspace {}",
+    trace!(
+      "Moved {} \"{}\" to active workspace {}",
       window.handle,
       window.title_trunc(),
       self.id
@@ -146,13 +150,18 @@ impl Workspace {
       window = self.update_window_rect_if_required(window, current_monitor, windows_api);
       windows_api.do_hide_window(window.handle);
       self.minimised_windows.push((window.handle, false));
-      self.windows.push(window);
+      self.windows.push(window.clone());
+      trace!(
+        "Stored and hid {} \"{}\" in workspace {}",
+        window.handle,
+        window.title_trunc(),
+        self.id
+      );
     } else {
-      warn!("{} already exists in workspace {}", window.handle, self.id);
+      warn!("{} already exists in workspace {}, ignoring request", window.handle, self.id);
     }
   }
 
-  // TODO: Check if window is snapped by Randolf - if yes, replicate on new monitor
   fn update_window_rect_if_required(
     &mut self,
     mut window: Window,
@@ -164,22 +173,53 @@ impl Workspace {
     }
 
     // Check if window was near maximised or near-snapped on current monitor
-    if let Some(monitor_info) = windows_api.get_monitor_info_for_monitor(current_monitor) {
-      // monitor_info.work_area
-      // Sizing::near_maximised(monitor_info.work_area)
+    let new_sizing = if let Some(monitor_info) = windows_api.get_monitor_info_for_monitor(current_monitor) {
+      let current_monitor_work_area = monitor_info.work_area;
+      let current_sizing = Sizing::from(window.rect);
+      match current_sizing {
+        sizing if sizing == Sizing::near_maximised(current_monitor_work_area, self.margin) => {
+          Some(Sizing::near_maximised(self.monitor.work_area, self.margin))
+        }
+        sizing if sizing == Sizing::left_half_of_screen(current_monitor_work_area, self.margin) => {
+          Some(Sizing::left_half_of_screen(self.monitor.work_area, self.margin))
+        }
+        sizing if sizing == Sizing::right_half_of_screen(current_monitor_work_area, self.margin) => {
+          Some(Sizing::right_half_of_screen(self.monitor.work_area, self.margin))
+        }
+        sizing if sizing == Sizing::top_half_of_screen(current_monitor_work_area, self.margin) => {
+          Some(Sizing::top_half_of_screen(self.monitor.work_area, self.margin))
+        }
+        sizing if sizing == Sizing::bottom_half_of_screen(current_monitor_work_area, self.margin) => {
+          Some(Sizing::bottom_half_of_screen(self.monitor.work_area, self.margin))
+        }
+        _ => None,
+      }
+    } else {
+      error!(
+        "Unable to get monitor info for current monitor {}, cannot detect if window was near-maximised or -snapped",
+        current_monitor
+      );
+
+      None
+    };
+
+    let old_rect = window.rect;
+    if let Some(new_sizing) = new_sizing {
+      debug!("{} is currently near-maximised or -snapped", window.handle);
+      window.rect = new_sizing.into();
+    } else {
+      debug!("{} is currently NOT near-maximised or -snapped", window.handle);
+      let width = window.rect.width();
+      let height = window.rect.height();
+      let target_monitor_work_area_center = self.monitor.work_area.center();
+      let left = target_monitor_work_area_center.x() - (width / 2);
+      let top = target_monitor_work_area_center.y() - (height / 2);
+      window.rect = Rect::new(left, top, left + width, top + height).clamp(&self.monitor.work_area, 10);
     }
 
-    let width = window.rect.width();
-    let height = window.rect.height();
-    let target_monitor_work_area_center = self.monitor.work_area.center();
-    let left = target_monitor_work_area_center.x() - (width / 2);
-    let top = target_monitor_work_area_center.y() - (height / 2);
-    let old_rect = window.rect;
-    window.rect = Rect::new(left, top, left + width, top + height).clamp(&self.monitor.work_area, 10);
     window.center = window.rect.center();
-
     debug!(
-      "Because {} is being moved to a different monitor, its placement was updated from {} to {}",
+      "Because {} is being moved to a different monitor, its location was updated from {} to {}",
       window.handle, old_rect, window.rect
     );
 
@@ -232,11 +272,89 @@ mod tests {
   }
 
   #[test]
+  fn update_window_rect_if_required_returns_window_unchanged_when_staying_on_same_monitor() {
+    let monitor = Monitor::new_test(1, Rect::new(0, 0, 1920, 1080));
+    let mut workspace = Workspace::new_test(WorkspaceId::from(monitor.handle.as_isize(), 1), &monitor);
+    let window = Window::new_test(1, Rect::new(10, 10, 110, 110));
+    let mock_api = MockWindowsApi::new();
+
+    let updated_window = workspace.update_window_rect_if_required(window.clone(), monitor.handle, &mock_api);
+
+    assert_eq!(updated_window.rect, window.rect);
+  }
+
+  #[test]
+  fn update_window_rect_if_required_maintains_near_maximised_layout_when_changing_monitors() {
+    let target_monitor = Monitor::new_test(2, Rect::new(0, 0, 1920, 1080));
+    let mut workspace = Workspace::new_test(WorkspaceId::from(target_monitor.handle.as_isize(), 1), &target_monitor);
+    let current_monitor_handle = MonitorHandle::from(1);
+    MockWindowsApi::add_or_update_monitor(current_monitor_handle, Rect::new(0, 0, 800, 600), true);
+    let mock_api = MockWindowsApi::new();
+    let current_monitor = mock_api.get_monitor_info_for_monitor(current_monitor_handle).unwrap();
+    let current_sizing_near_maximised = Sizing::near_maximised(current_monitor.work_area, workspace.margin);
+    let window = Window::new_test(1, current_sizing_near_maximised.into());
+
+    let updated_window = workspace.update_window_rect_if_required(window, current_monitor_handle, &mock_api);
+
+    let expected_sizing = Sizing::near_maximised(target_monitor.work_area, workspace.margin);
+    assert_eq!(updated_window.rect, expected_sizing.into());
+  }
+
+  #[test]
+  fn update_window_rect_if_required_maintains_left_half_layout_when_changing_monitors() {
+    let target_monitor = Monitor::new_test(2, Rect::new(0, 0, 1920, 1080));
+    let mut workspace = Workspace::new_test(WorkspaceId::from(target_monitor.handle.as_isize(), 1), &target_monitor);
+    let current_monitor_handle = MonitorHandle::from(1);
+    MockWindowsApi::add_or_update_monitor(current_monitor_handle, Rect::new(0, 0, 800, 600), true);
+    let mock_api = MockWindowsApi::new();
+    let current_monitor = mock_api.get_monitor_info_for_monitor(current_monitor_handle).unwrap();
+    let current_sizing_left_half = Sizing::left_half_of_screen(current_monitor.work_area, workspace.margin);
+    let window = Window::new_test(1, current_sizing_left_half.into());
+
+    let updated_window = workspace.update_window_rect_if_required(window, current_monitor_handle, &mock_api);
+
+    let expected_sizing = Sizing::left_half_of_screen(target_monitor.work_area, workspace.margin);
+    assert_eq!(updated_window.rect, expected_sizing.into());
+  }
+
+  #[test]
+  fn update_window_rect_if_required_centers_normal_window_when_changing_monitors() {
+    let source_monitor = Monitor::new_test(1, Rect::new(0, 0, 1000, 800));
+    let target_monitor = Monitor::new_test(2, Rect::new(0, 0, 1920, 1080));
+    let mut workspace = Workspace::new_test(WorkspaceId::from(target_monitor.handle.as_isize(), 1), &target_monitor);
+    let window = Window::new_test(1, Rect::new(100, 100, 300, 200));
+    MockWindowsApi::add_or_update_monitor(source_monitor.handle, source_monitor.monitor_area, true);
+    let mock_api = MockWindowsApi::new();
+
+    let updated_window = workspace.update_window_rect_if_required(window, source_monitor.handle, &mock_api);
+
+    assert_eq!(updated_window.rect.width(), 200);
+    assert_eq!(updated_window.rect.height(), 100);
+    assert_eq!(updated_window.center, target_monitor.work_area.center());
+  }
+
+  #[test]
+  fn update_window_rect_if_required_centers_window_when_monitor_info_missing() {
+    let source_monitor = Monitor::new_test(1, Rect::new(0, 0, 1024, 768));
+    let target_monitor = Monitor::new_test(2, Rect::new(0, 0, 1920, 1080));
+    let mut workspace = Workspace::new_test(WorkspaceId::from(target_monitor.handle.as_isize(), 1), &target_monitor);
+    let current_sizing_near_maximised = Sizing::near_maximised(source_monitor.work_area, workspace.margin);
+    let window = Window::new_test(1, current_sizing_near_maximised.into());
+    let mock_api = MockWindowsApi::new();
+
+    let updated_window = workspace.update_window_rect_if_required(window.clone(), source_monitor.handle, &mock_api);
+
+    assert_eq!(updated_window.rect.width(), 1024);
+    assert_eq!(updated_window.rect.height(), 768);
+    assert_eq!(updated_window.center, target_monitor.work_area.center());
+  }
+
+  #[test]
   fn move_or_store_and_hide_window_stores_window_if_workspace_is_inactive() {
     let monitor = Monitor::new_test(1, Rect::default());
     let workspace_id = WorkspaceId::from(1, 1);
     let mut workspace = Workspace::new_test(workspace_id, &monitor); // Inactive by default
-    let window = Window::from(1, "Test Window".to_string(), Rect::new(0, 0, 100, 100));
+    let window = Window::new_test(1, Rect::new(0, 0, 100, 100));
     MockWindowsApi::add_or_update_window(window.handle, window.title.clone(), window.rect.into(), false, false, true);
     let mock_api = MockWindowsApi::new();
 
@@ -252,7 +370,7 @@ mod tests {
     let monitor = Monitor::new_test(1, Rect::default());
     let workspace_id = WorkspaceId::from(1, 1);
     let mut workspace = Workspace::new_active(workspace_id, &monitor, 20);
-    let window = Window::from(1, "Test Window".to_string(), Rect::new(0, 0, 100, 100));
+    let window = Window::new_test(1, Rect::new(0, 0, 100, 100));
     MockWindowsApi::add_or_update_window(window.handle, window.title.clone(), window.rect.into(), false, false, true);
     let mock_api = MockWindowsApi::new();
 
@@ -269,7 +387,7 @@ mod tests {
   fn store_and_hide_window_stores_and_hide_window() {
     let monitor = Monitor::new_test(1, Rect::default());
     let mut workspace = Workspace::new_test(WorkspaceId::from(1, 1), &monitor);
-    let window = Window::from(1, "Test Window".to_string(), Rect::new(0, 0, 100, 100));
+    let window = Window::new_test(1, Rect::new(0, 0, 100, 100));
     MockWindowsApi::add_or_update_window(window.handle, window.title.clone(), window.rect.into(), false, false, true);
     let mock_api = MockWindowsApi::new();
 
@@ -287,7 +405,7 @@ mod tests {
   #[test]
   fn store_and_hide_window_does_not_add_duplicate_window() {
     let mut workspace = Workspace::new_test(WorkspaceId::from(1, 1), &Monitor::mock_1());
-    let window = Window::from(1, "Test Window".to_string(), Rect::new(0, 0, 100, 100));
+    let window = Window::new_test(1, Rect::new(0, 0, 100, 100));
     MockWindowsApi::add_or_update_window(window.handle, window.title.clone(), window.rect.into(), false, false, true);
     let mock_api = MockWindowsApi;
 
@@ -300,8 +418,8 @@ mod tests {
   #[test]
   fn store_and_hide_windows_adds_windows_to_workspace() {
     let mut workspace = Workspace::new_test(WorkspaceId::from(1, 1), &Monitor::mock_1());
-    let window_1 = Window::from(1, "Test Window 1".to_string(), Rect::new(0, 0, 100, 100));
-    let window_2 = Window::from(2, "Test Window 2".to_string(), Rect::new(100, 100, 200, 200));
+    let window_1 = Window::new_test(1, Rect::new(0, 0, 100, 100));
+    let window_2 = Window::new_test(2, Rect::new(100, 100, 200, 200));
     let mock_api = MockWindowsApi;
     MockWindowsApi::add_or_update_window(
       window_1.handle,
@@ -331,7 +449,7 @@ mod tests {
   fn stores_returns_true_if_window_is_in_workspace() {
     let monitor = Monitor::new_test(1, Rect::default());
     let mut workspace = Workspace::new_test(WorkspaceId::from(1, 1), &monitor);
-    let window = Window::from(1, "Test Window".to_string(), Rect::new(0, 0, 100, 100));
+    let window = Window::new_test(1, Rect::new(0, 0, 100, 100));
     workspace.windows.push(window.clone());
 
     assert!(workspace.stores(&window.handle));
@@ -341,7 +459,7 @@ mod tests {
   #[test]
   fn stores_returns_false_if_window_is_not_in_workspace() {
     let monitor = Monitor::new_test(1, Rect::default());
-    let mut workspace = Workspace::new_test(WorkspaceId::from(1, 1), &monitor);
+    let workspace = Workspace::new_test(WorkspaceId::from(1, 1), &monitor);
 
     assert!(!workspace.stores(&WindowHandle::new(2)));
   }

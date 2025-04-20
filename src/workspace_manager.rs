@@ -609,8 +609,8 @@ mod tests {
   #[test]
   fn switch_workspace_sets_largest_target_workspace_window_as_foreground_window() {
     // Given the current workspace has one window and the target workspace, which has two windows, is not active
-    let small_window = Window::from(2, "Small Window".to_string(), Rect::new(0, 0, 50, 50));
-    let large_window = Window::from(3, "Large Window".to_string(), Rect::new(0, 0, 500, 500));
+    let small_window = Window::new_test(2, Rect::new(0, 0, 50, 50));
+    let large_window = Window::new_test(3, Rect::new(0, 0, 500, 500));
     MockWindowsApi::add_or_update_window(
       small_window.handle,
       small_window.title.clone(),
@@ -771,7 +771,7 @@ mod tests {
   fn move_window_clamps_size_of_large_window_when_moving_to_another_active_workspace() {
     // Given the primary monitor has an active workspace with two, visible windows, one of which is the foreground
     // window, and it is too large to fit in the target workspace
-    let large_window = Window::from(2, "Large Window".to_string(), Rect::new(0, 0, 1920, 1080));
+    let large_window = Window::new_test(2, Rect::new(0, 0, 1920, 1080));
     MockWindowsApi::add_or_update_window(
       large_window.handle,
       large_window.title.clone(),
