@@ -20,6 +20,7 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
       additional_workspace_count,
     };
     workspace_manager.initialise_workspaces();
+    workspace_manager.log_initialised_workspaces();
 
     workspace_manager
   }
@@ -98,20 +99,6 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
       }
     }
 
-    debug!(
-      "Found [{}] workspaces (ordered): [{}] of which [{}] are active",
-      result.len(),
-      result.iter().map(|id| format!("{}", id)).collect::<Vec<_>>().join(", "),
-      self
-        .workspaces
-        .iter()
-        .filter(|(_, workspace)| workspace.is_active())
-        .map(|(id, _)| *id)
-        .map(|id| format!("{}", id))
-        .collect::<Vec<_>>()
-        .join(", "),
-    );
-
     result
   }
 
@@ -152,7 +139,7 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
           "Failed to switch workspace because: The workspace ({}) to store the window doesn't exist",
           target_monitor_active_workspace_id
         );
-        self.log_active_workspaces();
+        self.log_initialised_workspaces();
         return;
       };
     }
@@ -299,6 +286,7 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
       0 => {
         warn!("No active workspace found for {monitor_handle}, will reinitialise workspaces...");
         self.initialise_workspaces();
+        self.log_initialised_workspaces();
 
         Some(self.get_active_workspace_for_cursor_position(Some(recursion_depth))?)
       }
@@ -312,15 +300,6 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
         None
       }
     }
-  }
-
-  fn active_workspaces(&self) -> Vec<WorkspaceId> {
-    self
-      .workspaces
-      .iter()
-      .filter(|(_, workspace)| workspace.is_active())
-      .map(|(id, _)| *id)
-      .collect()
   }
 
   fn get_active_workspace(&mut self, workspace_id: &WorkspaceId) -> Option<&WorkspaceId> {
@@ -342,12 +321,24 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
       });
   }
 
-  fn log_active_workspaces(&self) {
-    let workspaces = self.active_workspaces();
+  fn log_initialised_workspaces(&self) {
+    let ordered_workspaces = self.get_ordered_workspace_ids();
     debug!(
-      "Found [{}] active workspaces: {}",
-      workspaces.len(),
-      workspaces.iter().map(|id| format!("{}", id)).collect::<Vec<_>>().join(", ")
+      "Found [{}] workspaces (ordered): [{}] of which [{}] are active",
+      ordered_workspaces.len(),
+      ordered_workspaces
+        .iter()
+        .map(|id| format!("{}", id))
+        .collect::<Vec<_>>()
+        .join(", "),
+      self
+        .workspaces
+        .iter()
+        .filter(|(_, workspace)| workspace.is_active())
+        .map(|(id, _)| *id)
+        .map(|id| format!("{}", id))
+        .collect::<Vec<_>>()
+        .join(", "),
     );
   }
 }
@@ -465,6 +456,15 @@ mod tests {
         margin,
         additional_workspace_count: 1,
       }
+    }
+
+    fn active_workspaces(&self) -> Vec<WorkspaceId> {
+      self
+        .workspaces
+        .iter()
+        .filter(|(_, workspace)| workspace.is_active())
+        .map(|(id, _)| *id)
+        .collect()
     }
   }
 
