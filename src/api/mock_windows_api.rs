@@ -51,6 +51,9 @@ pub(crate) mod test {
       is_hidden: bool,
       is_foreground: bool,
     ) {
+      trace!(
+        "Mock windows API adds window {handle} - title: {title}, sizing: {sizing:?}, is_minimised: {is_minimised}, is_hidden: {is_hidden}, is_foreground: {is_foreground}"
+      );
       MOCK_STATE.with(|state| {
         let mut state = state.borrow_mut();
         let window = Window::new(handle.into(), title, sizing.clone().into());
@@ -74,6 +77,7 @@ pub(crate) mod test {
     /// Adds or updates a monitor to the mock state, assuming that the height of the monitor's `work_area` is 20 pixels
     /// less than the `monitor_area`.
     pub fn add_or_update_monitor(monitor_handle: MonitorHandle, monitor_area: Rect, is_primary: bool) {
+      trace!("Mock windows API adds monitor {monitor_handle} - monitor_area: {monitor_area:?}, is_primary: {is_primary}");
       MOCK_STATE.with(|state| {
         let mut state = state.borrow_mut();
         let work_area_bottom = monitor_area.bottom - 20;
@@ -93,6 +97,7 @@ pub(crate) mod test {
     /// Adds a link between a window and a monitor, simulating the placement of the window on that monitor.
     /// This does not mean that the window is on the active workspace of the monitor or that it is active.
     pub fn place_window(window_handle: WindowHandle, monitor_handle: MonitorHandle) {
+      trace!("Mock windows API places window {window_handle} on monitor {monitor_handle}");
       MOCK_STATE.with(|state| {
         state
           .borrow_mut()
@@ -104,12 +109,14 @@ pub(crate) mod test {
     }
 
     pub fn set_foreground_window(handle: WindowHandle) {
+      trace!("Mock windows API sets foreground window {handle}");
       MOCK_STATE.with(|state| {
         state.borrow_mut().foreground_window = Some(handle);
       });
     }
 
     pub fn set_cursor_position(position: Point) {
+      trace!("Mock windows API sets cursor position to {position}");
       MOCK_STATE.with(|state| {
         state.borrow_mut().cursor_position = position;
       });
@@ -117,6 +124,7 @@ pub(crate) mod test {
 
     #[allow(dead_code)]
     pub fn reset() {
+      trace!("Mock windows API resets state");
       MOCK_STATE.with(|state| {
         *state.borrow_mut() = MockState::default();
       });
@@ -125,16 +133,19 @@ pub(crate) mod test {
 
   impl WindowsApi for MockWindowsApi {
     fn get_foreground_window(&self) -> Option<WindowHandle> {
+      trace!("Mock windows API gets foreground window");
       MOCK_STATE.with(|state| state.borrow_mut().foreground_window)
     }
 
     fn set_foreground_window(&self, handle: WindowHandle) {
+      trace!("Mock windows API sets foreground window {handle}");
       MOCK_STATE.with(|state| {
         state.borrow_mut().foreground_window = Some(handle);
       });
     }
 
     fn get_all_visible_windows(&self) -> Vec<Window> {
+      trace!("Mock windows API gets all visible windows");
       MOCK_STATE.with(|state| {
         state
           .borrow()
@@ -147,6 +158,7 @@ pub(crate) mod test {
     }
 
     fn get_all_visible_windows_within_area(&self, rect: Rect) -> Vec<Window> {
+      trace!("Mock windows API gets all visible windows within area {rect}");
       MOCK_STATE.with(|state| {
         state
           .borrow()
@@ -164,6 +176,7 @@ pub(crate) mod test {
     }
 
     fn get_window_title(&self, handle: &WindowHandle) -> String {
+      trace!("Mock windows API gets window title for {handle}");
       MOCK_STATE.with(|state| {
         state.borrow().windows.get(handle).map_or_else(
           || {
@@ -175,10 +188,12 @@ pub(crate) mod test {
     }
 
     fn get_window_class_name(&self, handle: &WindowHandle) -> String {
+      trace!("Mock windows API gets window class name for {handle}");
       unimplemented!()
     }
 
     fn is_window_minimised(&self, handle: WindowHandle) -> bool {
+      trace!("Mock windows API checks if window {handle} is minimised");
       MOCK_STATE.with(|state| {
         if let Some(window_state) = state.borrow_mut().windows.get(&handle) {
           return window_state.is_minimised;
@@ -188,10 +203,12 @@ pub(crate) mod test {
     }
 
     fn is_not_a_managed_window(&self, handle: &WindowHandle) -> bool {
+      trace!("Mock windows API checks if window {handle} is not a managed window");
       unimplemented!()
     }
 
     fn is_window_hidden(&self, handle: &WindowHandle) -> bool {
+      trace!("Mock windows API checks if window {handle} is hidden");
       MOCK_STATE.with(|state| {
         if let Some(window_state) = state.borrow_mut().windows.get(handle) {
           return window_state.is_hidden;
@@ -201,6 +218,7 @@ pub(crate) mod test {
     }
 
     fn set_window_position(&self, handle: WindowHandle, rect: Rect) {
+      trace!("Mock windows API sets window position for {handle} to {rect}");
       MOCK_STATE.with(|state| {
         if let Some(window_state) = state.borrow_mut().windows.get_mut(&handle) {
           window_state.window_placement = WindowPlacement::new_from_rect(rect);
@@ -209,7 +227,21 @@ pub(crate) mod test {
       });
     }
 
+    fn set_window_position_with_dpi_adjustment(
+      &self,
+      window_handle: WindowHandle,
+      source_monitor_handle: MonitorHandle,
+      target_monitor_handle: MonitorHandle,
+      rect: Rect,
+    ) {
+      trace!(
+        "Mock windows API sets window position for {window_handle} to {rect} with DPI adjustment from {source_monitor_handle} to {target_monitor_handle}"
+      );
+      unimplemented!()
+    }
+
     fn do_restore_window(&self, window: &Window, is_minimised: &bool) {
+      trace!("Mock windows API restores window {}", window.handle);
       MOCK_STATE.with(|state| {
         if let Some(window_state) = state.borrow_mut().windows.get_mut(&window.handle) {
           window_state.is_minimised = *is_minimised;
@@ -227,6 +259,7 @@ pub(crate) mod test {
     }
 
     fn do_hide_window(&self, handle: WindowHandle) {
+      trace!("Mock windows API hides window {handle}");
       MOCK_STATE.with(|state| {
         if let Some(window_state) = state.borrow_mut().windows.get_mut(&handle) {
           window_state.is_hidden = true;
@@ -237,6 +270,7 @@ pub(crate) mod test {
     }
 
     fn do_close_window(&self, handle: WindowHandle) {
+      trace!("Mock windows API closes window {handle}");
       MOCK_STATE.with(|state| {
         if let Some(window_state) = state.borrow_mut().windows.get_mut(&handle) {
           window_state.is_closed = true;
@@ -257,10 +291,12 @@ pub(crate) mod test {
     }
 
     fn get_window_placement(&self, handle: WindowHandle) -> Option<WindowPlacement> {
+      trace!("Mock windows API gets window placement for {handle}");
       MOCK_STATE.with(|state| state.borrow().windows.get(&handle).map(|w| w.window_placement.clone()))
     }
 
     fn set_window_placement_and_force_repaint(&self, handle: WindowHandle, placement: WindowPlacement) {
+      trace!("Mock windows API sets window placement for {handle} - {placement:?}");
       MOCK_STATE.with(|state| {
         let Some(window_state) = state.borrow_mut().windows.get_mut(&handle).map(|window_state| {
           window_state.window.rect = placement.normal_position;
@@ -273,6 +309,7 @@ pub(crate) mod test {
     }
 
     fn do_restore_window_placement(&self, handle: WindowHandle, previous_placement: WindowPlacement) {
+      trace!("Mock windows API restores window placement for {handle}");
       MOCK_STATE.with(|state| {
         if let Some(window_state) = state.borrow_mut().windows.get_mut(&handle).or_else(|| {
           panic!("Window with handle {handle} not found");
@@ -284,16 +321,19 @@ pub(crate) mod test {
     }
 
     fn get_cursor_position(&self) -> Point {
+      trace!("Mock windows API gets cursor position");
       MOCK_STATE.with(|state| state.borrow().cursor_position)
     }
 
     fn set_cursor_position(&self, target_point: &Point) {
+      trace!("Mock windows API sets cursor position to {target_point}");
       MOCK_STATE.with(|state| {
         state.borrow_mut().cursor_position = *target_point;
       });
     }
 
     fn get_all_monitors(&self) -> Monitors {
+      trace!("Mock windows API gets all monitors");
       MOCK_STATE.with(|state| {
         let monitors = state
           .borrow()
@@ -308,6 +348,7 @@ pub(crate) mod test {
     }
 
     fn get_monitor_info_for_window(&self, handle: WindowHandle) -> Option<MonitorInfo> {
+      trace!("Mock windows API gets monitor info for window {handle}");
       MOCK_STATE.with(|state| {
         let monitor_handle = self.get_monitor_for_window_handle(handle);
         if let Some(monitor_state) = state.borrow_mut().monitors.get(&monitor_handle) {
@@ -319,6 +360,7 @@ pub(crate) mod test {
     }
 
     fn get_monitor_info_for_monitor(&self, handle: MonitorHandle) -> Option<MonitorInfo> {
+      trace!("Mock windows API gets monitor info for monitor {handle}");
       MOCK_STATE.with(|state| {
         if let Some(monitor_info) = state.borrow_mut().monitors.get(&handle) {
           return Some(monitor_info.monitor_info);
@@ -329,6 +371,7 @@ pub(crate) mod test {
     }
 
     fn get_monitor_for_window_handle(&self, handle: WindowHandle) -> MonitorHandle {
+      trace!("Mock windows API gets monitor for window {handle}");
       MOCK_STATE.with(|state| {
         if let Some((monitor_handle, _)) = state
           .borrow_mut()
@@ -343,6 +386,7 @@ pub(crate) mod test {
     }
 
     fn get_monitor_for_point(&self, point: &Point) -> MonitorHandle {
+      trace!("Mock windows API gets monitor for point {point:?}");
       MOCK_STATE.with(|state| {
         state
           .borrow()
@@ -355,20 +399,12 @@ pub(crate) mod test {
     }
 
     fn get_virtual_desktop_manager(&self) -> Option<IVirtualDesktopManager> {
+      trace!("Mock windows API gets virtual desktop manager");
       unimplemented!()
     }
 
     fn is_window_on_current_desktop(&self, vdm: &IVirtualDesktopManager, window: &Window) -> Option<bool> {
-      unimplemented!()
-    }
-
-    fn set_window_position_with_dpi_adjustment(
-      &self,
-      window_handle: WindowHandle,
-      source_monitor_handle: MonitorHandle,
-      target_monitor_handle: MonitorHandle,
-      rect: Rect,
-    ) {
+      trace!("Mock windows API checks if window {} is on current desktop", window.handle);
       unimplemented!()
     }
   }
