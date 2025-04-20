@@ -10,6 +10,7 @@ pub enum Command {
   SwitchWorkspace(WorkspaceId),
   MoveWindowToWorkspace(WorkspaceId),
   OpenApplication(String, bool),
+  Exit,
 }
 
 impl Display for Command {
@@ -22,6 +23,7 @@ impl Display for Command {
       Command::SwitchWorkspace(id) => write!(f, "Switch to workspace {id}"),
       Command::MoveWindowToWorkspace(id) => write!(f, "Move window to workspace {id}"),
       Command::OpenApplication(path, as_admin) => write!(f, "Open [{path}] as admin [{as_admin}]"),
+      Command::Exit => write!(f, "Exit application"),
     }
   }
 }

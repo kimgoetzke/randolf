@@ -1,6 +1,6 @@
 use crate::api::get_all_monitors;
 use crate::configuration_provider::{ALLOW_SELECTING_SAME_CENTER_WINDOWS, ConfigurationProvider, WINDOW_MARGIN};
-use crate::utils::CONFIGURATION_PROVIDER_LOCK;
+use crate::utils::{CONFIGURATION_PROVIDER_LOCK, Command};
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
@@ -31,12 +31,15 @@ impl TrayMenuManager {
     }
   }
 
-  pub fn new_initialised(configuration_provider: Arc<Mutex<ConfigurationProvider>>) -> Self {
+  pub fn new_initialised(
+    configuration_provider: Arc<Mutex<ConfigurationProvider>>,
+    command_sender: Sender<Command>,
+  ) -> Self {
     let mut manager = Self::new(configuration_provider);
-    let (tx, rx) = unbounded();
-    let tray = manager.create_tray_icon(tx);
+    let (tray_event_sender, tray_event_receiver) = unbounded();
+    let tray = manager.create_tray_icon(tray_event_sender);
     manager.menu = Some(Arc::from(Mutex::new(tray)));
-    manager.initialise(rx);
+    manager.initialise(tray_event_receiver, command_sender);
     debug!("Created tray icon & menu");
 
     manager
@@ -99,7 +102,7 @@ impl TrayMenuManager {
   }
 
   // TODO: Update margins of "known" windows when the margin is changed
-  fn initialise(&self, rx: Receiver<Event>) {
+  fn initialise(&self, rx: Receiver<Event>, command_sender: Sender<Command>) {
     let tray_icon = Arc::clone(self.menu.as_ref().unwrap());
     let config_provider = self.configuration_provider.clone();
     thread::spawn(move || {
@@ -149,8 +152,8 @@ impl TrayMenuManager {
           debug!("Set [{:?}] to [{}]", Event::ToggleSelectingSameCenterWindows, !is_enabled);
         }
         Event::Exit => {
-          info!("Exit application...");
-          std::process::exit(0);
+          info!("Attempting to exit application...");
+          command_sender.send(Command::Exit).expect("Failed to send exit command");
         }
         Event::LogMonitorLayout => {
           get_all_monitors().print_layout();

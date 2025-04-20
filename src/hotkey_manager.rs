@@ -1,7 +1,7 @@
 use crate::Command;
 use crate::configuration_provider::ConfigurationProvider;
 use crate::utils::{CONFIGURATION_PROVIDER_LOCK, Direction, WorkspaceId};
-use crossbeam_channel::{Receiver, unbounded};
+use crossbeam_channel::Sender;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -61,15 +61,14 @@ impl HotkeyManager {
     hotkey_manager
   }
 
-  pub fn initialise(mut self) -> (Receiver<Command>, InterruptHandle) {
-    let (tx, rx) = unbounded();
-    self.hkm.register_channel(tx);
-    let handle = self.hkm.interrupt_handle();
+  pub fn initialise(mut self, command_sender: Sender<Command>) -> InterruptHandle {
+    self.hkm.register_channel(command_sender);
+    let interrupt_handle = self.hkm.interrupt_handle();
     thread::spawn(move || {
       self.hkm.event_loop();
     });
 
-    (rx, handle)
+    interrupt_handle
   }
 
   fn register_near_maximise_window_hotkey(&mut self, key: VKey) {

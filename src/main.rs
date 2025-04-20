@@ -22,6 +22,7 @@ use crate::log_manager::LogManager;
 use crate::tray_menu_manager::TrayMenuManager;
 use crate::utils::CONFIGURATION_PROVIDER_LOCK;
 use crate::window_manager::WindowManager;
+use crossbeam_channel::unbounded;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
@@ -37,7 +38,8 @@ fn main() {
 
   // Create configuration manager and tray menu
   let configuration_manager = Arc::new(Mutex::new(ConfigurationProvider::new()));
-  TrayMenuManager::new_initialised(configuration_manager.clone());
+  let (command_sender, command_receiver) = unbounded();
+  TrayMenuManager::new_initialised(configuration_manager.clone(), command_sender.clone());
   let launcher = Rc::new(RefCell::new(ApplicationLauncher::new_initialised(
     configuration_manager.clone(),
     windows_api,
@@ -51,14 +53,14 @@ fn main() {
   let wm = Rc::new(RefCell::new(WindowManager::new(configuration_manager.clone(), windows_api)));
   let workspace_ids = wm.borrow().get_ordered_workspace_ids();
   let hkm = HotkeyManager::new_with_hotkeys(configuration_manager.clone(), workspace_ids);
-  let (hotkey_receiver, _) = hkm.initialise();
+  let _ = hkm.initialise(command_sender);
 
   // Run event loop
   let mut last_heartbeat = Instant::now();
   loop {
     api::do_process_windows_messages();
-    if let Ok(command) = hotkey_receiver.try_recv() {
-      info!("Hotkey pressed: {}", command);
+    if let Ok(command) = command_receiver.try_recv() {
+      info!("Command received: {}", command);
       match command {
         Command::NearMaximiseWindow => wm.borrow_mut().near_maximise_or_restore(),
         Command::MoveWindow(direction) => wm.borrow_mut().move_window(direction),
@@ -67,6 +69,11 @@ fn main() {
         Command::SwitchWorkspace(id) => wm.borrow_mut().switch_workspace(id),
         Command::MoveWindowToWorkspace(id) => wm.borrow_mut().move_window_to_workspace(id),
         Command::OpenApplication(path, as_admin) => launcher.borrow_mut().launch(path, as_admin),
+        Command::Exit => {
+          wm.borrow_mut().restore_all_managed_windows();
+          info!("Application exited cleanly");
+          std::process::exit(0);
+        }
       }
     }
     last_heartbeat = update_heart_beat(last_heartbeat);

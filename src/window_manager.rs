@@ -147,6 +147,10 @@ impl<T: WindowsApi + Copy> WindowManager<T> {
     }
   }
 
+  pub fn restore_all_managed_windows(&mut self) {
+    self.workspace_manager.restore_all_managed_windows();
+  }
+
   fn margin(&self) -> i32 {
     self.configuration_provider.lock().unwrap().get_i32(WINDOW_MARGIN)
   }

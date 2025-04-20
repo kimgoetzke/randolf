@@ -249,6 +249,12 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
     );
   }
 
+  pub fn restore_all_managed_windows(&mut self) {
+    for workspace in self.workspaces.values_mut() {
+      workspace.restore_windows(&self.windows_api);
+    }
+  }
+
   fn get_current_workspace_id_if_different(&mut self, target_workspace_id: WorkspaceId) -> Option<WorkspaceId> {
     let Some(current_workspace_id) = self.get_active_workspace_for_cursor_position(None) else {
       warn!("Failed to complete request: Unable to find the active workspace");
@@ -808,5 +814,51 @@ mod tests {
 
     // And the cursor position is set to the center of the target workspace (excl. taskbar)
     assert_eq!(workspace_manager.windows_api.get_cursor_position(), Point::new(-400, 275));
+  }
+
+  #[test]
+  fn restore_all_managed_windows_restores_windows_for_all_workspaces() {
+    let w_2 = Window::new_test(2, Rect::new(0, 0, 100, 100));
+    let w_3 = Window::new_test(3, Rect::new(100, 100, 200, 200));
+    let w_4 = Window::new_test(4, Rect::new(0, 0, 300, 300));
+    MockWindowsApi::add_or_update_window(w_2.handle, w_2.title.clone(), w_2.rect.into(), false, false, false);
+    MockWindowsApi::add_or_update_window(w_3.handle, w_3.title.clone(), w_3.rect.into(), false, false, false);
+    MockWindowsApi::add_or_update_window(w_4.handle, w_4.title.clone(), w_4.rect.into(), false, false, false);
+    let mut workspace_manager = WorkspaceManager::new_test(false);
+    if let Some(workspace) = workspace_manager.workspaces.get_mut(primary_inactive_workspace()) {
+      workspace.store_and_hide_windows(
+        vec![w_2, w_3],
+        primary_inactive_workspace().monitor_handle,
+        &workspace_manager.windows_api,
+      );
+    }
+    if let Some(workspace) = workspace_manager.workspaces.get_mut(secondary_inactive_workspace()) {
+      workspace.store_and_hide_windows(
+        vec![w_4],
+        primary_inactive_workspace().monitor_handle,
+        &workspace_manager.windows_api,
+      );
+    }
+    assert_eq!(workspace_manager.windows_api.get_all_visible_windows().len(), 1);
+
+    workspace_manager.restore_all_managed_windows();
+
+    assert_eq!(workspace_manager.windows_api.get_all_visible_windows().len(), 4);
+    workspace_manager.workspaces.iter().for_each(|(_, workspace)| {
+      assert_eq!(workspace.get_windows().len(), 0);
+      assert_eq!(workspace.get_window_state_info().len(), 0);
+    });
+  }
+
+  #[test]
+  fn restore_all_managed_windows_does_nothing_if_no_windows_are_stored() {
+    let mut workspace_manager = WorkspaceManager::new_test(false);
+    workspace_manager.workspaces.iter().for_each(|(_, workspace)| {
+      assert_eq!(workspace.get_windows().len(), 0);
+    });
+
+    workspace_manager.restore_all_managed_windows();
+
+    assert_eq!(workspace_manager.windows_api.get_all_visible_windows().len(), 1);
   }
 }

@@ -88,7 +88,7 @@ impl Workspace {
       debug!("No windows to restore for workspace {}", self.id);
       return;
     }
-    if !(!self.windows.is_empty() && !self.minimised_windows.is_empty()) {
+    if self.windows.len() != self.minimised_windows.len() {
       error!(
         "Data inconsistency detected: {} stores [{}] window(s) but [{}] window state(s)",
         self.id,
@@ -100,24 +100,25 @@ impl Workspace {
     let mut i = 0;
     for (window_handle, is_minimised) in self.minimised_windows.iter() {
       i += 1;
-      if !*is_minimised {
-        match self.windows.iter().find(|w| w.handle == *window_handle) {
-          Some(window) => {
-            if api.is_window_hidden(&window.handle) {
-              debug!(
-                "Restoring {} {} on workspace {}",
-                window.handle,
-                window.title_trunc(),
-                self.id
-              );
-              api.do_restore_window(window, is_minimised);
-            } else {
-              debug!("Attempted to restore window {} but it is already visible", window_handle);
-            }
+      if *is_minimised {
+        continue;
+      }
+      match self.windows.iter().find(|w| w.handle == *window_handle) {
+        Some(window) => {
+          if api.is_window_hidden(&window.handle) {
+            debug!(
+              "Restoring {} {} on workspace {}",
+              window.handle,
+              window.title_trunc(),
+              self.id
+            );
+            api.do_restore_window(window, is_minimised);
+          } else {
+            debug!("Attempted to restore window {} but it is already visible", window_handle);
           }
-          None => {
-            warn!("Attempted to restore window {window_handle} but workspace manager doesn't recognise it");
-          }
+        }
+        None => {
+          warn!("Attempted to restore window {window_handle} but workspace manager doesn't recognise it");
         }
       }
     }
