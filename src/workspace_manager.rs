@@ -6,7 +6,10 @@ pub struct WorkspaceManager<T: WindowsApi> {
   workspaces: HashMap<WorkspaceId, Workspace>,
   windows_api: T,
   margin: i32,
+  additional_workspace_count: i32,
 }
+
+const MAX_RECURSION_DEPTH: usize = 1;
 
 impl<T: WindowsApi + Copy> WorkspaceManager<T> {
   pub fn new(additional_workspace_count: i32, margin: i32, api: T) -> Self {
@@ -14,19 +17,20 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
       workspaces: HashMap::new(),
       windows_api: api,
       margin,
+      additional_workspace_count,
     };
-    workspace_manager.initialise_workspaces(additional_workspace_count);
+    workspace_manager.initialise_workspaces();
 
     workspace_manager
   }
 
-  fn initialise_workspaces(&mut self, additional_workspace_count: i32) {
+  fn initialise_workspaces(&mut self) {
     let mut workspaces = HashMap::new();
     let all_monitors = self.windows_api.get_all_monitors();
     for monitor in all_monitors.get_all() {
       let monitor_handle = monitor.handle;
       if monitor.is_primary {
-        for layer in 1..=additional_workspace_count + 1 {
+        for layer in 1..=self.additional_workspace_count + 1 {
           let id = WorkspaceId::new(monitor_handle, layer as usize);
           let workspace = if layer == 1 {
             Workspace::new_active(id, monitor, self.margin)
@@ -113,7 +117,7 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
 
   pub fn switch_workspace(&mut self, target_workspace_id: WorkspaceId) {
     let current_workspace_id = match self.get_current_workspace_id_if_different(target_workspace_id) {
-      Some(id) => *id,
+      Some(id) => id,
       None => return,
     };
 
@@ -251,20 +255,20 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
     }
 
     info!(
-      "Moved window {} ({}) to workspace {}",
+      "Moved {} \"{}\" to workspace {}",
       window.handle,
       window.title_trunc(),
       target_workspace_id
     );
   }
 
-  fn get_current_workspace_id_if_different(&mut self, target_workspace_id: WorkspaceId) -> Option<&WorkspaceId> {
-    let Some(current_workspace_id) = self.get_active_workspace_for_cursor_position() else {
+  fn get_current_workspace_id_if_different(&mut self, target_workspace_id: WorkspaceId) -> Option<WorkspaceId> {
+    let Some(current_workspace_id) = self.get_active_workspace_for_cursor_position(None) else {
       warn!("Failed to complete request: Unable to find the active workspace");
       return None;
     };
 
-    if &target_workspace_id == current_workspace_id {
+    if target_workspace_id == current_workspace_id {
       info!(
         "Ignored request because current and target workspaces are the same: {}",
         target_workspace_id
@@ -275,9 +279,15 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
     Some(current_workspace_id)
   }
 
-  fn get_active_workspace_for_cursor_position(&mut self) -> Option<&WorkspaceId> {
+  fn get_active_workspace_for_cursor_position(&mut self, recursion_depth: Option<usize>) -> Option<WorkspaceId> {
     let cursor_position = self.windows_api.get_cursor_position();
     let monitor_handle = self.windows_api.get_monitor_for_point(&cursor_position);
+    let recursion_depth = recursion_depth.unwrap_or(0);
+    if recursion_depth > MAX_RECURSION_DEPTH {
+      error!("Failed to find active workspace for {monitor_handle} after [{recursion_depth}] attempts");
+      return None;
+    }
+
     let workspace_ids = self
       .workspaces
       .iter()
@@ -285,13 +295,22 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
       .map(|(id, _)| id)
       .collect::<Vec<_>>();
 
-    if workspace_ids.len() > 1 {
-      panic!(
-        "Data inconsistency detected: Found multiple active workspaces for monitor [{monitor_handle}]: {:?}",
-        workspace_ids
-      );
-    } else {
-      Some(workspace_ids[0])
+    match workspace_ids.len() {
+      0 => {
+        warn!("No active workspace found for {monitor_handle}, will reinitialise workspaces...");
+        self.initialise_workspaces();
+
+        Some(self.get_active_workspace_for_cursor_position(Some(recursion_depth))?)
+      }
+      1 => Some(*workspace_ids[0]),
+      _ => {
+        error!(
+          "Data inconsistency detected: Found multiple active workspaces for monitor [{monitor_handle}]: {:?}",
+          workspace_ids
+        );
+
+        None
+      }
     }
   }
 
@@ -378,6 +397,7 @@ mod tests {
         workspaces: HashMap::new(),
         windows_api: MockWindowsApi::new(),
         margin: 10,
+        additional_workspace_count: 0,
       }
     }
 
@@ -429,6 +449,7 @@ mod tests {
         ]),
         windows_api: mock_api,
         margin,
+        additional_workspace_count: 1,
       }
     }
 
@@ -442,8 +463,48 @@ mod tests {
         workspaces: workspace_map,
         windows_api: MockWindowsApi::new(),
         margin,
+        additional_workspace_count: 1,
       }
     }
+  }
+
+  #[test]
+  fn get_active_workspace_for_cursor_position_returns_workspace_if_one_active_workspace_found() {
+    let mut workspace_manager = WorkspaceManager::new_test(false);
+    // Cursor on primary monitor
+    MockWindowsApi::set_cursor_position(Point::new(50, 50));
+
+    let result = workspace_manager.get_active_workspace_for_cursor_position(None);
+
+    assert_eq!(result, Some(*primary_active_workspace()));
+  }
+
+  #[test]
+  fn get_active_workspace_for_cursor_position_reinitialises_workspaces_to_detect_monitor_changes() {
+    let mut workspace_manager = WorkspaceManager::default();
+    MockWindowsApi::set_cursor_position(Point::new(100, 100));
+    // Monitor 5 is added after initialisation and can only be detected once workspaces for all known monitors
+    // have been reinitialised
+    let monitor_handle = MonitorHandle::from(5);
+    MockWindowsApi::add_or_update_monitor(monitor_handle, Rect::new(100, 0, 200, 200), true);
+
+    let result = workspace_manager.get_active_workspace_for_cursor_position(None);
+
+    assert!(result.is_some());
+    assert_eq!(result.unwrap(), WorkspaceId::new(monitor_handle, 1));
+  }
+
+  #[test]
+  fn get_active_workspace_for_cursor_position_returns_none_if_recursion_depth_exceeded() {
+    let mut workspace_manager = WorkspaceManager::default();
+    MockWindowsApi::set_cursor_position(Point::new(100, 100));
+    // Monitor 5 is added after initialisation and can only be detected once workspaces for all known monitors
+    // have been reinitialised which must not happen in this case
+    MockWindowsApi::add_or_update_monitor(MonitorHandle::from(5), Rect::new(0, 0, 200, 200), true);
+
+    let result = workspace_manager.get_active_workspace_for_cursor_position(Some(MAX_RECURSION_DEPTH + 1));
+
+    assert!(result.is_none());
   }
 
   #[test]
