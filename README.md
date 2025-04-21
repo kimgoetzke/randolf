@@ -41,11 +41,12 @@ Selecting and moving windows using hotkeys:
 
 Opening and closing applications using hotkeys:
 
-_Note that the newly opened application is focussed upon opening and, after closing a window, the closest window is
-selected._
 ![Demo GIF 2](assets/demo_2.gif)
+_Note that the newly opened application is focussed upon opening and, after closing a window, the closest window  (if
+any) is selected._
 
-(More GIFs to follow...)
+Switching between workspaces and moving windows between them:
+![Demo GIF 3](assets/demo_3.gif)
 
 #### Features currently under consideration
 
