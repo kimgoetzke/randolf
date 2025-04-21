@@ -64,7 +64,6 @@ configuration file is created with the following default values:
 ```toml
 [general]
 window_margin = 20
-file_logging_enabled = true
 allow_selecting_same_center_windows = true
 additional_workspace_count = 3
 ```
@@ -75,14 +74,6 @@ Default: `20`
 
 The margin in pixels that is used when near-maximising or near-snapping a window. The margin is subtracted from the size
 of the screen when calculating the size and position of the window. Can be configured via the tray icon context menu.
-
-##### file_logging_enabled
-
-Default: `true`
-
-Whether to write logs to a file in the directory of the executable or the project root directory. The log file is named
-`randolf.log`. The log file is overwritten on each start of the application. Can be configured via the tray icon context
-menu but requires restart to take effect.
 
 ##### allow_selecting_same_center_windows
 
