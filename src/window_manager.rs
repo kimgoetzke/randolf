@@ -43,8 +43,8 @@ impl<T: WindowsApi + Copy> WindowManager<T> {
   }
 
   /// Returns the unique IDs for all desktop containers across all monitors in their natural order.
-  pub fn get_ordered_workspace_ids(&self) -> Vec<WorkspaceId> {
-    self.workspace_manager.get_ordered_workspace_ids()
+  pub fn get_ordered_permanent_workspace_ids(&mut self) -> Vec<PersistentWorkspaceId> {
+    self.workspace_manager.get_ordered_permanent_workspace_ids()
   }
 
   pub fn close_window(&mut self) {
@@ -55,11 +55,11 @@ impl<T: WindowsApi + Copy> WindowManager<T> {
     self.windows_api.do_close_window(window);
   }
 
-  pub fn switch_workspace(&mut self, id: WorkspaceId) {
+  pub fn switch_workspace(&mut self, id: PersistentWorkspaceId) {
     self.workspace_manager.switch_workspace(id);
   }
 
-  pub fn move_window_to_workspace(&mut self, id: WorkspaceId) {
+  pub fn move_window_to_workspace(&mut self, id: PersistentWorkspaceId) {
     self.workspace_manager.move_window_to_workspace(id);
   }
 
@@ -78,7 +78,7 @@ impl<T: WindowsApi + Copy> WindowManager<T> {
     match is_of_expected_size(handle, &placement, &sizing) {
       true => {
         let all_monitors = self.windows_api.get_all_monitors();
-        let this_monitor = self.windows_api.get_monitor_for_window_handle(handle);
+        let this_monitor = self.windows_api.get_monitor_handle_for_window_handle(handle);
         let target_monitor = all_monitors.get(direction, this_monitor);
         if let Some(target_monitor) = target_monitor {
           debug!("Moving window to [{}]", target_monitor);
@@ -119,7 +119,7 @@ impl<T: WindowsApi + Copy> WindowManager<T> {
     } else {
       trace!("No window found in [{:?}] direction, attempting to find monitor", direction);
       let all_monitors = self.windows_api.get_all_monitors();
-      let this_monitor = self.windows_api.get_monitor_for_point(&cursor_position);
+      let this_monitor = self.windows_api.get_monitor_handle_for_point(&cursor_position);
       match all_monitors.get(direction, this_monitor) {
         Some(target_monitor) => self.move_focus_to_monitor(direction, target_monitor),
         None => {
@@ -448,7 +448,7 @@ mod tests {
     let sizing = Sizing::new(0, 0, 100, 100);
     let initial_placement = WindowPlacement::new_from_sizing(sizing.clone());
     MockWindowsApi::add_or_update_window(window_handle, "Test Window".to_string(), sizing, false, false, true);
-    MockWindowsApi::add_or_update_monitor(monitor_handle, Rect::new(0, 0, 200, 200), true);
+    MockWindowsApi::add_monitor(monitor_handle, Rect::new(0, 0, 200, 200), true);
     MockWindowsApi::place_window(window_handle, monitor_handle);
     let mut manager = WindowManager::default(MockWindowsApi);
 
@@ -471,7 +471,7 @@ mod tests {
     let window_handle = WindowHandle::new(1);
     let sizing = Sizing::new(20, 20, 160, 140);
     MockWindowsApi::add_or_update_window(window_handle, "Test Window".to_string(), sizing, false, false, true);
-    MockWindowsApi::add_or_update_monitor(monitor_handle, Rect::new(0, 0, 200, 200), true);
+    MockWindowsApi::add_monitor(monitor_handle, Rect::new(0, 0, 200, 200), true);
     MockWindowsApi::place_window(window_handle, monitor_handle);
     let mut manager = WindowManager::default(MockWindowsApi);
     let previous_placement = WindowPlacement::new_test();
@@ -492,7 +492,7 @@ mod tests {
     let window_handle = WindowHandle::new(1);
     let sizing = Sizing::new(20, 20, 160, 160);
     MockWindowsApi::add_or_update_window(window_handle, "Test Window".to_string(), sizing, false, false, true);
-    MockWindowsApi::add_or_update_monitor(monitor_handle, Rect::new(0, 0, 200, 200), true);
+    MockWindowsApi::add_monitor(monitor_handle, Rect::new(0, 0, 200, 200), true);
     MockWindowsApi::place_window(window_handle, monitor_handle);
     let mock_api = MockWindowsApi;
     let mut manager = WindowManager::default(mock_api);
@@ -517,7 +517,7 @@ mod tests {
     let window_handle = WindowHandle::new(1);
     let sizing = Sizing::left_half_of_screen(Rect::new(0, 0, 200, 180), 20);
     MockWindowsApi::add_or_update_window(window_handle, "Test Window".to_string(), sizing.clone(), false, false, true);
-    MockWindowsApi::add_or_update_monitor(monitor_handle, Rect::new(0, 0, 200, 200), true);
+    MockWindowsApi::add_monitor(monitor_handle, Rect::new(0, 0, 200, 200), true);
     MockWindowsApi::place_window(window_handle, monitor_handle);
     let mut manager = WindowManager::default(MockWindowsApi);
 
@@ -536,8 +536,8 @@ mod tests {
     let window_handle = WindowHandle::new(1);
     let sizing = Sizing::right_half_of_screen(Rect::new(0, 0, 200, 180), 20);
     MockWindowsApi::add_or_update_window(window_handle, "Test Window".to_string(), sizing.clone(), false, false, true);
-    MockWindowsApi::add_or_update_monitor(monitor_handle_1, Rect::new(0, 0, 200, 200), true);
-    MockWindowsApi::add_or_update_monitor(2.into(), Rect::new(200, 0, 400, 200), false);
+    MockWindowsApi::add_monitor(monitor_handle_1, Rect::new(0, 0, 200, 200), true);
+    MockWindowsApi::add_monitor(2.into(), Rect::new(200, 0, 400, 200), false);
     MockWindowsApi::place_window(window_handle, monitor_handle_1);
     let mut manager = WindowManager::default(MockWindowsApi);
 
@@ -558,7 +558,7 @@ mod tests {
     let initial_cursor_position = Point::new(0, 0);
     MockWindowsApi::set_cursor_position(initial_cursor_position);
     MockWindowsApi::add_or_update_window(window_handle_1, "Test".to_string(), left_sizing.clone(), false, false, true);
-    MockWindowsApi::add_or_update_monitor(monitor_handle, Rect::new(0, 0, 200, 200), true);
+    MockWindowsApi::add_monitor(monitor_handle, Rect::new(0, 0, 200, 200), true);
     MockWindowsApi::place_window(window_handle_1, monitor_handle);
     let mut manager = WindowManager::default(MockWindowsApi);
 
@@ -572,7 +572,7 @@ mod tests {
     let window_handle = WindowHandle::new(1);
     let monitor_handle = MonitorHandle::from(1);
     MockWindowsApi::add_or_update_window(window_handle, "Test".to_string(), Sizing::default(), false, false, true);
-    MockWindowsApi::add_or_update_monitor(monitor_handle, Rect::new(0, 0, 200, 200), true);
+    MockWindowsApi::add_monitor(monitor_handle, Rect::new(0, 0, 200, 200), true);
     MockWindowsApi::place_window(window_handle, monitor_handle);
     let mut manager = WindowManager::default(MockWindowsApi);
 

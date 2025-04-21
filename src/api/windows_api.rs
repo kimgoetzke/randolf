@@ -34,8 +34,10 @@ pub trait WindowsApi {
   fn get_all_monitors(&self) -> Monitors;
   fn get_monitor_info_for_window(&self, handle: WindowHandle) -> Option<MonitorInfo>;
   fn get_monitor_info_for_monitor(&self, handle: MonitorHandle) -> Option<MonitorInfo>;
-  fn get_monitor_for_window_handle(&self, handle: WindowHandle) -> MonitorHandle;
-  fn get_monitor_for_point(&self, point: &Point) -> MonitorHandle;
+  fn get_monitor_id_for_handle(&self, handle: MonitorHandle) -> Option<[u16; 32]>;
+  fn get_monitor_handle_for_id(&self, id: &[u16; 32]) -> Option<MonitorHandle>;
+  fn get_monitor_handle_for_window_handle(&self, handle: WindowHandle) -> MonitorHandle;
+  fn get_monitor_handle_for_point(&self, point: &Point) -> MonitorHandle;
   fn get_virtual_desktop_manager(&self) -> Option<IVirtualDesktopManager>;
   fn is_window_on_current_desktop(&self, vdm: &IVirtualDesktopManager, window: &Window) -> Option<bool>;
 }

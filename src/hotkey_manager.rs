@@ -1,6 +1,6 @@
 use crate::Command;
 use crate::configuration_provider::ConfigurationProvider;
-use crate::utils::{CONFIGURATION_PROVIDER_LOCK, Direction, WorkspaceId};
+use crate::utils::{CONFIGURATION_PROVIDER_LOCK, Direction, PersistentWorkspaceId};
 use crossbeam_channel::Sender;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
@@ -27,7 +27,7 @@ impl HotkeyManager {
 
   pub fn new_with_hotkeys(
     configuration_provider: Arc<Mutex<ConfigurationProvider>>,
-    workspace_ids: Vec<WorkspaceId>,
+    workspace_ids: Vec<PersistentWorkspaceId>,
   ) -> Self {
     let mut hotkey_manager = HotkeyManager::new(configuration_provider.clone());
 
@@ -85,7 +85,7 @@ impl HotkeyManager {
       .unwrap_or_else(|err| panic!("Failed to register hotkey for {:?}: {err}", Command::CloseWindow));
   }
 
-  fn register_switch_workspace_hotkeys(&mut self, workspace_ids: &[WorkspaceId]) {
+  fn register_switch_workspace_hotkeys(&mut self, workspace_ids: &[PersistentWorkspaceId]) {
     for (i, workspace_id) in workspace_ids.iter().enumerate() {
       let key_number = i + 1;
       if key_number >= 9 {
@@ -111,7 +111,7 @@ impl HotkeyManager {
     }
   }
 
-  fn register_switch_workspace_hotkey(&mut self, key: VKey, workspace_id: &WorkspaceId) {
+  fn register_switch_workspace_hotkey(&mut self, key: VKey, workspace_id: &PersistentWorkspaceId) {
     let id = *workspace_id;
     self
       .hkm
@@ -119,7 +119,7 @@ impl HotkeyManager {
       .unwrap_or_else(|err| panic!("Failed to register hotkey for {:?}: {err}", Command::SwitchWorkspace(id)));
   }
 
-  fn register_move_window_to_workspace_hotkeys(&mut self, workspace_ids: &[WorkspaceId]) {
+  fn register_move_window_to_workspace_hotkeys(&mut self, workspace_ids: &[PersistentWorkspaceId]) {
     for (i, workspace_id) in workspace_ids.iter().enumerate() {
       let key_number = i + 1;
       if key_number >= 9 {
@@ -145,7 +145,7 @@ impl HotkeyManager {
     }
   }
 
-  fn register_move_window_to_workspace_hotkey(&mut self, key: VKey, workspace_id: &WorkspaceId) {
+  fn register_move_window_to_workspace_hotkey(&mut self, key: VKey, workspace_id: &PersistentWorkspaceId) {
     let id = *workspace_id;
     self
       .hkm
@@ -211,14 +211,17 @@ impl HotkeyManager {
 mod tests {
   use super::*;
   use crate::configuration_provider::CustomHotkey;
-  use crate::utils::WorkspaceId;
   use log::Level::{Debug, Warn};
 
   #[test]
   fn registers_switch_workspace_hotkeys_for_valid_workspace_ids() {
     testing_logger::setup();
     let mut hotkey_manager = HotkeyManager::new(Arc::new(Mutex::new(ConfigurationProvider::default())));
-    let workspace_ids = vec![WorkspaceId::from(1, 1), WorkspaceId::from(1, 2), WorkspaceId::from(1, 3)];
+    let workspace_ids = vec![
+      PersistentWorkspaceId::new_test(1),
+      PersistentWorkspaceId::new_test(2),
+      PersistentWorkspaceId::new_test(3),
+    ];
 
     hotkey_manager.register_switch_workspace_hotkeys(&workspace_ids);
 
@@ -228,7 +231,7 @@ mod tests {
         assert_eq!(
           captured_logs[i].body,
           format!(
-            "Registered hotkey [{}] + [{}] to switch to workspace [s#1-{}]",
+            "Registered hotkey [{}] + [{}] to switch to workspace [d#P_DISPLAY-{}]",
             MAIN_MOD,
             i + 1,
             i + 1
@@ -244,7 +247,7 @@ mod tests {
     let mut hotkey_manager = HotkeyManager::new(Arc::new(Mutex::new(ConfigurationProvider::default())));
     let mut workspace_ids = vec![];
     for i in 1..=9 {
-      workspace_ids.push(WorkspaceId::from(1, i));
+      workspace_ids.push(PersistentWorkspaceId::new_test(i));
     }
 
     hotkey_manager.register_switch_workspace_hotkeys(&workspace_ids);

@@ -16,6 +16,10 @@ impl Monitors {
     self.get_direction_of(monitor, direction)
   }
 
+  pub fn get_by_id(&self, id: &[u16; 32]) -> Option<&Monitor> {
+    self.monitors.iter().find(|m| m.id == *id)
+  }
+
   pub fn get_by_handle(&self, handle: MonitorHandle) -> Option<&Monitor> {
     self.monitors.iter().find(|m| m.handle == handle)
   }

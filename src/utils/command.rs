@@ -1,4 +1,5 @@
-use crate::utils::{Direction, WorkspaceId};
+use crate::utils::Direction;
+use crate::utils::permanent_workspace_id::PersistentWorkspaceId;
 use std::fmt::Display;
 
 #[derive(Debug)]
@@ -7,8 +8,8 @@ pub enum Command {
   NearMaximiseWindow,
   MoveWindow(Direction),
   MoveCursor(Direction),
-  SwitchWorkspace(WorkspaceId),
-  MoveWindowToWorkspace(WorkspaceId),
+  SwitchWorkspace(PersistentWorkspaceId),
+  MoveWindowToWorkspace(PersistentWorkspaceId),
   OpenApplication(String, bool),
   Exit,
 }

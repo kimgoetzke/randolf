@@ -1,10 +1,12 @@
 use crate::utils::MonitorHandle;
+use crate::utils::utils::id_to_string;
 use crate::utils::{Direction, Point, Rect};
 use std::fmt::Display;
-use windows::Win32::Graphics::Gdi::{HMONITOR, MONITORINFO};
+use windows::Win32::Graphics::Gdi::MONITORINFO;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Monitor {
+  pub id: [u16; 32],
   pub handle: MonitorHandle,
   pub size: u32,
   pub is_primary: bool,
@@ -17,10 +19,11 @@ pub struct Monitor {
 }
 
 impl Monitor {
-  pub fn new(h_monitor: HMONITOR, monitor_info: MONITORINFO) -> Self {
+  pub fn new(id: [u16; 32], handle: MonitorHandle, monitor_info: MONITORINFO) -> Self {
     let monitor_area = Rect::from(monitor_info.rcMonitor);
     Self {
-      handle: MonitorHandle::from(h_monitor),
+      id,
+      handle,
       size: monitor_info.cbSize,
       work_area: Rect::from(monitor_info.rcWork),
       is_primary: monitor_info.dwFlags & 1 != 0,
@@ -38,6 +41,10 @@ impl Monitor {
       Direction::Down => other.monitor_area.bottom <= self.monitor_area.top,
     }
   }
+
+  pub fn id_to_string(&self) -> String {
+    id_to_string(&self.id, &self.handle)
+  }
 }
 
 impl Display for Monitor {
@@ -46,7 +53,7 @@ impl Display for Monitor {
       f,
       "{} {} at ({}, {}) to ({}, {})",
       if self.is_primary { "Primary monitor" } else { "Monitor" },
-      self.handle,
+      self.id_to_string(),
       self.monitor_area.left,
       self.monitor_area.top,
       self.monitor_area.right,
@@ -61,7 +68,16 @@ mod tests {
 
   impl Monitor {
     pub fn new_test(handle: isize, monitor_area: Rect) -> Self {
+      let name = format!("DISPLAY {}", handle);
       Self {
+        id: name
+          .as_bytes()
+          .iter()
+          .map(|&b| b as u16)
+          .chain(std::iter::repeat(0).take(32 - name.len()))
+          .collect::<Vec<u16>>()
+          .try_into()
+          .unwrap(),
         handle: handle.into(),
         size: 0,
         is_primary: false,
@@ -73,9 +89,17 @@ mod tests {
 
     pub fn mock_1() -> Self {
       Monitor {
+        id: "DISPLAY1"
+          .as_bytes()
+          .iter()
+          .map(|&b| b as u16)
+          .chain(std::iter::repeat(0).take(32 - "DISPLAY1".len()))
+          .collect::<Vec<u16>>()
+          .try_into()
+          .unwrap(),
         handle: MonitorHandle::from(1),
         size: 0,
-        is_primary: false,
+        is_primary: true,
         monitor_area: Rect::new(0, 0, 1920, 1080),
         work_area: Rect::new(0, 0, 1920, 1030),
         center: Point::new(960, 540),
@@ -84,6 +108,14 @@ mod tests {
 
     pub fn mock_2() -> Self {
       Monitor {
+        id: "DISPLAY2"
+          .as_bytes()
+          .iter()
+          .map(|&b| b as u16)
+          .chain(std::iter::repeat(0).take(32 - "DISPLAY2".len()))
+          .collect::<Vec<u16>>()
+          .try_into()
+          .unwrap(),
         handle: MonitorHandle::from(2),
         size: 0,
         is_primary: false,
@@ -92,6 +124,39 @@ mod tests {
         center: Point::new(-400, 300),
       }
     }
+  }
+
+  #[test]
+  fn display_formats_primary_monitor_correctly() {
+    let monitor = Monitor::mock_1();
+
+    let formatted = format!("{}", monitor);
+
+    assert_eq!(formatted, "Primary monitor DISPLAY1 at (0, 0) to (1920, 1080)");
+  }
+
+  #[test]
+  fn display_formats_non_primary_monitor_correctly() {
+    let monitor = Monitor {
+      id: "\\\\.\\DISPLAY10"
+        .as_bytes()
+        .iter()
+        .map(|&b| b as u16)
+        .chain(std::iter::repeat(0).take(32 - "\\\\.\\DISPLAY10".len()))
+        .collect::<Vec<u16>>()
+        .try_into()
+        .unwrap(),
+      handle: MonitorHandle::from(10),
+      size: 0,
+      is_primary: false,
+      monitor_area: Rect::new(-800, 0, 0, 600),
+      work_area: Rect::new(-800, 0, 0, 550),
+      center: Point::new(-400, 300),
+    };
+
+    let formatted = format!("{}", monitor);
+
+    assert_eq!(formatted, "Monitor \\\\.\\DISPLAY10 at (-800, 0) to (0, 600)");
   }
 
   #[test]

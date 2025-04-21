@@ -1,10 +1,10 @@
 use crate::api::WindowsApi;
-use crate::utils::{Monitor, MonitorHandle, Rect, Sizing, Window, WindowHandle, WorkspaceId};
+use crate::utils::{Monitor, MonitorHandle, PersistentWorkspaceId, Rect, Sizing, Window, WindowHandle};
 use std::fmt::Display;
 
 #[derive(Debug, Clone)]
 pub struct Workspace {
-  pub id: WorkspaceId,
+  pub id: PersistentWorkspaceId,
   pub monitor_handle: i64,
   pub monitor: Monitor,
   windows: Vec<Window>,
@@ -14,7 +14,7 @@ pub struct Workspace {
 }
 
 impl Workspace {
-  pub fn new_active(id: WorkspaceId, monitor: &Monitor, margin: i32) -> Self {
+  pub fn new_active(id: PersistentWorkspaceId, monitor: &Monitor, margin: i32) -> Self {
     Workspace {
       id,
       monitor_handle: monitor.handle.handle as i64,
@@ -26,7 +26,7 @@ impl Workspace {
     }
   }
 
-  pub fn new_inactive(id: WorkspaceId, monitor: &Monitor, margin: i32) -> Self {
+  pub fn new_inactive(id: PersistentWorkspaceId, monitor: &Monitor, margin: i32) -> Self {
     Workspace {
       id,
       monitor_handle: monitor.handle.handle as i64,
@@ -44,6 +44,10 @@ impl Workspace {
 
   pub fn set_active(&mut self, is_active: bool) {
     self.is_active = is_active;
+  }
+
+  pub fn update_handle(&mut self, monitor_handle: MonitorHandle) {
+    self.monitor_handle = monitor_handle.handle as i64;
   }
 
   pub fn get_largest_window(&self) -> Option<Window> {
@@ -215,6 +219,10 @@ impl Workspace {
       let target_monitor_work_area_center = self.monitor.work_area.center();
       let left = target_monitor_work_area_center.x() - (width / 2);
       let top = target_monitor_work_area_center.y() - (height / 2);
+      debug!(
+        "Proposed size for {} is top: {}, left: {}, width: {}, height: {}",
+        window.handle, top, left, width, height
+      );
       window.rect = Rect::new(left, top, left + width, top + height).clamp(&self.monitor.work_area, 10);
     }
 
@@ -251,7 +259,7 @@ mod tests {
 
   impl Workspace {
     /// Creates a new workspace for testing purposes with margin set to 0 and inactive by default.
-    pub fn new_test(id: WorkspaceId, monitor: &Monitor) -> Self {
+    pub fn new_test(id: PersistentWorkspaceId, monitor: &Monitor) -> Self {
       Workspace {
         id,
         monitor_handle: monitor.handle.handle as i64,
@@ -275,7 +283,7 @@ mod tests {
   #[test]
   fn update_window_rect_if_required_returns_window_unchanged_when_staying_on_same_monitor() {
     let monitor = Monitor::new_test(1, Rect::new(0, 0, 1920, 1080));
-    let mut workspace = Workspace::new_test(WorkspaceId::from(monitor.handle.as_isize(), 1), &monitor);
+    let mut workspace = Workspace::new_test(PersistentWorkspaceId::new(monitor.id, 1), &monitor);
     let window = Window::new_test(1, Rect::new(10, 10, 110, 110));
     let mock_api = MockWindowsApi::new();
 
@@ -287,9 +295,9 @@ mod tests {
   #[test]
   fn update_window_rect_if_required_maintains_near_maximised_layout_when_changing_monitors() {
     let target_monitor = Monitor::new_test(2, Rect::new(0, 0, 1920, 1080));
-    let mut workspace = Workspace::new_test(WorkspaceId::from(target_monitor.handle.as_isize(), 1), &target_monitor);
+    let mut workspace = Workspace::new_test(PersistentWorkspaceId::new(target_monitor.id, 1), &target_monitor);
     let current_monitor_handle = MonitorHandle::from(1);
-    MockWindowsApi::add_or_update_monitor(current_monitor_handle, Rect::new(0, 0, 800, 600), true);
+    MockWindowsApi::add_monitor(current_monitor_handle, Rect::new(0, 0, 800, 600), true);
     let mock_api = MockWindowsApi::new();
     let current_monitor = mock_api.get_monitor_info_for_monitor(current_monitor_handle).unwrap();
     let current_sizing_near_maximised = Sizing::near_maximised(current_monitor.work_area, workspace.margin);
@@ -304,9 +312,9 @@ mod tests {
   #[test]
   fn update_window_rect_if_required_maintains_left_half_layout_when_changing_monitors() {
     let target_monitor = Monitor::new_test(2, Rect::new(0, 0, 1920, 1080));
-    let mut workspace = Workspace::new_test(WorkspaceId::from(target_monitor.handle.as_isize(), 1), &target_monitor);
+    let mut workspace = Workspace::new_test(PersistentWorkspaceId::new(target_monitor.id, 1), &target_monitor);
     let current_monitor_handle = MonitorHandle::from(1);
-    MockWindowsApi::add_or_update_monitor(current_monitor_handle, Rect::new(0, 0, 800, 600), true);
+    MockWindowsApi::add_monitor(current_monitor_handle, Rect::new(0, 0, 800, 600), true);
     let mock_api = MockWindowsApi::new();
     let current_monitor = mock_api.get_monitor_info_for_monitor(current_monitor_handle).unwrap();
     let current_sizing_left_half = Sizing::left_half_of_screen(current_monitor.work_area, workspace.margin);
@@ -322,9 +330,9 @@ mod tests {
   fn update_window_rect_if_required_centers_normal_window_when_changing_monitors() {
     let source_monitor = Monitor::new_test(1, Rect::new(0, 0, 1000, 800));
     let target_monitor = Monitor::new_test(2, Rect::new(0, 0, 1920, 1080));
-    let mut workspace = Workspace::new_test(WorkspaceId::from(target_monitor.handle.as_isize(), 1), &target_monitor);
+    let mut workspace = Workspace::new_test(PersistentWorkspaceId::new(target_monitor.id, 1), &target_monitor);
     let window = Window::new_test(1, Rect::new(100, 100, 300, 200));
-    MockWindowsApi::add_or_update_monitor(source_monitor.handle, source_monitor.monitor_area, true);
+    MockWindowsApi::add_monitor(source_monitor.handle, source_monitor.monitor_area, true);
     let mock_api = MockWindowsApi::new();
 
     let updated_window = workspace.update_window_rect_if_required(window, source_monitor.handle, &mock_api);
@@ -338,7 +346,7 @@ mod tests {
   fn update_window_rect_if_required_centers_window_when_monitor_info_missing() {
     let source_monitor = Monitor::new_test(1, Rect::new(0, 0, 1024, 768));
     let target_monitor = Monitor::new_test(2, Rect::new(0, 0, 1920, 1080));
-    let mut workspace = Workspace::new_test(WorkspaceId::from(target_monitor.handle.as_isize(), 1), &target_monitor);
+    let mut workspace = Workspace::new_test(PersistentWorkspaceId::new(target_monitor.id, 1), &target_monitor);
     let current_sizing_near_maximised = Sizing::near_maximised(source_monitor.work_area, workspace.margin);
     let window = Window::new_test(1, current_sizing_near_maximised.into());
     let mock_api = MockWindowsApi::new();
@@ -353,7 +361,7 @@ mod tests {
   #[test]
   fn move_or_store_and_hide_window_stores_window_if_workspace_is_inactive() {
     let monitor = Monitor::new_test(1, Rect::default());
-    let workspace_id = WorkspaceId::from(1, 1);
+    let workspace_id = PersistentWorkspaceId::new(monitor.id, 1);
     let mut workspace = Workspace::new_test(workspace_id, &monitor); // Inactive by default
     let window = Window::new_test(1, Rect::new(0, 0, 100, 100));
     MockWindowsApi::add_or_update_window(window.handle, window.title.clone(), window.rect.into(), false, false, true);
@@ -369,7 +377,7 @@ mod tests {
   #[test]
   fn move_or_store_and_hide_window_moves_window_if_workspace_is_active() {
     let monitor = Monitor::new_test(1, Rect::default());
-    let workspace_id = WorkspaceId::from(1, 1);
+    let workspace_id = PersistentWorkspaceId::new(monitor.id, 1);
     let mut workspace = Workspace::new_active(workspace_id, &monitor, 20);
     let window = Window::new_test(1, Rect::new(0, 0, 100, 100));
     MockWindowsApi::add_or_update_window(window.handle, window.title.clone(), window.rect.into(), false, false, true);
@@ -387,7 +395,7 @@ mod tests {
   #[test]
   fn store_and_hide_window_stores_and_hide_window() {
     let monitor = Monitor::new_test(1, Rect::default());
-    let mut workspace = Workspace::new_test(WorkspaceId::from(1, 1), &monitor);
+    let mut workspace = Workspace::new_test(PersistentWorkspaceId::new(monitor.id, 1), &monitor);
     let window = Window::new_test(1, Rect::new(0, 0, 100, 100));
     MockWindowsApi::add_or_update_window(window.handle, window.title.clone(), window.rect.into(), false, false, true);
     let mock_api = MockWindowsApi::new();
@@ -405,7 +413,7 @@ mod tests {
 
   #[test]
   fn store_and_hide_window_does_not_add_duplicate_window() {
-    let mut workspace = Workspace::new_test(WorkspaceId::from(1, 1), &Monitor::mock_1());
+    let mut workspace = Workspace::new_test(PersistentWorkspaceId::new_test(1), &Monitor::mock_1());
     let window = Window::new_test(1, Rect::new(0, 0, 100, 100));
     MockWindowsApi::add_or_update_window(window.handle, window.title.clone(), window.rect.into(), false, false, true);
     let mock_api = MockWindowsApi;
@@ -418,7 +426,7 @@ mod tests {
 
   #[test]
   fn store_and_hide_windows_adds_windows_to_workspace() {
-    let mut workspace = Workspace::new_test(WorkspaceId::from(1, 1), &Monitor::mock_1());
+    let mut workspace = Workspace::new_test(PersistentWorkspaceId::new_test(1), &Monitor::mock_1());
     let window_1 = Window::new_test(1, Rect::new(0, 0, 100, 100));
     let window_2 = Window::new_test(2, Rect::new(100, 100, 200, 200));
     let mock_api = MockWindowsApi;
@@ -449,7 +457,7 @@ mod tests {
   #[test]
   fn stores_returns_true_if_window_is_in_workspace() {
     let monitor = Monitor::new_test(1, Rect::default());
-    let mut workspace = Workspace::new_test(WorkspaceId::from(1, 1), &monitor);
+    let mut workspace = Workspace::new_test(PersistentWorkspaceId::new(monitor.id, 1), &monitor);
     let window = Window::new_test(1, Rect::new(0, 0, 100, 100));
     workspace.windows.push(window.clone());
 
@@ -460,14 +468,14 @@ mod tests {
   #[test]
   fn stores_returns_false_if_window_is_not_in_workspace() {
     let monitor = Monitor::new_test(1, Rect::default());
-    let workspace = Workspace::new_test(WorkspaceId::from(1, 1), &monitor);
+    let workspace = Workspace::new_test(PersistentWorkspaceId::new(monitor.id, 1), &monitor);
 
     assert!(!workspace.stores(&WindowHandle::new(2)));
   }
 
   #[test]
   fn restore_windows_restores_all_windows() {
-    let mut workspace = Workspace::new_test(WorkspaceId::from(1, 1), &Monitor::mock_1());
+    let mut workspace = Workspace::new_test(PersistentWorkspaceId::new_test(1), &Monitor::mock_1());
     let sizing_window_1 = Sizing::new(0, 0, 100, 100);
     let sizing_window_2 = Sizing::new(100, 100, 100, 100);
     MockWindowsApi::add_or_update_window(1.into(), "Test Window 1".to_string(), sizing_window_1, false, false, true);
@@ -485,7 +493,7 @@ mod tests {
 
   #[test]
   fn restore_windows_handles_empty_workspace() {
-    let mut workspace = Workspace::new_test(WorkspaceId::from(1, 1), &Monitor::mock_1());
+    let mut workspace = Workspace::new_test(PersistentWorkspaceId::new_test(1), &Monitor::mock_1());
     let mock_api = MockWindowsApi;
 
     workspace.restore_windows(&mock_api);

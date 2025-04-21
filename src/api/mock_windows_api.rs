@@ -2,8 +2,10 @@
 #[cfg(test)]
 pub(crate) mod test {
   use crate::api::WindowsApi;
-  use crate::utils::{Monitor, MonitorInfo, Monitors, Point, Rect, Sizing, Window, WindowPlacement};
-  use crate::utils::{MonitorHandle, WindowHandle};
+  use crate::utils::{
+    Monitor, MonitorHandle, MonitorInfo, Monitors, Point, Rect, Sizing, Window, WindowHandle, WindowPlacement,
+    id_to_string_or_panic,
+  };
   use std::cell::RefCell;
   use std::collections::HashMap;
   use windows::Win32::UI::Shell::IVirtualDesktopManager;
@@ -75,17 +77,37 @@ pub(crate) mod test {
     }
 
     /// Adds or updates a monitor to the mock state, assuming that the height of the monitor's `work_area` is 20 pixels
-    /// less than the `monitor_area`.
-    pub fn add_or_update_monitor(monitor_handle: MonitorHandle, monitor_area: Rect, is_primary: bool) {
-      trace!("Mock windows API adds monitor {monitor_handle} - monitor_area: {monitor_area:?}, is_primary: {is_primary}");
+    /// less than the `monitor_area` and using the `monitor_handle` as the ID.
+    pub fn add_monitor(monitor_handle: MonitorHandle, monitor_area: Rect, is_primary: bool) {
+      let work_area_bottom = monitor_area.bottom - 20;
+      Self::add_monitor_with_full_details(
+        [monitor_handle.handle as u16; 32],
+        monitor_handle,
+        monitor_area,
+        Rect::new(monitor_area.left, monitor_area.top, monitor_area.right, work_area_bottom),
+        is_primary,
+      );
+    }
+
+    pub fn add_monitor_with_full_details(
+      monitor_id: [u16; 32],
+      monitor_handle: MonitorHandle,
+      monitor_area: Rect,
+      work_area: Rect,
+      is_primary: bool,
+    ) {
+      trace!(
+        "Mock windows API adds monitor {monitor_handle} - monitor_area: {monitor_area}, work_area: {work_area}, is_primary: {is_primary}"
+      );
       MOCK_STATE.with(|state| {
         let mut state = state.borrow_mut();
         let work_area_bottom = monitor_area.bottom - 20;
         let monitor = Monitor {
+          id: monitor_id,
           handle: monitor_handle,
           size: 0,
           is_primary,
-          work_area: Rect::new(monitor_area.left, monitor_area.top, monitor_area.right, work_area_bottom),
+          work_area,
           monitor_area,
           center: Point::from_center_of_rect(&monitor_area),
         };
@@ -158,7 +180,7 @@ pub(crate) mod test {
     }
 
     fn get_all_visible_windows_within_area(&self, rect: Rect) -> Vec<Window> {
-      trace!("Mock windows API gets all visible windows within area {rect}");
+      trace!("Mock windows API gets all visible windows within {rect}");
       MOCK_STATE.with(|state| {
         state
           .borrow()
@@ -282,7 +304,7 @@ pub(crate) mod test {
         if is_foreground {
           state.borrow_mut().foreground_window = None;
         }
-        let monitor_handle = self.get_monitor_for_window_handle(handle);
+        let monitor_handle = self.get_monitor_handle_for_window_handle(handle);
         if let Some(windows) = state.borrow_mut().monitor_windows.get_mut(&monitor_handle) {
           windows.retain(|&w| w != handle);
         }
@@ -350,7 +372,7 @@ pub(crate) mod test {
     fn get_monitor_info_for_window(&self, handle: WindowHandle) -> Option<MonitorInfo> {
       trace!("Mock windows API gets monitor info for window {handle}");
       MOCK_STATE.with(|state| {
-        let monitor_handle = self.get_monitor_for_window_handle(handle);
+        let monitor_handle = self.get_monitor_handle_for_window_handle(handle);
         if let Some(monitor_state) = state.borrow_mut().monitors.get(&monitor_handle) {
           return Some(monitor_state.monitor_info);
         }
@@ -370,7 +392,30 @@ pub(crate) mod test {
       })
     }
 
-    fn get_monitor_for_window_handle(&self, handle: WindowHandle) -> MonitorHandle {
+    fn get_monitor_id_for_handle(&self, handle: MonitorHandle) -> Option<[u16; 32]> {
+      trace!("Mock windows API gets monitor id for handle {handle}");
+      MOCK_STATE.with(|state| {
+        state
+          .borrow()
+          .monitors
+          .get(&handle)
+          .map(|monitor_state| monitor_state.monitor.id)
+      })
+    }
+
+    fn get_monitor_handle_for_id(&self, id: &[u16; 32]) -> Option<MonitorHandle> {
+      trace!("Mock windows API gets monitor for id d#{}", id_to_string_or_panic(id));
+      MOCK_STATE.with(|state| {
+        state
+          .borrow()
+          .monitors
+          .iter()
+          .find(|(_, monitor_state)| monitor_state.monitor.id == *id)
+          .map(|(handle, _)| *handle)
+      })
+    }
+
+    fn get_monitor_handle_for_window_handle(&self, handle: WindowHandle) -> MonitorHandle {
       trace!("Mock windows API gets monitor for window {handle}");
       MOCK_STATE.with(|state| {
         if let Some((monitor_handle, _)) = state
@@ -385,7 +430,7 @@ pub(crate) mod test {
       })
     }
 
-    fn get_monitor_for_point(&self, point: &Point) -> MonitorHandle {
+    fn get_monitor_handle_for_point(&self, point: &Point) -> MonitorHandle {
       trace!("Mock windows API gets monitor for point {point:?}");
       MOCK_STATE.with(|state| {
         state

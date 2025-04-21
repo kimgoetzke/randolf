@@ -5,8 +5,8 @@ use std::mem::MaybeUninit;
 use std::{mem, ptr};
 use windows::Win32::Foundation::{HWND, LPARAM, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-  EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint,
-  MonitorFromWindow,
+  EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITORINFO, MONITORINFOEXW,
+  MonitorFromPoint, MonitorFromWindow,
 };
 use windows::Win32::System::Com::{CLSCTX_ALL, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx};
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, PROCESS_PER_MONITOR_DPI_AWARE, SetProcessDpiAwareness};
@@ -386,11 +386,31 @@ impl WindowsApi for RealWindowsApi {
     Some(MonitorInfo::from(monitor_info))
   }
 
-  fn get_monitor_for_window_handle(&self, handle: WindowHandle) -> MonitorHandle {
+  fn get_monitor_id_for_handle(&self, handle: MonitorHandle) -> Option<[u16; 32]> {
+    if let Some(monitor) = get_all_monitors().get_by_handle(handle) {
+      Some(monitor.id)
+    } else {
+      error!("Failed to get monitor id for {handle}");
+
+      None
+    }
+  }
+
+  fn get_monitor_handle_for_id(&self, id: &[u16; 32]) -> Option<MonitorHandle> {
+    if let Some(monitor) = get_all_monitors().get_by_id(id) {
+      Some(monitor.handle)
+    } else {
+      error!("Failed to get monitor for id {id:?}");
+
+      None
+    }
+  }
+
+  fn get_monitor_handle_for_window_handle(&self, handle: WindowHandle) -> MonitorHandle {
     unsafe { MonitorFromWindow(handle.as_hwnd(), MONITOR_DEFAULTTONEAREST) }.into()
   }
 
-  fn get_monitor_for_point(&self, point: &Point) -> MonitorHandle {
+  fn get_monitor_handle_for_point(&self, point: &Point) -> MonitorHandle {
     unsafe { MonitorFromPoint(point.into(), MONITOR_DEFAULTTONEAREST).into() }
   }
 
@@ -532,24 +552,34 @@ pub fn get_all_monitors() -> Monitors {
   }
 
   for monitor in &monitors {
-    trace!("- {}", monitor,);
+    trace!("- {}", monitor);
   }
 
   Monitors::from(monitors)
 }
 
-extern "system" fn enum_monitors_callback(monitor: HMONITOR, _dc: HDC, _rect: *mut RECT, data: LPARAM) -> BOOL {
+extern "system" fn enum_monitors_callback(hmonitor: HMONITOR, _dc: HDC, _rect: *mut RECT, data: LPARAM) -> BOOL {
   unsafe {
     let monitors = data.0 as *mut Vec<Monitor>;
-    let mut monitor_info = MONITORINFO {
-      cbSize: size_of::<MONITORINFO>() as u32,
-      ..Default::default()
-    };
+    let mut device_info = MONITORINFOEXW::default();
+    device_info.monitorInfo.cbSize = size_of::<MONITORINFOEXW>() as u32;
 
-    if GetMonitorInfoW(monitor, &mut monitor_info).as_bool() {
-      (*monitors).push(Monitor::new(monitor, monitor_info));
+    if GetMonitorInfoW(hmonitor, &mut device_info as *mut MONITORINFOEXW as *mut MONITORINFO).as_bool() {
+      let handle = MonitorHandle::from(hmonitor);
+      let device_name = get_persistent_device_name(&handle, &device_info);
+      (*monitors).push(Monitor::new(device_name, handle, device_info.monitorInfo));
     }
 
     true.into()
   }
+}
+
+fn get_persistent_device_name(handle: &MonitorHandle, info: &MONITORINFOEXW) -> [u16; 32] {
+  debug!(
+    "Persistent device name of {} is \"{}\"",
+    handle,
+    String::from_utf16_lossy(&info.szDevice)
+  );
+
+  info.szDevice
 }

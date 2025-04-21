@@ -51,9 +51,9 @@ fn main() {
 
   // Create window manager and register hotkeys
   let wm = Rc::new(RefCell::new(WindowManager::new(configuration_manager.clone(), windows_api)));
-  let workspace_ids = wm.borrow().get_ordered_workspace_ids();
+  let workspace_ids = wm.borrow_mut().get_ordered_permanent_workspace_ids();
   let hkm = HotkeyManager::new_with_hotkeys(configuration_manager.clone(), workspace_ids);
-  let _ = hkm.initialise(command_sender);
+  let interrupt_handle = hkm.initialise(command_sender);
 
   // Run event loop
   let mut last_heartbeat = Instant::now();
@@ -71,6 +71,7 @@ fn main() {
         Command::OpenApplication(path, as_admin) => launcher.borrow_mut().launch(path, as_admin),
         Command::Exit => {
           wm.borrow_mut().restore_all_managed_windows();
+          interrupt_handle.interrupt();
           info!("Application exited cleanly");
           std::process::exit(0);
         }

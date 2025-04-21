@@ -1,15 +1,13 @@
 use crate::api::WindowsApi;
-use crate::utils::{MonitorHandle, Window, Workspace, WorkspaceId};
+use crate::utils::{MonitorHandle, PersistentWorkspaceId, TransientWorkspaceId, Window, Workspace};
 use std::collections::HashMap;
 
 pub struct WorkspaceManager<T: WindowsApi> {
-  workspaces: HashMap<WorkspaceId, Workspace>,
+  workspaces: HashMap<PersistentWorkspaceId, Workspace>,
   windows_api: T,
   margin: i32,
   additional_workspace_count: i32,
 }
-
-const MAX_RECURSION_DEPTH: usize = 1;
 
 impl<T: WindowsApi + Copy> WorkspaceManager<T> {
   pub fn new(additional_workspace_count: i32, margin: i32, api: T) -> Self {
@@ -29,10 +27,9 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
     let mut workspaces = HashMap::new();
     let all_monitors = self.windows_api.get_all_monitors();
     for monitor in all_monitors.get_all() {
-      let monitor_handle = monitor.handle;
       if monitor.is_primary {
         for layer in 1..=self.additional_workspace_count + 1 {
-          let id = WorkspaceId::new(monitor_handle, layer as usize);
+          let id = PersistentWorkspaceId::new(monitor.id, layer as usize);
           let workspace = if layer == 1 {
             Workspace::new_active(id, monitor, self.margin)
           } else {
@@ -41,18 +38,25 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
           workspaces.insert(id, workspace);
         }
       } else {
-        let id = WorkspaceId::new(monitor_handle, 1);
+        let id = PersistentWorkspaceId::new(monitor.id, 1);
         workspaces.insert(id, Workspace::new_active(id, monitor, self.margin));
       }
     }
     self.workspaces = workspaces;
   }
 
+  pub fn get_ordered_permanent_workspace_ids(&mut self) -> Vec<PersistentWorkspaceId> {
+    self
+      .get_ordered_workspace_ids()
+      .iter_mut()
+      .map(|id| PersistentWorkspaceId::from(*id))
+      .collect()
+  }
+
   /// Returns the unique IDs for all workspaces across all monitors. Ordered by monitor position. Returned in ascending
   /// order from top-left to bottom-right.
-  pub fn get_ordered_workspace_ids(&self) -> Vec<WorkspaceId> {
+  fn get_ordered_workspace_ids(&self) -> Vec<PersistentWorkspaceId> {
     let mut workspaces_by_monitor: HashMap<i64, Vec<&Workspace>> = HashMap::new();
-
     for workspace in self.workspaces.values() {
       workspaces_by_monitor
         .entry(workspace.monitor_handle)
@@ -99,10 +103,16 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
       }
     }
 
+    debug!(
+      "Ordered workspaces: [{}]",
+      result.iter().map(|id| format!("{}", id)).collect::<Vec<_>>().join(", ")
+    );
+
     result
   }
 
-  pub fn switch_workspace(&mut self, target_workspace_id: WorkspaceId) {
+  pub fn switch_workspace(&mut self, target_workspace_id: PersistentWorkspaceId) {
+    let target_workspace_id = self.reinitialise_and_resolve_to_transient_workspace_id(target_workspace_id);
     let current_workspace_id = match self.get_current_workspace_id_if_different(target_workspace_id) {
       Some(id) => id,
       None => return,
@@ -110,7 +120,7 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
 
     // Identify the active workspace on the target monitor
     let target_monitor_active_workspace_id = if let Some(workspace) = self.get_active_workspace(&target_workspace_id) {
-      *workspace
+      workspace
     } else {
       if target_workspace_id.monitor_handle != current_workspace_id.monitor_handle {
         error!(
@@ -128,7 +138,7 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
 
     // Hide and store all windows in the target workspace, if required
     if !target_workspace_id.is_same_workspace(&target_monitor_active_workspace_id) {
-      if let Some(target_monitor_active_workspace) = self.workspaces.get_mut(&target_monitor_active_workspace_id) {
+      if let Some(target_monitor_active_workspace) = self.workspaces.get_mut(&target_monitor_active_workspace_id.into()) {
         let current_windows = self
           .windows_api
           .get_all_visible_windows_within_area(target_monitor_active_workspace.monitor.monitor_area);
@@ -145,7 +155,7 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
     }
 
     // Attempt to find the largest window on the target workspace
-    let largest_window = if let Some(new_workspace) = self.workspaces.get(&target_workspace_id) {
+    let largest_window = if let Some(new_workspace) = self.workspaces.get(&target_workspace_id.into()) {
       let visible_windows = self
         .windows_api
         .get_all_visible_windows_within_area(new_workspace.monitor.work_area);
@@ -163,7 +173,7 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
     };
 
     // Restore windows for the new workspace and set the cursor position
-    if let Some(new_workspace) = self.workspaces.get_mut(&target_workspace_id) {
+    if let Some(new_workspace) = self.workspaces.get_mut(&target_workspace_id.into()) {
       new_workspace.restore_windows(&self.windows_api);
       if let Some(largest_window) = largest_window {
         trace!(
@@ -182,7 +192,7 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
         "Failed to switch workspace because: The target workspace ({}) does not exist",
         target_workspace_id
       );
-      if let Some(original_workspace) = self.workspaces.get_mut(&current_workspace_id) {
+      if let Some(original_workspace) = self.workspaces.get_mut(&current_workspace_id.into()) {
         original_workspace.restore_windows(&self.windows_api);
         self.windows_api.set_cursor_position(&original_workspace.monitor.center);
         debug!(
@@ -211,8 +221,9 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
     info!("Switched workspace from {} to {}", current_workspace_id, target_workspace_id);
   }
 
-  pub fn move_window_to_workspace(&mut self, target_workspace_id: WorkspaceId) {
+  pub fn move_window_to_workspace(&mut self, target_workspace_id: PersistentWorkspaceId) {
     // Guard against moving a window to the same workspace
+    let target_workspace_id = self.reinitialise_and_resolve_to_transient_workspace_id(target_workspace_id);
     match self.get_current_workspace_id_if_different(target_workspace_id) {
       Some(_) => {}
       None => return,
@@ -229,10 +240,10 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
     };
     let window_title = self.windows_api.get_window_title(&foreground_window);
     let window = Window::new(foreground_window.as_hwnd(), window_title, window_placement.normal_position);
-    let current_monitor = self.windows_api.get_monitor_for_window_handle(window.handle);
+    let current_monitor = self.windows_api.get_monitor_handle_for_window_handle(window.handle);
 
     // Move or store the window
-    if let Some(target_workspace) = self.workspaces.get_mut(&target_workspace_id) {
+    if let Some(target_workspace) = self.workspaces.get_mut(&target_workspace_id.into()) {
       target_workspace.move_or_store_and_hide_window(window.clone(), current_monitor, &self.windows_api);
     } else {
       warn!(
@@ -255,8 +266,43 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
     }
   }
 
-  fn get_current_workspace_id_if_different(&mut self, target_workspace_id: WorkspaceId) -> Option<WorkspaceId> {
-    let Some(current_workspace_id) = self.get_active_workspace_for_cursor_position(None) else {
+  fn reinitialise_and_resolve_to_transient_workspace_id(
+    &mut self,
+    persistent_workspace_id: PersistentWorkspaceId,
+  ) -> TransientWorkspaceId {
+    let monitors = self.windows_api.get_all_monitors();
+    self.workspaces.iter_mut().for_each(|(_, workspace)| {
+      if let Some(monitor) = monitors.get_by_id(&workspace.id.monitor_id) {
+        workspace.update_handle(monitor.handle);
+      }
+    });
+    if let Some(monitor) = monitors.get_by_id(&persistent_workspace_id.monitor_id) {
+      debug!(
+        "Resolved persistent workspace ID {} to monitor handle {}",
+        persistent_workspace_id, monitor.handle
+      );
+      TransientWorkspaceId::new(
+        persistent_workspace_id.monitor_id,
+        monitor.handle,
+        persistent_workspace_id.workspace,
+      )
+    } else {
+      error!(
+        "Failed to resolve persistent workspace ID {} to monitor handle",
+        persistent_workspace_id
+      );
+      panic!(
+        "Failed to resolve persistent workspace ID {} to monitor handle",
+        persistent_workspace_id
+      );
+    }
+  }
+
+  fn get_current_workspace_id_if_different(
+    &mut self,
+    target_workspace_id: TransientWorkspaceId,
+  ) -> Option<TransientWorkspaceId> {
+    let Some(current_workspace_id) = self.get_active_workspace_for_cursor_position() else {
       warn!("Failed to complete request: Unable to find the active workspace");
       return None;
     };
@@ -272,56 +318,48 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
     Some(current_workspace_id)
   }
 
-  fn get_active_workspace_for_cursor_position(&mut self, recursion_depth: Option<usize>) -> Option<WorkspaceId> {
+  fn get_active_workspace_for_cursor_position(&mut self) -> Option<TransientWorkspaceId> {
     let cursor_position = self.windows_api.get_cursor_position();
-    let monitor_handle = self.windows_api.get_monitor_for_point(&cursor_position);
-    let recursion_depth = recursion_depth.unwrap_or(0);
-    if recursion_depth > MAX_RECURSION_DEPTH {
-      error!("Failed to find active workspace for {monitor_handle} after [{recursion_depth}] attempts");
-      return None;
-    }
+    let monitor_handle = self.windows_api.get_monitor_handle_for_point(&cursor_position);
+    let monitor_id = self
+      .windows_api
+      .get_monitor_id_for_handle(monitor_handle)
+      .expect("Cannot find monitor for handle");
 
     let workspace_ids = self
       .workspaces
       .iter()
-      .filter(|(id, workspace)| workspace.is_active() && id.monitor_handle == monitor_handle)
+      .filter(|(id, workspace)| workspace.is_active() && id.monitor_id == monitor_id)
       .map(|(id, _)| id)
       .collect::<Vec<_>>();
 
-    match workspace_ids.len() {
-      0 => {
-        warn!("No active workspace found for {monitor_handle}, will reinitialise workspaces...");
-        self.initialise_workspaces();
-        self.log_initialised_workspaces();
+    if workspace_ids.len() == 1 {
+      Some(TransientWorkspaceId::from(*workspace_ids[0], monitor_handle))
+    } else {
+      error!(
+        "Data inconsistency detected: Found {} active workspaces for monitor [{monitor_handle}]: {:?}",
+        workspace_ids.len(),
+        workspace_ids,
+      );
 
-        Some(self.get_active_workspace_for_cursor_position(Some(recursion_depth))?)
-      }
-      1 => Some(*workspace_ids[0]),
-      _ => {
-        error!(
-          "Data inconsistency detected: Found multiple active workspaces for monitor [{monitor_handle}]: {:?}",
-          workspace_ids
-        );
-
-        None
-      }
+      None
     }
   }
 
-  fn get_active_workspace(&mut self, workspace_id: &WorkspaceId) -> Option<&WorkspaceId> {
+  fn get_active_workspace(&mut self, workspace_id: &TransientWorkspaceId) -> Option<TransientWorkspaceId> {
     self
       .workspaces
       .iter()
       .filter(|(_, workspace)| workspace.is_active())
-      .map(|(id, _)| id)
+      .map(|(id, ws)| TransientWorkspaceId::new(id.monitor_id, MonitorHandle::from(ws.monitor_handle), id.workspace))
       .find(|id| id.monitor_handle == workspace_id.monitor_handle)
   }
 
-  fn set_active_workspace(&mut self, workspace_id: &WorkspaceId, is_active: bool) {
+  fn set_active_workspace(&mut self, workspace_id: &TransientWorkspaceId, is_active: bool) {
     self
       .workspaces
       .iter_mut()
-      .filter(|(_, workspace)| workspace.id == *workspace_id)
+      .filter(|(id, workspace)| workspace.id.monitor_id == workspace_id.monitor_id && id.workspace == workspace_id.workspace)
       .for_each(|(_, workspace)| {
         workspace.set_active(is_active);
       });
@@ -353,16 +391,16 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
 mod tests {
   use super::*;
   use crate::api::MockWindowsApi;
-  use crate::utils::{Monitor, Point, Rect, Workspace, WorkspaceId};
+  use crate::utils::{Monitor, Point, Rect, TransientWorkspaceId, Workspace};
   use crate::utils::{Sizing, WindowHandle};
   use std::sync::OnceLock;
 
   static PRIMARY_MONITOR: OnceLock<Monitor> = OnceLock::new();
   static SECONDARY_MONITOR: OnceLock<Monitor> = OnceLock::new();
-  static PRIMARY_INACTIVE_WORKSPACE: OnceLock<WorkspaceId> = OnceLock::new();
-  static PRIMARY_ACTIVE_WORKSPACE: OnceLock<WorkspaceId> = OnceLock::new();
-  static SECONDARY_ACTIVE_WORKSPACE: OnceLock<WorkspaceId> = OnceLock::new();
-  static SECONDARY_INACTIVE_WORKSPACE: OnceLock<WorkspaceId> = OnceLock::new();
+  static PRIMARY_INACTIVE_WORKSPACE: OnceLock<TransientWorkspaceId> = OnceLock::new();
+  static PRIMARY_ACTIVE_WORKSPACE: OnceLock<TransientWorkspaceId> = OnceLock::new();
+  static SECONDARY_ACTIVE_WORKSPACE: OnceLock<TransientWorkspaceId> = OnceLock::new();
+  static SECONDARY_INACTIVE_WORKSPACE: OnceLock<TransientWorkspaceId> = OnceLock::new();
 
   fn primary_monitor() -> &'static Monitor {
     PRIMARY_MONITOR.get_or_init(Monitor::mock_1)
@@ -372,20 +410,22 @@ mod tests {
     SECONDARY_MONITOR.get_or_init(Monitor::mock_2)
   }
 
-  fn primary_active_workspace() -> &'static WorkspaceId {
-    PRIMARY_ACTIVE_WORKSPACE.get_or_init(|| WorkspaceId::new(primary_monitor().handle, 1))
+  fn primary_active_ws_id() -> &'static TransientWorkspaceId {
+    PRIMARY_ACTIVE_WORKSPACE.get_or_init(|| TransientWorkspaceId::new(primary_monitor().id, primary_monitor().handle, 1))
   }
 
-  fn primary_inactive_workspace() -> &'static WorkspaceId {
-    PRIMARY_INACTIVE_WORKSPACE.get_or_init(|| WorkspaceId::new(primary_monitor().handle, 2))
+  fn primary_inactive_ws_id() -> &'static TransientWorkspaceId {
+    PRIMARY_INACTIVE_WORKSPACE.get_or_init(|| TransientWorkspaceId::new(primary_monitor().id, primary_monitor().handle, 2))
   }
 
-  fn secondary_active_workspace() -> &'static WorkspaceId {
-    SECONDARY_ACTIVE_WORKSPACE.get_or_init(|| WorkspaceId::new(secondary_monitor().handle, 1))
+  fn secondary_active_ws_id() -> &'static TransientWorkspaceId {
+    SECONDARY_ACTIVE_WORKSPACE
+      .get_or_init(|| TransientWorkspaceId::new(secondary_monitor().id, secondary_monitor().handle, 1))
   }
 
-  fn secondary_inactive_workspace() -> &'static WorkspaceId {
-    SECONDARY_INACTIVE_WORKSPACE.get_or_init(|| WorkspaceId::new(secondary_monitor().handle, 2))
+  fn secondary_inactive_ws_id() -> &'static TransientWorkspaceId {
+    SECONDARY_INACTIVE_WORKSPACE
+      .get_or_init(|| TransientWorkspaceId::new(secondary_monitor().id, secondary_monitor().handle, 2))
   }
 
   impl WorkspaceManager<MockWindowsApi> {
@@ -415,33 +455,49 @@ mod tests {
       let secondary_monitor = secondary_monitor();
       MockWindowsApi::place_window(window_handle, primary_monitor.handle);
       MockWindowsApi::set_cursor_position(Point::new(50, 50));
-      MockWindowsApi::add_or_update_monitor(primary_monitor.handle, primary_monitor.monitor_area, true);
-      MockWindowsApi::add_or_update_monitor(secondary_monitor.handle, secondary_monitor.monitor_area, false);
+      MockWindowsApi::add_monitor_with_full_details(
+        primary_monitor.id,
+        primary_monitor.handle,
+        primary_monitor.monitor_area,
+        primary_monitor.work_area,
+        true,
+      );
+      MockWindowsApi::add_monitor_with_full_details(
+        secondary_monitor.id,
+        secondary_monitor.handle,
+        secondary_monitor.monitor_area,
+        secondary_monitor.work_area,
+        false,
+      );
 
       let mock_api = MockWindowsApi;
-      let primary_active_workspace_id = *primary_active_workspace();
-      let primary_inactive_workspace_id = *primary_inactive_workspace();
-      let secondary_active_workspace_id = *secondary_active_workspace();
-      let secondary_inactive_workspace_id = *secondary_inactive_workspace();
+      let primary_active_workspace_id = *primary_active_ws_id();
+      let primary_inactive_workspace_id = *primary_inactive_ws_id();
+      let secondary_active_workspace_id = *secondary_active_ws_id();
+      let secondary_inactive_workspace_id = *secondary_inactive_ws_id();
       let margin = 10;
 
       WorkspaceManager {
         workspaces: HashMap::from([
           (
-            primary_active_workspace_id,
-            Workspace::new_active(primary_active_workspace_id, primary_monitor, margin),
+            primary_active_workspace_id.into(),
+            Workspace::new_active(
+              PersistentWorkspaceId::from(primary_active_workspace_id),
+              primary_monitor,
+              margin,
+            ),
           ),
           (
-            primary_inactive_workspace_id,
-            Workspace::new_inactive(primary_inactive_workspace_id, primary_monitor, margin),
+            primary_inactive_workspace_id.into(),
+            Workspace::new_inactive(primary_inactive_workspace_id.into(), primary_monitor, margin),
           ),
           (
-            secondary_active_workspace_id,
-            Workspace::new_active(secondary_active_workspace_id, secondary_monitor, margin),
+            secondary_active_workspace_id.into(),
+            Workspace::new_active(secondary_active_workspace_id.into(), secondary_monitor, margin),
           ),
           (
-            secondary_inactive_workspace_id,
-            Workspace::new_inactive(secondary_inactive_workspace_id, secondary_monitor, margin),
+            secondary_inactive_workspace_id.into(),
+            Workspace::new_inactive(secondary_inactive_workspace_id.into(), secondary_monitor, margin),
           ),
         ]),
         windows_api: mock_api,
@@ -464,12 +520,12 @@ mod tests {
       }
     }
 
-    fn active_workspaces(&self) -> Vec<WorkspaceId> {
+    fn active_workspaces(&self) -> Vec<TransientWorkspaceId> {
       self
         .workspaces
         .iter()
         .filter(|(_, workspace)| workspace.is_active())
-        .map(|(id, _)| *id)
+        .map(|(id, ws)| TransientWorkspaceId::new(id.monitor_id, MonitorHandle::from(ws.monitor_handle), id.workspace))
         .collect()
     }
   }
@@ -480,35 +536,18 @@ mod tests {
     // Cursor on primary monitor
     MockWindowsApi::set_cursor_position(Point::new(50, 50));
 
-    let result = workspace_manager.get_active_workspace_for_cursor_position(None);
+    let result = workspace_manager.get_active_workspace_for_cursor_position();
 
-    assert_eq!(result, Some(*primary_active_workspace()));
+    assert_eq!(result, Some(*primary_active_ws_id()));
   }
 
   #[test]
-  fn get_active_workspace_for_cursor_position_reinitialises_workspaces_to_detect_monitor_changes() {
+  fn get_active_workspace_for_cursor_position_returns_none_when_no_matches() {
     let mut workspace_manager = WorkspaceManager::default();
     MockWindowsApi::set_cursor_position(Point::new(100, 100));
-    // Monitor 5 is added after initialisation and can only be detected once workspaces for all known monitors
-    // have been reinitialised
-    let monitor_handle = MonitorHandle::from(5);
-    MockWindowsApi::add_or_update_monitor(monitor_handle, Rect::new(100, 0, 200, 200), true);
+    MockWindowsApi::add_monitor(MonitorHandle::from(5), Rect::new(0, 0, 200, 200), true);
 
-    let result = workspace_manager.get_active_workspace_for_cursor_position(None);
-
-    assert!(result.is_some());
-    assert_eq!(result.unwrap(), WorkspaceId::new(monitor_handle, 1));
-  }
-
-  #[test]
-  fn get_active_workspace_for_cursor_position_returns_none_if_recursion_depth_exceeded() {
-    let mut workspace_manager = WorkspaceManager::default();
-    MockWindowsApi::set_cursor_position(Point::new(100, 100));
-    // Monitor 5 is added after initialisation and can only be detected once workspaces for all known monitors
-    // have been reinitialised which must not happen in this case
-    MockWindowsApi::add_or_update_monitor(MonitorHandle::from(5), Rect::new(0, 0, 200, 200), true);
-
-    let result = workspace_manager.get_active_workspace_for_cursor_position(Some(MAX_RECURSION_DEPTH + 1));
+    let result = workspace_manager.get_active_workspace_for_cursor_position();
 
     assert!(result.is_none());
   }
@@ -518,17 +557,17 @@ mod tests {
     let left_monitor = Monitor::new_test(1, Rect::new(0, 0, 99, 100));
     let center_monitor = Monitor::new_test(2, Rect::new(100, 0, 199, 100));
     let right_monitor = Monitor::new_test(3, Rect::new(200, 0, 299, 100));
-    let left_workspace = Workspace::new_test(WorkspaceId::new(left_monitor.handle, 1), &left_monitor);
-    let center_workspace = Workspace::new_test(WorkspaceId::new(center_monitor.handle, 1), &center_monitor);
-    let right_workspace = Workspace::new_test(WorkspaceId::new(right_monitor.handle, 1), &right_monitor);
+    let left_workspace = Workspace::new_test(PersistentWorkspaceId::new(left_monitor.id, 1), &left_monitor);
+    let center_workspace = Workspace::new_test(PersistentWorkspaceId::new(center_monitor.id, 1), &center_monitor);
+    let right_workspace = Workspace::new_test(PersistentWorkspaceId::new(right_monitor.id, 1), &right_monitor);
     let workspace_manager = WorkspaceManager::from_workspaces(&[&left_workspace, &center_workspace, &right_workspace], 0);
 
     let ordered_workspaces = workspace_manager.get_ordered_workspace_ids();
 
     assert_eq!(ordered_workspaces.len(), 3);
     assert_eq!(ordered_workspaces[0], left_workspace.id);
-    assert_eq!(ordered_workspaces[1], center_workspace.id);
-    assert_eq!(ordered_workspaces[2], right_workspace.id);
+    assert_eq!(ordered_workspaces[1], center_workspace.id,);
+    assert_eq!(ordered_workspaces[2], right_workspace.id,);
   }
 
   #[test]
@@ -536,27 +575,27 @@ mod tests {
     let top_monitor = Monitor::new_test(1, Rect::new(0, 0, 100, 99));
     let center_monitor = Monitor::new_test(2, Rect::new(0, 100, 100, 199));
     let bottom_monitor = Monitor::new_test(3, Rect::new(0, 200, 100, 299));
-    let top_workspace = Workspace::new_test(WorkspaceId::new(top_monitor.handle, 1), &top_monitor);
-    let center_workspace = Workspace::new_test(WorkspaceId::new(center_monitor.handle, 1), &center_monitor);
-    let bottom_workspace = Workspace::new_test(WorkspaceId::new(bottom_monitor.handle, 1), &bottom_monitor);
+    let top_workspace = Workspace::new_test(PersistentWorkspaceId::new(top_monitor.id, 1), &top_monitor);
+    let center_workspace = Workspace::new_test(PersistentWorkspaceId::new(center_monitor.id, 1), &center_monitor);
+    let bottom_workspace = Workspace::new_test(PersistentWorkspaceId::new(bottom_monitor.id, 1), &bottom_monitor);
     let workspace_manager = WorkspaceManager::from_workspaces(&[&top_workspace, &center_workspace, &bottom_workspace], 0);
 
     let ordered_workspaces = workspace_manager.get_ordered_workspace_ids();
 
     assert_eq!(ordered_workspaces.len(), 3);
-    assert_eq!(ordered_workspaces[0], top_workspace.id);
+    assert_eq!(ordered_workspaces[0], top_workspace.id,);
     assert_eq!(ordered_workspaces[1], center_workspace.id);
-    assert_eq!(ordered_workspaces[2], bottom_workspace.id);
+    assert_eq!(ordered_workspaces[2], bottom_workspace.id,);
   }
 
   #[test]
   fn get_ordered_workspace_ids_with_multiple_workspaces_on_same_monitor() {
     let top_monitor = Monitor::new_test(1, Rect::new(0, 0, 100, 99));
     let bottom_monitor = Monitor::new_test(3, Rect::new(0, 200, 100, 299));
-    let top_workspace_1 = Workspace::new_test(WorkspaceId::new(top_monitor.handle, 1), &top_monitor);
-    let top_workspace_2 = Workspace::new_test(WorkspaceId::new(top_monitor.handle, 2), &top_monitor);
-    let bottom_workspace_1 = Workspace::new_test(WorkspaceId::new(bottom_monitor.handle, 1), &bottom_monitor);
-    let bottom_workspace_2 = Workspace::new_test(WorkspaceId::new(bottom_monitor.handle, 2), &bottom_monitor);
+    let top_workspace_1 = Workspace::new_test(PersistentWorkspaceId::new(top_monitor.id, 1), &top_monitor);
+    let top_workspace_2 = Workspace::new_test(PersistentWorkspaceId::new(top_monitor.id, 2), &top_monitor);
+    let bottom_workspace_1 = Workspace::new_test(PersistentWorkspaceId::new(bottom_monitor.id, 1), &bottom_monitor);
+    let bottom_workspace_2 = Workspace::new_test(PersistentWorkspaceId::new(bottom_monitor.id, 2), &bottom_monitor);
     let workspace_manager = WorkspaceManager::from_workspaces(
       &[&top_workspace_1, &top_workspace_2, &bottom_workspace_1, &bottom_workspace_2],
       0,
@@ -566,7 +605,7 @@ mod tests {
 
     assert_eq!(ordered_workspaces.len(), 4);
     assert_eq!(ordered_workspaces[0], top_workspace_1.id);
-    assert_eq!(ordered_workspaces[1], top_workspace_2.id);
+    assert_eq!(ordered_workspaces[1], top_workspace_2.id,);
     assert_eq!(ordered_workspaces[2], bottom_workspace_1.id);
     assert_eq!(ordered_workspaces[3], bottom_workspace_2.id);
   }
@@ -575,20 +614,21 @@ mod tests {
   fn switch_workspace_when_target_workspace_has_no_windows() {
     // Given the current workspace has one window and target workspace is not active
     let mut workspace_manager = WorkspaceManager::new_test(true);
-    let target_workspace_id = primary_inactive_workspace();
+    let transient_target_ws_id = primary_inactive_ws_id();
     let active_workspaces = workspace_manager.active_workspaces();
     assert_eq!(active_workspaces.len(), 2);
-    assert!(active_workspaces.contains(primary_active_workspace()));
-    assert!(active_workspaces.contains(secondary_active_workspace()));
+    assert!(active_workspaces.contains(primary_active_ws_id()));
+    assert!(active_workspaces.contains(secondary_active_ws_id()));
+    let persistent_target_ws_id = PersistentWorkspaceId::from(*transient_target_ws_id);
 
     // When the user switches to the target workspace
-    workspace_manager.switch_workspace(*target_workspace_id);
+    workspace_manager.switch_workspace(persistent_target_ws_id);
 
     // Then the active workspace for the relevant monitor is updated
     let active_workspaces = workspace_manager.active_workspaces();
     assert_eq!(active_workspaces.len(), 2, "The number of active workspaces shouldn't change");
-    assert!(active_workspaces.contains(target_workspace_id));
-    assert!(active_workspaces.contains(secondary_active_workspace()));
+    assert!(active_workspaces.contains(transient_target_ws_id));
+    assert!(active_workspaces.contains(secondary_active_ws_id()));
     assert_eq!(
       workspace_manager.windows_api.get_foreground_window().unwrap(),
       WindowHandle::new(1),
@@ -603,7 +643,7 @@ mod tests {
     // And the window on the original workspace has been stored
     let original_workspace = workspace_manager
       .workspaces
-      .get(primary_active_workspace())
+      .get(&(*primary_active_ws_id()).into())
       .expect("Original workspace not found");
     assert_eq!(
       original_workspace.get_windows().len(),
@@ -634,8 +674,8 @@ mod tests {
       true,
     );
     let mut workspace_manager = WorkspaceManager::new_test(true);
-    let target_workspace_id = primary_inactive_workspace();
-    if let Some(target_workspace) = workspace_manager.workspaces.get_mut(target_workspace_id) {
+    let target_workspace_id = primary_inactive_ws_id();
+    if let Some(target_workspace) = workspace_manager.workspaces.get_mut(&(*target_workspace_id).into()) {
       target_workspace.store_and_hide_windows(vec![small_window, large_window], 1.into(), &workspace_manager.windows_api);
     }
     let active_workspaces = workspace_manager.active_workspaces();
@@ -643,13 +683,13 @@ mod tests {
     assert!(!active_workspaces.contains(target_workspace_id));
 
     // When the user switches to the target workspace
-    workspace_manager.switch_workspace(*target_workspace_id);
+    workspace_manager.switch_workspace(PersistentWorkspaceId::from(*target_workspace_id));
 
     // Then the active workspace for the relevant monitor is updated and the large window is brought to the foreground
     let active_workspaces = workspace_manager.active_workspaces();
     assert_eq!(active_workspaces.len(), 2, "The number of active workspaces shouldn't change");
     assert!(active_workspaces.contains(target_workspace_id));
-    assert!(active_workspaces.contains(secondary_active_workspace()));
+    assert!(active_workspaces.contains(secondary_active_ws_id()));
     assert_eq!(
       workspace_manager.windows_api.get_foreground_window().unwrap(),
       WindowHandle::new(3),
@@ -666,16 +706,16 @@ mod tests {
   fn move_window_to_different_workspace_on_same_monitor() {
     // Given the primary monitor has an active workspace with one, visible foreground window
     MockWindowsApi::place_window(WindowHandle::new(1), primary_monitor().handle);
-    let workspace_id = primary_inactive_workspace();
+    let workspace_id = primary_inactive_ws_id();
     let mut workspace_manager = WorkspaceManager::new_test(true);
 
     // When the user moves a window to a different workspace on the same monitor
-    workspace_manager.move_window_to_workspace(*workspace_id);
+    workspace_manager.move_window_to_workspace(PersistentWorkspaceId::from(*workspace_id));
 
     // Then the window appears in the target workspace
     let target_workspace = workspace_manager
       .workspaces
-      .get(workspace_id)
+      .get(&(*workspace_id).into())
       .expect("Target workspace not found");
     assert_eq!(target_workspace.get_windows().len(), 1);
     assert_eq!(target_workspace.get_window_state_info().len(), 1);
@@ -692,8 +732,8 @@ mod tests {
     let active_workspaces = workspace_manager.active_workspaces();
     assert_eq!(active_workspaces.len(), 2);
     assert!(!active_workspaces.contains(workspace_id));
-    assert!(active_workspaces.contains(primary_active_workspace()));
-    assert!(active_workspaces.contains(secondary_active_workspace()));
+    assert!(active_workspaces.contains(primary_active_ws_id()));
+    assert!(active_workspaces.contains(secondary_active_ws_id()));
   }
 
   #[test]
@@ -703,13 +743,13 @@ mod tests {
     let mut workspace_manager = WorkspaceManager::new_test(true);
 
     // When the user moves a window to a different workspace on a different monitor
-    let target_workspace_id = secondary_active_workspace();
-    workspace_manager.move_window_to_workspace(*target_workspace_id);
+    let target_workspace_id = secondary_active_ws_id();
+    workspace_manager.move_window_to_workspace(PersistentWorkspaceId::from(*target_workspace_id));
 
     // Then the window is not stored in the target workspace
     let target_workspace = workspace_manager
       .workspaces
-      .get(target_workspace_id)
+      .get(&(*target_workspace_id).into())
       .expect("Target workspace not found");
     assert_eq!(target_workspace.get_windows().len(), 0);
     assert_eq!(target_workspace.get_window_state_info().len(), 0);
@@ -737,7 +777,7 @@ mod tests {
     let active_workspaces = workspace_manager.active_workspaces();
     assert_eq!(active_workspaces.len(), 2);
     assert!(active_workspaces.contains(target_workspace_id));
-    assert!(active_workspaces.contains(primary_active_workspace()));
+    assert!(active_workspaces.contains(primary_active_ws_id()));
   }
 
   #[test]
@@ -748,13 +788,13 @@ mod tests {
     assert_eq!(workspace_manager.windows_api.get_all_visible_windows().len(), 1);
 
     // When the user moves a window to a different workspace on a different monitor
-    let target_workspace_id = secondary_inactive_workspace();
-    workspace_manager.move_window_to_workspace(*target_workspace_id);
+    let target_workspace_id = secondary_inactive_ws_id();
+    workspace_manager.move_window_to_workspace(PersistentWorkspaceId::from(*target_workspace_id));
 
     // Then the window appears in the target workspace
     let target_workspace = workspace_manager
       .workspaces
-      .get(target_workspace_id)
+      .get(&(*target_workspace_id).into())
       .expect("Target workspace not found");
     assert_eq!(target_workspace.get_windows().len(), 1);
     assert_eq!(target_workspace.get_window_state_info().len(), 1);
@@ -769,8 +809,8 @@ mod tests {
     // But the active workspace has not changed
     let active_workspaces = workspace_manager.active_workspaces();
     assert_eq!(active_workspaces.len(), 2);
-    assert!(active_workspaces.contains(primary_active_workspace()));
-    assert!(active_workspaces.contains(secondary_active_workspace()));
+    assert!(active_workspaces.contains(primary_active_ws_id()));
+    assert!(active_workspaces.contains(secondary_active_ws_id()));
   }
 
   #[test]
@@ -790,8 +830,8 @@ mod tests {
     let mut workspace_manager = WorkspaceManager::new_test(false);
 
     // When the user moves a window to a different workspace on a different monitor
-    let target_workspace_id = secondary_active_workspace();
-    workspace_manager.move_window_to_workspace(*target_workspace_id);
+    let target_workspace_id = secondary_active_ws_id();
+    workspace_manager.move_window_to_workspace(PersistentWorkspaceId::from(*target_workspace_id));
 
     // Then the window was moved to the target workspace, is still in the foreground, and its size was clamped to
     // fit within the target workspace
@@ -825,17 +865,17 @@ mod tests {
     MockWindowsApi::add_or_update_window(w_3.handle, w_3.title.clone(), w_3.rect.into(), false, false, false);
     MockWindowsApi::add_or_update_window(w_4.handle, w_4.title.clone(), w_4.rect.into(), false, false, false);
     let mut workspace_manager = WorkspaceManager::new_test(false);
-    if let Some(workspace) = workspace_manager.workspaces.get_mut(primary_inactive_workspace()) {
+    if let Some(workspace) = workspace_manager.workspaces.get_mut(&(*primary_inactive_ws_id()).into()) {
       workspace.store_and_hide_windows(
         vec![w_2, w_3],
-        primary_inactive_workspace().monitor_handle,
+        primary_active_ws_id().monitor_handle,
         &workspace_manager.windows_api,
       );
     }
-    if let Some(workspace) = workspace_manager.workspaces.get_mut(secondary_inactive_workspace()) {
+    if let Some(workspace) = workspace_manager.workspaces.get_mut(&(*secondary_inactive_ws_id()).into()) {
       workspace.store_and_hide_windows(
         vec![w_4],
-        primary_inactive_workspace().monitor_handle,
+        primary_active_ws_id().monitor_handle,
         &workspace_manager.windows_api,
       );
     }
