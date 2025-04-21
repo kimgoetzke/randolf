@@ -53,7 +53,8 @@ Switching between workspaces and moving windows between them:
 - Allow customising modifier keys and/or customising window/workspace management hotkeys
 - Allow auto-start application on startup
 - Group "snapped" window on a single screen and allow resizing them together
-- Animate window movement
+- Allow moving windows with `Win` + `Left Mouse Button` dragging
+- Allow resizing windows with `Win` + `Right Mouse Button` dragging
 
 ## How to configure
 
@@ -138,6 +139,24 @@ You can create a shortcut to the executable and place it in the startup folder (
 1. Create a shortcut to the executable and cut it
 2. Press `Win` + `r`, type `shell:startup`, and press `Enter`
 3. Paste the shortcut into the startup folder
+
+### Why does this application even exist? What it is purpose?
+
+While [Komorebi](https://github.com/LGUG2Z/komorebi/) is the most feature-rich window tiling manager for Windows I
+know, it requires a commercial license (particularly problematic for since I only use Windows for work), depends on a
+separate hotkey daemon, and enforces tiling for all windows unless explicitly excepted. I also experienced stability and
+configuration issues during my usage.
+
+Randolf was created as a simpler alternative that:
+
+- Does not require a paid commercial license
+- Runs as a standalone application
+- Only includes a handful of essential window management features
+- Provides hotkeys to facilitate a clean desktop without forcing automatic tiling
+- Serves as a fun, little personal learning project
+
+If you are looking for something more sophisticated and feature-rich, I strongly recommend checking
+out [Komorebi](https://github.com/LGUG2Z/komorebi/).
 
 ## How to develop
 
