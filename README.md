@@ -22,7 +22,7 @@ My goal for this project was to implement some key window navigation concepts
 from [my Linux configuration](https://github.com/kimgoetzke/nixos-config) for Windows, offering an experience,
 somewhat closer to that of Linux window managers/compositors such as [Hyprland](https://hyprland.org/). The
 application was created to meet my own needs and started as migration of [Randy](https://github.com/kimgoetzke/randy)
-from C#/.NET to Rust, however contributions or suggestions are welcome.
+from C#/.NET to Rust, however contributions and suggestions (via issues) are welcome.
 
 #### Additional features
 
@@ -92,7 +92,9 @@ Default: `3`
 The number of virtual workspaces that are created on the primary monitor by Randolf. Workspaces are similar to Windows
 desktops but only apply to a single monitor and are much faster to switch.
 
-In addition to the above, the application also supports setting custom hotkeys via the configuration file like so:
+##### Launcher hotkeys
+
+In addition to the above, the application also supports setting custom application launcher hotkeys via the configuration file like so:
 
 ```toml
 [[hotkey]]
