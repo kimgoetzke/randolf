@@ -36,6 +36,10 @@ impl Rect {
     Point::new((self.left + self.right) / 2, (self.top + self.bottom) / 2)
   }
 
+  pub fn contains(&self, point: &Point) -> bool {
+    point.x() >= self.left && point.x() <= self.right && point.y() >= self.top && point.y() <= self.bottom
+  }
+
   pub fn clamp(&self, other: &Self, margin: i32) -> Self {
     Self {
       left: self.left.max(other.left + margin),
@@ -86,7 +90,7 @@ impl Display for Rect {
 
 #[cfg(test)]
 mod tests {
-  use crate::common::{Point, Rect};
+  use crate::common::Rect;
   use windows::Win32::Foundation::RECT;
 
   impl Rect {
@@ -97,10 +101,6 @@ mod tests {
         right: 0,
         bottom: 0,
       }
-    }
-
-    pub fn contains(&self, point: &Point) -> bool {
-      point.x() >= self.left && point.x() <= self.right && point.y() >= self.top && point.y() <= self.bottom
     }
 
     pub fn intersects(&self, other: &Self) -> bool {

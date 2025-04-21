@@ -69,7 +69,7 @@ impl WindowsApi for RealWindowsApi {
     trace!("┌| Found the following windows:");
     let mut i: usize = 1;
     windows.retain(|window| {
-      if self.is_not_a_managed_window(&window.handle) {
+      if self.is_not_a_managed_window(&window.handle) || self.is_window_minimised(window.handle) {
         false
       } else {
         let window_area = ((window.rect.right - window.rect.left) * (window.rect.bottom - window.rect.top)) / 1000;

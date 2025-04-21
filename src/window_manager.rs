@@ -54,6 +54,18 @@ impl<T: WindowsApi + Copy> WindowManager<T> {
     };
 
     self.windows_api.do_close_window(window);
+    let cursor_position = self.windows_api.get_cursor_position();
+    if let Some(window) = self.find_closest_window(cursor_position, Some(window)) {
+      self.windows_api.set_foreground_window(window);
+      let window_info = self
+        .windows_api
+        .get_window_placement(window)
+        .expect("Failed to get window placement");
+      let target_point = Point::from_center_of_rect(&window_info.normal_position);
+      self.windows_api.set_cursor_position(&target_point);
+    } else {
+      info!("No window found to move focus to after closing the current window");
+    }
   }
 
   pub fn switch_workspace(&mut self, id: PersistentWorkspaceId) {
@@ -353,6 +365,58 @@ impl<T: WindowsApi + Copy> WindowManager<T> {
       direction, monitor.center, monitor
     );
   }
+
+  fn find_closest_window(&self, cursor_position: Point, ignored_window: Option<WindowHandle>) -> Option<WindowHandle> {
+    let mut closest_window = (vec![], f64::MAX);
+    self
+      .windows_api
+      .get_all_visible_windows()
+      .iter()
+      .filter(|w| ignored_window != Some(w.handle))
+      .for_each(|w| {
+        let distance = cursor_position.distance_to(&w.center);
+        trace!(
+          "Distance from cursor position {} to window {} \"{}\" is {}",
+          cursor_position,
+          w.handle,
+          w.title_trunc(),
+          distance
+        );
+        if distance == closest_window.1 {
+          closest_window.0.push(w.clone());
+        } else if distance < closest_window.1 {
+          closest_window.0.clear();
+          closest_window.0.push(w.clone());
+          closest_window.1 = distance;
+        }
+      });
+    match closest_window.0.len() {
+      0 => {
+        trace!("No windows found close to {}", cursor_position);
+
+        None
+      }
+      1 => Some(closest_window.0.first().map(|w| w.handle)?),
+      _ => {
+        let smallest_window = closest_window
+          .0
+          .iter()
+          .min_by_key(|window| {
+            let width = window.rect.right - window.rect.left;
+            let height = window.rect.bottom - window.rect.top;
+            width * height
+          })
+          .map(|window| window.handle)
+          .expect("Failed to get the smallest window");
+        trace!(
+          "Found multiple windows closest to cursor position {}, returning {} which is the smallest one",
+          cursor_position, smallest_window
+        );
+
+        Some(smallest_window)
+      }
+    }
+  }
 }
 
 fn add_or_update_previous_placement(
@@ -592,5 +656,131 @@ mod tests {
     manager.close_window();
 
     assert!(manager.windows_api.get_all_visible_windows().is_empty());
+  }
+
+  #[test]
+  fn find_closest_window_returns_none_when_no_windows_are_visible() {
+    let cursor_position = Point::new(100, 100);
+    let manager = WindowManager::default(MockWindowsApi);
+
+    let result = manager.find_closest_window(cursor_position, None);
+
+    assert!(result.is_none());
+  }
+
+  #[test]
+  fn find_closest_window_returns_window_under_cursor() {
+    let cursor_position = Point::new(50, 50);
+    let window_handle = WindowHandle::new(1);
+    MockWindowsApi::set_cursor_position(cursor_position);
+    MockWindowsApi::add_or_update_window(
+      window_handle,
+      "Test Window".to_string(),
+      Rect::new(0, 0, 100, 100).into(),
+      false,
+      false,
+      true,
+    );
+    let manager = WindowManager::default(MockWindowsApi);
+
+    let result = manager.find_closest_window(cursor_position, None);
+
+    assert_eq!(result, Some(window_handle));
+  }
+
+  #[test]
+  fn find_closest_window_returns_smallest_window_when_multiple_windows_overlap() {
+    let cursor_position = Point::new(50, 50);
+    let expected_window_handle = WindowHandle::new(2);
+    MockWindowsApi::set_cursor_position(cursor_position);
+    MockWindowsApi::add_or_update_window(
+      WindowHandle::new(1),
+      "Window 1".to_string(),
+      Rect::new(40, 40, 60, 60).into(),
+      false,
+      false,
+      true,
+    );
+    MockWindowsApi::add_or_update_window(
+      expected_window_handle,
+      "Window 2".to_string(),
+      Rect::new(45, 45, 55, 55).into(),
+      false,
+      false,
+      false,
+    );
+    let manager = WindowManager::default(MockWindowsApi);
+
+    let result = manager.find_closest_window(cursor_position, None);
+
+    assert_eq!(result, Some(expected_window_handle));
+  }
+
+  #[test]
+  fn find_closest_window_returns_closest_window_when_cursor_is_outside_all_windows() {
+    let cursor_position = Point::new(1000, 1000);
+    let window_handle = WindowHandle::new(1);
+    MockWindowsApi::set_cursor_position(cursor_position);
+    MockWindowsApi::add_or_update_window(
+      window_handle,
+      "Test Window".to_string(),
+      Rect::new(0, 0, 100, 100).into(),
+      false,
+      false,
+      false,
+    );
+    let manager = WindowManager::default(MockWindowsApi);
+
+    let result = manager.find_closest_window(cursor_position, None);
+
+    assert_eq!(result, Some(window_handle));
+  }
+
+  #[test]
+  fn find_closest_window_ignores_minimised_or_hidden_windows() {
+    let cursor_position = Point::new(50, 50);
+    let expected_window_handle = WindowHandle::new(2);
+    MockWindowsApi::set_cursor_position(cursor_position);
+    MockWindowsApi::add_or_update_window(
+      WindowHandle::new(1),
+      "Window 1".to_string(),
+      Rect::new(40, 40, 60, 60).into(),
+      true,
+      false,
+      true,
+    );
+    MockWindowsApi::add_or_update_window(
+      expected_window_handle,
+      "Window 2".to_string(),
+      Rect::new(45, 45, 55, 55).into(),
+      false,
+      true,
+      false,
+    );
+    let manager = WindowManager::default(MockWindowsApi);
+
+    let result = manager.find_closest_window(cursor_position, None);
+
+    assert!(result.is_none());
+  }
+
+  #[test]
+  fn find_closest_window_ignores_provided_window() {
+    let cursor_position = Point::new(50, 50);
+    let expected_window_handle = WindowHandle::new(2);
+    MockWindowsApi::set_cursor_position(cursor_position);
+    MockWindowsApi::add_or_update_window(
+      WindowHandle::new(1),
+      "Window 1".to_string(),
+      Rect::new(0, 0, 60, 60).into(),
+      true,
+      false,
+      true,
+    );
+    let manager = WindowManager::default(MockWindowsApi);
+
+    let result = manager.find_closest_window(cursor_position, Some(expected_window_handle));
+
+    assert!(result.is_none());
   }
 }

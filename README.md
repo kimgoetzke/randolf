@@ -36,8 +36,14 @@ from C#/.NET to Rust, however contributions or suggestions are welcome.
 
 ## Demo
 
-Selecting and moving windows using shortcuts:
+Selecting and moving windows using hotkeys:
 ![Demo GIF 1](assets/demo_1.gif)
+
+Opening and closing applications using hotkeys:
+
+_Note that the newly opened application is focussed upon opening and, after closing a window, the closest window is
+selected._
+![Demo GIF 2](assets/demo_2.gif)
 
 (More GIFs to follow...)
 

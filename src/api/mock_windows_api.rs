@@ -52,9 +52,6 @@ pub(crate) mod test {
       is_hidden: bool,
       is_foreground: bool,
     ) {
-      trace!(
-        "Mock windows API adds window {handle} - title: {title}, sizing: {sizing:?}, is_minimised: {is_minimised}, is_hidden: {is_hidden}, is_foreground: {is_foreground}"
-      );
       MOCK_STATE.with(|state| {
         let mut state = state.borrow_mut();
         let window = Window::new(handle.into(), title, sizing.clone().into());
@@ -100,6 +97,9 @@ pub(crate) mod test {
       );
       MOCK_STATE.with(|state| {
         let mut state = state.borrow_mut();
+        if state.monitors.contains_key(&monitor_handle) {
+          panic!("Monitor with handle {monitor_handle} already exists");
+        }
         let work_area_bottom = monitor_area.bottom - 20;
         let monitor = Monitor {
           id: monitor_id,
@@ -172,7 +172,7 @@ pub(crate) mod test {
           .borrow()
           .windows
           .values()
-          .filter(|ws| !ws.is_hidden && !ws.is_closed)
+          .filter(|ws| !ws.is_hidden && !ws.is_closed && !ws.is_minimised)
           .map(|ws| ws.window.clone())
           .collect()
       })
