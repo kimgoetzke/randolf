@@ -1,5 +1,5 @@
 use crate::utils::Direction;
-use crate::utils::permanent_workspace_id::PersistentWorkspaceId;
+use crate::utils::persistent_workspace_id::PersistentWorkspaceId;
 use std::fmt::Display;
 
 #[derive(Debug)]
@@ -21,8 +21,8 @@ impl Display for Command {
       Command::NearMaximiseWindow => write!(f, "Near maximise window"),
       Command::MoveWindow(direction) => write!(f, "Move window [{:?}]", direction),
       Command::MoveCursor(direction) => write!(f, "Move cursor [{:?}]", direction),
-      Command::SwitchWorkspace(id) => write!(f, "Switch to workspace {id}"),
-      Command::MoveWindowToWorkspace(id) => write!(f, "Move window to workspace {id}"),
+      Command::SwitchWorkspace(id) => write!(f, "Switch to workspace [{id}]"),
+      Command::MoveWindowToWorkspace(id) => write!(f, "Move window to workspace [{id}]"),
       Command::OpenApplication(path, as_admin) => write!(f, "Open [{path}] as admin [{as_admin}]"),
       Command::Exit => write!(f, "Exit application"),
     }

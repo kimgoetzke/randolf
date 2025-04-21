@@ -8,6 +8,7 @@ mod log_manager;
 mod tray_menu_manager;
 mod utils;
 mod window_manager;
+mod workspace_guard;
 mod workspace_manager;
 
 #[macro_use]

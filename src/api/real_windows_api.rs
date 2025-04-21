@@ -396,16 +396,6 @@ impl WindowsApi for RealWindowsApi {
     }
   }
 
-  fn get_monitor_handle_for_id(&self, id: &[u16; 32]) -> Option<MonitorHandle> {
-    if let Some(monitor) = get_all_monitors().get_by_id(id) {
-      Some(monitor.handle)
-    } else {
-      error!("Failed to get monitor for id {id:?}");
-
-      None
-    }
-  }
-
   fn get_monitor_handle_for_window_handle(&self, handle: WindowHandle) -> MonitorHandle {
     unsafe { MonitorFromWindow(handle.as_hwnd(), MONITOR_DEFAULTTONEAREST) }.into()
   }
@@ -574,12 +564,12 @@ extern "system" fn enum_monitors_callback(hmonitor: HMONITOR, _dc: HDC, _rect: *
   }
 }
 
-fn get_persistent_device_name(handle: &MonitorHandle, info: &MONITORINFOEXW) -> [u16; 32] {
-  debug!(
-    "Persistent device name of {} is \"{}\"",
-    handle,
-    String::from_utf16_lossy(&info.szDevice)
-  );
+fn get_persistent_device_name(_handle: &MonitorHandle, info: &MONITORINFOEXW) -> [u16; 32] {
+  // trace!(
+  //   "Persistent device name of {} is \"{}\"",
+  //   handle,
+  //   String::from_utf16_lossy(&info.szDevice)
+  // );
 
   info.szDevice
 }

@@ -16,6 +16,15 @@ impl PersistentWorkspaceId {
   pub fn id_to_string(&self) -> String {
     id_to_string_or_panic(&self.monitor_id)
   }
+
+  #[allow(unused)]
+  pub fn is_same_monitor(&self, other: &Self) -> bool {
+    self.monitor_id == other.monitor_id
+  }
+
+  pub fn is_same_workspace(&self, other: &Self) -> bool {
+    self.workspace == other.workspace
+  }
 }
 
 impl From<TransientWorkspaceId> for PersistentWorkspaceId {
@@ -29,7 +38,7 @@ impl From<TransientWorkspaceId> for PersistentWorkspaceId {
 
 impl Display for PersistentWorkspaceId {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    write!(f, "d#{}-{}", self.id_to_string(), self.workspace)
+    write!(f, "wsp#{}-{}", self.id_to_string(), self.workspace)
   }
 }
 
@@ -79,12 +88,44 @@ mod tests {
   fn display_formats_permanent_workspace_id_correctly() {
     let id = PersistentWorkspaceId::new_test(3);
 
-    assert_eq!(id.to_string(), "d#P_DISPLAY-3");
+    assert_eq!(id.to_string(), "wsp#P_DISPLAY-3");
   }
 
   #[test]
   #[should_panic(expected = "Failed to convert id to string")]
   fn id_to_string_panics_on_empty_id() {
     PersistentWorkspaceId::new([0; 32], 1).id_to_string();
+  }
+
+  #[test]
+  fn workspace_id_same_monitor_returns_true() {
+    let id1 = PersistentWorkspaceId::new([1; 32], 1);
+    let id2 = PersistentWorkspaceId::new([1; 32], 2);
+
+    assert!(id1.is_same_monitor(&id2));
+  }
+
+  #[test]
+  fn workspace_id_different_monitor_returns_false() {
+    let id1 = PersistentWorkspaceId::new([1; 32], 1);
+    let id2 = PersistentWorkspaceId::new([2; 32], 1);
+
+    assert!(!id1.is_same_monitor(&id2));
+  }
+
+  #[test]
+  fn workspace_id_same_workspace_returns_true() {
+    let id1 = PersistentWorkspaceId::new([1; 32], 1);
+    let id2 = PersistentWorkspaceId::new([2; 32], 1);
+
+    assert!(id1.is_same_workspace(&id2));
+  }
+
+  #[test]
+  fn workspace_id_different_workspace_returns_false() {
+    let id1 = PersistentWorkspaceId::new([1; 32], 1);
+    let id2 = PersistentWorkspaceId::new([1; 32], 2);
+
+    assert!(!id1.is_same_workspace(&id2));
   }
 }

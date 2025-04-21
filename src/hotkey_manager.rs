@@ -231,7 +231,7 @@ mod tests {
         assert_eq!(
           captured_logs[i].body,
           format!(
-            "Registered hotkey [{}] + [{}] to switch to workspace [d#P_DISPLAY-{}]",
+            "Registered hotkey [{}] + [{}] to switch to workspace [wsp#P_DISPLAY-{}]",
             MAIN_MOD,
             i + 1,
             i + 1

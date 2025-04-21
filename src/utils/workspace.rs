@@ -89,7 +89,7 @@ impl Workspace {
   /// after restoring.
   pub fn restore_windows(&mut self, api: &impl WindowsApi) {
     if self.windows.is_empty() && self.minimised_windows.is_empty() {
-      debug!("No windows to restore for workspace {}", self.id);
+      debug!("No windows to restore for workspace [{}]", self.id);
       return;
     }
     if self.windows.len() != self.minimised_windows.len() {
@@ -111,7 +111,7 @@ impl Workspace {
         Some(window) => {
           if api.is_window_hidden(&window.handle) {
             debug!(
-              "Restoring {} {} on workspace {}",
+              "Restoring {} \"{}\" on workspace [{}]",
               window.handle,
               window.title_trunc(),
               self.id
@@ -126,7 +126,7 @@ impl Workspace {
         }
       }
     }
-    debug!("Restored [{}] window(s) on workspace {}", i, self.id);
+    debug!("Restored [{}] window(s) on workspace [{}]", i, self.id);
     self.clear_windows();
   }
 
@@ -139,7 +139,7 @@ impl Workspace {
     windows_api.set_window_position(window.handle, window.rect);
     windows_api.set_cursor_position(&window.rect.center());
     trace!(
-      "Moved {} \"{}\" to active workspace {}",
+      "Moved {} \"{}\" to active workspace [{}]",
       window.handle,
       window.title_trunc(),
       self.id
@@ -149,7 +149,7 @@ impl Workspace {
   fn store_and_hide_window(&mut self, mut window: Window, current_monitor: MonitorHandle, windows_api: &impl WindowsApi) {
     if !self.windows.iter().any(|w| w.handle == window.handle) {
       if windows_api.is_window_minimised(window.handle) {
-        debug!("{} is minimised, ignoring it for workspace {}", window.handle, self.id);
+        debug!("{} is minimised, ignoring it for workspace [{}]", window.handle, self.id);
         return;
       }
       window = self.update_window_rect_if_required(window, current_monitor, windows_api);
@@ -157,13 +157,16 @@ impl Workspace {
       self.minimised_windows.push((window.handle, false));
       self.windows.push(window.clone());
       trace!(
-        "Stored and hid {} \"{}\" in workspace {}",
+        "Stored and hid {} \"{}\" in workspace [{}]",
         window.handle,
         window.title_trunc(),
         self.id
       );
     } else {
-      warn!("{} already exists in workspace {}, ignoring request", window.handle, self.id);
+      warn!(
+        "{} already exists in workspace [{}], ignoring request",
+        window.handle, self.id
+      );
     }
   }
 
@@ -219,16 +222,12 @@ impl Workspace {
       let target_monitor_work_area_center = self.monitor.work_area.center();
       let left = target_monitor_work_area_center.x() - (width / 2);
       let top = target_monitor_work_area_center.y() - (height / 2);
-      debug!(
-        "Proposed size for {} is top: {}, left: {}, width: {}, height: {}",
-        window.handle, top, left, width, height
-      );
       window.rect = Rect::new(left, top, left + width, top + height).clamp(&self.monitor.work_area, 10);
     }
 
     window.center = window.rect.center();
-    debug!(
-      "Because {} is being moved to a different monitor, its location was updated from {} to {}",
+    trace!(
+      "{} is being moved to a different monitor, its location was updated from {} to {}",
       window.handle, old_rect, window.rect
     );
 

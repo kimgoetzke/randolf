@@ -1,10 +1,11 @@
 use crate::api::WindowsApi;
-use crate::utils::{MonitorHandle, PersistentWorkspaceId, TransientWorkspaceId, Window, Workspace};
+use crate::utils::{Monitors, PersistentWorkspaceId, TransientWorkspaceId, Workspace};
+use crate::workspace_guard::WorkspaceGuard;
 use std::collections::HashMap;
 
 pub struct WorkspaceManager<T: WindowsApi> {
-  workspaces: HashMap<PersistentWorkspaceId, Workspace>,
-  windows_api: T,
+  pub(crate) workspaces: HashMap<PersistentWorkspaceId, Workspace>,
+  pub(crate) windows_api: T,
   margin: i32,
   additional_workspace_count: i32,
 }
@@ -18,9 +19,19 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
       additional_workspace_count,
     };
     workspace_manager.initialise_workspaces();
-    workspace_manager.log_initialised_workspaces();
 
     workspace_manager
+  }
+
+  pub(crate) fn create_workspace_id_map(&self, monitors: Monitors) -> HashMap<PersistentWorkspaceId, TransientWorkspaceId> {
+    let mut workspace_id_map = HashMap::new();
+    for workspace in self.workspaces.values() {
+      if let Some(monitor) = monitors.get_by_id(&workspace.id.monitor_id) {
+        workspace_id_map.insert(workspace.id, TransientWorkspaceId::from(workspace.id, monitor.handle));
+      }
+    }
+
+    workspace_id_map
   }
 
   fn initialise_workspaces(&mut self) {
@@ -46,352 +57,31 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
   }
 
   pub fn get_ordered_permanent_workspace_ids(&mut self) -> Vec<PersistentWorkspaceId> {
-    self
-      .get_ordered_workspace_ids()
-      .iter_mut()
-      .map(|id| PersistentWorkspaceId::from(*id))
-      .collect()
-  }
-
-  /// Returns the unique IDs for all workspaces across all monitors. Ordered by monitor position. Returned in ascending
-  /// order from top-left to bottom-right.
-  fn get_ordered_workspace_ids(&self) -> Vec<PersistentWorkspaceId> {
-    let mut workspaces_by_monitor: HashMap<i64, Vec<&Workspace>> = HashMap::new();
-    for workspace in self.workspaces.values() {
-      workspaces_by_monitor
-        .entry(workspace.monitor_handle)
-        .or_default()
-        .push(workspace);
-    }
-
-    let mut monitor_handles: Vec<i64> = workspaces_by_monitor.keys().cloned().collect();
-    monitor_handles.sort_by(|a, b| {
-      let monitor_a = self
-        .workspaces
-        .values()
-        .find(|w| w.monitor_handle == *a)
-        .map(|w| &w.monitor)
-        .expect("Monitor not found");
-
-      let monitor_b = self
-        .workspaces
-        .values()
-        .find(|w| w.monitor_handle == *b)
-        .map(|w| &w.monitor)
-        .expect("Monitor not found");
-
-      // Left to right
-      let a_center_x = monitor_a.center.x();
-      let b_center_x = monitor_b.center.x();
-      if a_center_x != b_center_x {
-        return a_center_x.cmp(&b_center_x);
-      }
-
-      // Top to bottom
-      let a_center_y = monitor_a.center.y();
-      let b_center_y = monitor_b.center.y();
-
-      a_center_y.cmp(&b_center_y)
-    });
-
-    let mut result = Vec::new();
-    for monitor_handle in monitor_handles {
-      let mut monitor_workspaces = workspaces_by_monitor.remove(&monitor_handle).expect("Monitor not found");
-      monitor_workspaces.sort_by_key(|w| w.id);
-      for workspace in monitor_workspaces {
-        result.push(workspace.id);
-      }
-    }
-
-    debug!(
-      "Ordered workspaces: [{}]",
-      result.iter().map(|id| format!("{}", id)).collect::<Vec<_>>().join(", ")
-    );
-
-    result
+    let guard = WorkspaceGuard::new(self);
+    guard.get_ordered_workspace_ids()
   }
 
   pub fn switch_workspace(&mut self, target_workspace_id: PersistentWorkspaceId) {
-    let target_workspace_id = self.reinitialise_and_resolve_to_transient_workspace_id(target_workspace_id);
-    let current_workspace_id = match self.get_current_workspace_id_if_different(target_workspace_id) {
-      Some(id) => id,
-      None => return,
-    };
-
-    // Identify the active workspace on the target monitor
-    let target_monitor_active_workspace_id = if let Some(workspace) = self.get_active_workspace(&target_workspace_id) {
-      workspace
-    } else {
-      if target_workspace_id.monitor_handle != current_workspace_id.monitor_handle {
-        error!(
-          "Failed to switch workspace because: The target workspace ({}) does not exist",
-          target_workspace_id.clone()
-        );
-        return;
-      }
-      trace!(
-        "Expecting target monitor workspace ({}) and current workspace ({}) to be on the same monitor",
-        target_workspace_id.monitor_handle, current_workspace_id.monitor_handle
-      );
-      current_workspace_id
-    };
-
-    // Hide and store all windows in the target workspace, if required
-    if !target_workspace_id.is_same_workspace(&target_monitor_active_workspace_id) {
-      if let Some(target_monitor_active_workspace) = self.workspaces.get_mut(&target_monitor_active_workspace_id.into()) {
-        let current_windows = self
-          .windows_api
-          .get_all_visible_windows_within_area(target_monitor_active_workspace.monitor.monitor_area);
-        let current_monitor = MonitorHandle::from(target_monitor_active_workspace.monitor_handle);
-        target_monitor_active_workspace.store_and_hide_windows(current_windows, current_monitor, &self.windows_api);
-      } else {
-        warn!(
-          "Failed to switch workspace because: The workspace ({}) to store the window doesn't exist",
-          target_monitor_active_workspace_id
-        );
-        self.log_initialised_workspaces();
-        return;
-      };
-    }
-
-    // Attempt to find the largest window on the target workspace
-    let largest_window = if let Some(new_workspace) = self.workspaces.get(&target_workspace_id.into()) {
-      let visible_windows = self
-        .windows_api
-        .get_all_visible_windows_within_area(new_workspace.monitor.work_area);
-      let mut windows: Vec<Window> = visible_windows
-        .iter()
-        .filter(|w| !self.workspaces.values().any(|workspace| workspace.stores(&w.handle)))
-        .cloned()
-        .collect();
-      if let Some(window) = new_workspace.get_largest_window() {
-        windows.push(window);
-      }
-      windows.iter().max_by_key(|w| w.rect.area()).cloned().to_owned()
-    } else {
-      None
-    };
-
-    // Restore windows for the new workspace and set the cursor position
-    if let Some(new_workspace) = self.workspaces.get_mut(&target_workspace_id.into()) {
-      new_workspace.restore_windows(&self.windows_api);
-      if let Some(largest_window) = largest_window {
-        trace!(
-          "Setting foreground window to {} \"{}\"",
-          largest_window.handle,
-          largest_window.title_trunc()
-        );
-        self.windows_api.set_foreground_window(largest_window.handle);
-        self.windows_api.set_cursor_position(&largest_window.center);
-      } else {
-        self.windows_api.set_cursor_position(&new_workspace.monitor.center);
-      }
-    } else {
-      // Restore the original workspace if the target workspace doesn't exist
-      warn!(
-        "Failed to switch workspace because: The target workspace ({}) does not exist",
-        target_workspace_id
-      );
-      if let Some(original_workspace) = self.workspaces.get_mut(&current_workspace_id.into()) {
-        original_workspace.restore_windows(&self.windows_api);
-        self.windows_api.set_cursor_position(&original_workspace.monitor.center);
-        debug!(
-          "Restored original workspace [{}] due to earlier failures",
-          current_workspace_id
-        );
-      } else {
-        error!(
-          "Failed to restore original workspace [{}] because it does not exist",
-          current_workspace_id
-        );
-        panic!(
-          "Failed to restore original workspace [{}] because it does not exist",
-          current_workspace_id
-        );
-      }
-      return;
-    };
-
-    // Update the active workspaces
-    if !target_workspace_id.is_same_workspace(&target_monitor_active_workspace_id) {
-      self.set_active_workspace(&target_workspace_id, true);
-      self.set_active_workspace(&target_monitor_active_workspace_id, false);
-    }
-
-    info!("Switched workspace from {} to {}", current_workspace_id, target_workspace_id);
+    let mut guard = WorkspaceGuard::new(self);
+    guard.switch_workspace(target_workspace_id);
   }
 
   pub fn move_window_to_workspace(&mut self, target_workspace_id: PersistentWorkspaceId) {
-    // Guard against moving a window to the same workspace
-    let target_workspace_id = self.reinitialise_and_resolve_to_transient_workspace_id(target_workspace_id);
-    match self.get_current_workspace_id_if_different(target_workspace_id) {
-      Some(_) => {}
-      None => return,
-    };
-
-    // Collect all relevant information
-    let Some(foreground_window) = self.windows_api.get_foreground_window() else {
-      debug!("Ignored request to move window to workspace because there is no foreground window");
-      return;
-    };
-    let Some(window_placement) = self.windows_api.get_window_placement(foreground_window) else {
-      debug!("Ignored request to move window to workspace because the window is not visible");
-      return;
-    };
-    let window_title = self.windows_api.get_window_title(&foreground_window);
-    let window = Window::new(foreground_window.as_hwnd(), window_title, window_placement.normal_position);
-    let current_monitor = self.windows_api.get_monitor_handle_for_window_handle(window.handle);
-
-    // Move or store the window
-    if let Some(target_workspace) = self.workspaces.get_mut(&target_workspace_id.into()) {
-      target_workspace.move_or_store_and_hide_window(window.clone(), current_monitor, &self.windows_api);
-    } else {
-      warn!(
-        "Failed to move window to workspace because: The target workspace ({}) does not exist",
-        target_workspace_id
-      );
-    }
-
-    info!(
-      "Moved {} \"{}\" to workspace {}",
-      window.handle,
-      window.title_trunc(),
-      target_workspace_id
-    );
+    let mut guard = WorkspaceGuard::new(self);
+    guard.move_window_to_workspace(target_workspace_id);
   }
 
   pub fn restore_all_managed_windows(&mut self) {
-    for workspace in self.workspaces.values_mut() {
-      workspace.restore_windows(&self.windows_api);
-    }
-  }
-
-  fn reinitialise_and_resolve_to_transient_workspace_id(
-    &mut self,
-    persistent_workspace_id: PersistentWorkspaceId,
-  ) -> TransientWorkspaceId {
-    let monitors = self.windows_api.get_all_monitors();
-    self.workspaces.iter_mut().for_each(|(_, workspace)| {
-      if let Some(monitor) = monitors.get_by_id(&workspace.id.monitor_id) {
-        workspace.update_handle(monitor.handle);
-      }
-    });
-    if let Some(monitor) = monitors.get_by_id(&persistent_workspace_id.monitor_id) {
-      debug!(
-        "Resolved persistent workspace ID {} to monitor handle {}",
-        persistent_workspace_id, monitor.handle
-      );
-      TransientWorkspaceId::new(
-        persistent_workspace_id.monitor_id,
-        monitor.handle,
-        persistent_workspace_id.workspace,
-      )
-    } else {
-      error!(
-        "Failed to resolve persistent workspace ID {} to monitor handle",
-        persistent_workspace_id
-      );
-      panic!(
-        "Failed to resolve persistent workspace ID {} to monitor handle",
-        persistent_workspace_id
-      );
-    }
-  }
-
-  fn get_current_workspace_id_if_different(
-    &mut self,
-    target_workspace_id: TransientWorkspaceId,
-  ) -> Option<TransientWorkspaceId> {
-    let Some(current_workspace_id) = self.get_active_workspace_for_cursor_position() else {
-      warn!("Failed to complete request: Unable to find the active workspace");
-      return None;
-    };
-
-    if target_workspace_id == current_workspace_id {
-      info!(
-        "Ignored request because current and target workspaces are the same: {}",
-        target_workspace_id
-      );
-      return None;
-    }
-
-    Some(current_workspace_id)
-  }
-
-  fn get_active_workspace_for_cursor_position(&mut self) -> Option<TransientWorkspaceId> {
-    let cursor_position = self.windows_api.get_cursor_position();
-    let monitor_handle = self.windows_api.get_monitor_handle_for_point(&cursor_position);
-    let monitor_id = self
-      .windows_api
-      .get_monitor_id_for_handle(monitor_handle)
-      .expect("Cannot find monitor for handle");
-
-    let workspace_ids = self
-      .workspaces
-      .iter()
-      .filter(|(id, workspace)| workspace.is_active() && id.monitor_id == monitor_id)
-      .map(|(id, _)| id)
-      .collect::<Vec<_>>();
-
-    if workspace_ids.len() == 1 {
-      Some(TransientWorkspaceId::from(*workspace_ids[0], monitor_handle))
-    } else {
-      error!(
-        "Data inconsistency detected: Found {} active workspaces for monitor [{monitor_handle}]: {:?}",
-        workspace_ids.len(),
-        workspace_ids,
-      );
-
-      None
-    }
-  }
-
-  fn get_active_workspace(&mut self, workspace_id: &TransientWorkspaceId) -> Option<TransientWorkspaceId> {
-    self
-      .workspaces
-      .iter()
-      .filter(|(_, workspace)| workspace.is_active())
-      .map(|(id, ws)| TransientWorkspaceId::new(id.monitor_id, MonitorHandle::from(ws.monitor_handle), id.workspace))
-      .find(|id| id.monitor_handle == workspace_id.monitor_handle)
-  }
-
-  fn set_active_workspace(&mut self, workspace_id: &TransientWorkspaceId, is_active: bool) {
-    self
-      .workspaces
-      .iter_mut()
-      .filter(|(id, workspace)| workspace.id.monitor_id == workspace_id.monitor_id && id.workspace == workspace_id.workspace)
-      .for_each(|(_, workspace)| {
-        workspace.set_active(is_active);
-      });
-  }
-
-  fn log_initialised_workspaces(&self) {
-    let ordered_workspaces = self.get_ordered_workspace_ids();
-    debug!(
-      "Found [{}] workspaces (ordered): [{}] of which [{}] are active",
-      ordered_workspaces.len(),
-      ordered_workspaces
-        .iter()
-        .map(|id| format!("{}", id))
-        .collect::<Vec<_>>()
-        .join(", "),
-      self
-        .workspaces
-        .iter()
-        .filter(|(_, workspace)| workspace.is_active())
-        .map(|(id, _)| *id)
-        .map(|id| format!("{}", id))
-        .collect::<Vec<_>>()
-        .join(", "),
-    );
+    let mut guard = WorkspaceGuard::new(self);
+    guard.restore_all_managed_windows();
   }
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
   use super::*;
   use crate::api::MockWindowsApi;
-  use crate::utils::{Monitor, Point, Rect, TransientWorkspaceId, Workspace};
+  use crate::utils::{Monitor, MonitorHandle, Point, Rect, TransientWorkspaceId, Window, Workspace};
   use crate::utils::{Sizing, WindowHandle};
   use std::sync::OnceLock;
 
@@ -402,7 +92,7 @@ mod tests {
   static SECONDARY_ACTIVE_WORKSPACE: OnceLock<TransientWorkspaceId> = OnceLock::new();
   static SECONDARY_INACTIVE_WORKSPACE: OnceLock<TransientWorkspaceId> = OnceLock::new();
 
-  fn primary_monitor() -> &'static Monitor {
+  pub fn primary_monitor() -> &'static Monitor {
     PRIMARY_MONITOR.get_or_init(Monitor::mock_1)
   }
 
@@ -410,7 +100,7 @@ mod tests {
     SECONDARY_MONITOR.get_or_init(Monitor::mock_2)
   }
 
-  fn primary_active_ws_id() -> &'static TransientWorkspaceId {
+  pub fn primary_active_ws_id() -> &'static TransientWorkspaceId {
     PRIMARY_ACTIVE_WORKSPACE.get_or_init(|| TransientWorkspaceId::new(primary_monitor().id, primary_monitor().handle, 1))
   }
 
@@ -531,28 +221,6 @@ mod tests {
   }
 
   #[test]
-  fn get_active_workspace_for_cursor_position_returns_workspace_if_one_active_workspace_found() {
-    let mut workspace_manager = WorkspaceManager::new_test(false);
-    // Cursor on primary monitor
-    MockWindowsApi::set_cursor_position(Point::new(50, 50));
-
-    let result = workspace_manager.get_active_workspace_for_cursor_position();
-
-    assert_eq!(result, Some(*primary_active_ws_id()));
-  }
-
-  #[test]
-  fn get_active_workspace_for_cursor_position_returns_none_when_no_matches() {
-    let mut workspace_manager = WorkspaceManager::default();
-    MockWindowsApi::set_cursor_position(Point::new(100, 100));
-    MockWindowsApi::add_monitor(MonitorHandle::from(5), Rect::new(0, 0, 200, 200), true);
-
-    let result = workspace_manager.get_active_workspace_for_cursor_position();
-
-    assert!(result.is_none());
-  }
-
-  #[test]
   fn get_ordered_workspace_ids_left_to_right() {
     let left_monitor = Monitor::new_test(1, Rect::new(0, 0, 99, 100));
     let center_monitor = Monitor::new_test(2, Rect::new(100, 0, 199, 100));
@@ -560,9 +228,10 @@ mod tests {
     let left_workspace = Workspace::new_test(PersistentWorkspaceId::new(left_monitor.id, 1), &left_monitor);
     let center_workspace = Workspace::new_test(PersistentWorkspaceId::new(center_monitor.id, 1), &center_monitor);
     let right_workspace = Workspace::new_test(PersistentWorkspaceId::new(right_monitor.id, 1), &right_monitor);
-    let workspace_manager = WorkspaceManager::from_workspaces(&[&left_workspace, &center_workspace, &right_workspace], 0);
+    let mut workspace_manager =
+      WorkspaceManager::from_workspaces(&[&left_workspace, &center_workspace, &right_workspace], 0);
 
-    let ordered_workspaces = workspace_manager.get_ordered_workspace_ids();
+    let ordered_workspaces = workspace_manager.get_ordered_permanent_workspace_ids();
 
     assert_eq!(ordered_workspaces.len(), 3);
     assert_eq!(ordered_workspaces[0], left_workspace.id);
@@ -578,9 +247,10 @@ mod tests {
     let top_workspace = Workspace::new_test(PersistentWorkspaceId::new(top_monitor.id, 1), &top_monitor);
     let center_workspace = Workspace::new_test(PersistentWorkspaceId::new(center_monitor.id, 1), &center_monitor);
     let bottom_workspace = Workspace::new_test(PersistentWorkspaceId::new(bottom_monitor.id, 1), &bottom_monitor);
-    let workspace_manager = WorkspaceManager::from_workspaces(&[&top_workspace, &center_workspace, &bottom_workspace], 0);
+    let mut workspace_manager =
+      WorkspaceManager::from_workspaces(&[&top_workspace, &center_workspace, &bottom_workspace], 0);
 
-    let ordered_workspaces = workspace_manager.get_ordered_workspace_ids();
+    let ordered_workspaces = workspace_manager.get_ordered_permanent_workspace_ids();
 
     assert_eq!(ordered_workspaces.len(), 3);
     assert_eq!(ordered_workspaces[0], top_workspace.id,);
@@ -596,12 +266,12 @@ mod tests {
     let top_workspace_2 = Workspace::new_test(PersistentWorkspaceId::new(top_monitor.id, 2), &top_monitor);
     let bottom_workspace_1 = Workspace::new_test(PersistentWorkspaceId::new(bottom_monitor.id, 1), &bottom_monitor);
     let bottom_workspace_2 = Workspace::new_test(PersistentWorkspaceId::new(bottom_monitor.id, 2), &bottom_monitor);
-    let workspace_manager = WorkspaceManager::from_workspaces(
+    let mut workspace_manager = WorkspaceManager::from_workspaces(
       &[&top_workspace_1, &top_workspace_2, &bottom_workspace_1, &bottom_workspace_2],
       0,
     );
 
-    let ordered_workspaces = workspace_manager.get_ordered_workspace_ids();
+    let ordered_workspaces = workspace_manager.get_ordered_permanent_workspace_ids();
 
     assert_eq!(ordered_workspaces.len(), 4);
     assert_eq!(ordered_workspaces[0], top_workspace_1.id);

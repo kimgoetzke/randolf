@@ -4,7 +4,6 @@ pub(crate) mod test {
   use crate::api::WindowsApi;
   use crate::utils::{
     Monitor, MonitorHandle, MonitorInfo, Monitors, Point, Rect, Sizing, Window, WindowHandle, WindowPlacement,
-    id_to_string_or_panic,
   };
   use std::cell::RefCell;
   use std::collections::HashMap;
@@ -400,18 +399,6 @@ pub(crate) mod test {
           .monitors
           .get(&handle)
           .map(|monitor_state| monitor_state.monitor.id)
-      })
-    }
-
-    fn get_monitor_handle_for_id(&self, id: &[u16; 32]) -> Option<MonitorHandle> {
-      trace!("Mock windows API gets monitor for id d#{}", id_to_string_or_panic(id));
-      MOCK_STATE.with(|state| {
-        state
-          .borrow()
-          .monitors
-          .iter()
-          .find(|(_, monitor_state)| monitor_state.monitor.id == *id)
-          .map(|(handle, _)| *handle)
       })
     }
 

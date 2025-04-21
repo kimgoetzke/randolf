@@ -104,10 +104,6 @@ impl<T: WindowsApi + Copy> WindowManager<T> {
       Some(window_info) => (Point::from_center_of_rect(&window_info.rect), Some(window_info)),
       None => (cursor_position, None),
     };
-    info!(
-      "Found cursor {} window(s) and cursor is at {cursor_position} with reference point {ref_point}",
-      windows.len()
-    );
 
     if let Some(target_window) = if let Some(vdm) = &self.virtual_desktop_manager {
       self.find_closest_window_in_direction(&ref_point, direction, &windows, vdm, ref_window)
