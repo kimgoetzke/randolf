@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/randolf.png" width="200" height="200" alt="Randolf"/>
+  <img src="./assets/randolf.png" width="180" height="180" alt="Randolf"/>
 </p>
 
 # Meet Randolf
@@ -28,7 +28,7 @@ from C#/.NET to Rust, however contributions and suggestions (via issues) are wel
 
 - Pressing `Win` + `\` on a near-maximised window will reset the window to its previous size and position (i.e. undo the
   near-maximisation)
-- Writes application logs to a file in the directory of the executable (can be disabled)
+- Writes application logs to a file in the directory of the executable
 - Stores and loads configuration from `randolf.toml` in the directory of the executable
 - Tray icon with a context menu
     - Allows customising the window margin
@@ -133,7 +133,7 @@ You can create a shortcut to the executable and place it in the startup folder (
 2. Press `Win` + `r`, type `shell:startup`, and press `Enter`
 3. Paste the shortcut into the startup folder
 
-### Why does this application even exist? What it is purpose?
+### Why does this application even exist? What is its purpose?
 
 While [Komorebi](https://github.com/LGUG2Z/komorebi/) is the most feature-rich window tiling manager for Windows I
 know, it requires a commercial license (particularly problematic for since I only use Windows for work), depends on a
