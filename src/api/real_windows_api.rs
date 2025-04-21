@@ -19,7 +19,13 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::BOOL;
 
-const IGNORED_WINDOW_TITLES: [&str; 4] = ["Program Manager", "Windows Input Experience", "Settings", ""];
+const IGNORED_WINDOW_TITLES: [&str; 5] = [
+  "Program Manager",
+  "Windows Input Experience",
+  "Settings",
+  "",
+  "Windows Shell Experience Host",
+];
 const IGNORED_CLASS_NAMES: [&str; 5] = [
   "Progman",
   "WorkerW",
