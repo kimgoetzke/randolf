@@ -1,4 +1,4 @@
-use crate::utils::Window;
+use crate::common::Window;
 use std::fmt::Formatter;
 use windows::Win32::Foundation::HWND;
 
@@ -54,8 +54,7 @@ impl std::fmt::Display for WindowHandle {
 
 #[cfg(test)]
 mod tests {
-  use crate::utils::window_handle::WindowHandle;
-  use crate::utils::{Rect, Window};
+  use crate::common::{Rect, Window, WindowHandle};
   use windows::Win32::Foundation::HWND;
 
   impl WindowHandle {

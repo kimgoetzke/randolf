@@ -1,6 +1,6 @@
-use crate::Command;
+use crate::common::{Command, Direction, PersistentWorkspaceId};
 use crate::configuration_provider::ConfigurationProvider;
-use crate::utils::{CONFIGURATION_PROVIDER_LOCK, Direction, PersistentWorkspaceId};
+use crate::utils::CONFIGURATION_PROVIDER_LOCK;
 use crossbeam_channel::Sender;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};

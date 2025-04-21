@@ -2,6 +2,7 @@
 
 mod api;
 mod application_launcher;
+mod common;
 mod configuration_provider;
 mod hotkey_manager;
 mod log_manager;
@@ -23,12 +24,12 @@ use crate::log_manager::LogManager;
 use crate::tray_menu_manager::TrayMenuManager;
 use crate::utils::CONFIGURATION_PROVIDER_LOCK;
 use crate::window_manager::WindowManager;
+use common::Command;
 use crossbeam_channel::unbounded;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use utils::Command;
 
 const EVENT_LOOP_SLEEP_DURATION: Duration = Duration::from_millis(20);
 const HEART_BEAT_DURATION: Duration = Duration::from_secs(5);

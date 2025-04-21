@@ -1,4 +1,4 @@
-use crate::utils::{Monitor, Rect};
+use crate::common::{Monitor, Rect};
 use windows::Win32::Graphics::Gdi::MONITORINFO;
 
 #[allow(dead_code)]

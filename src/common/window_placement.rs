@@ -1,4 +1,4 @@
-use crate::utils::{Point, Rect, Sizing};
+use crate::common::{Point, Rect, Sizing};
 use windows::Win32::Foundation::POINT;
 use windows::Win32::UI::WindowsAndMessaging::{SW_SHOWNORMAL, WINDOWPLACEMENT, WINDOWPLACEMENT_FLAGS};
 
@@ -73,7 +73,7 @@ impl Into<*const WINDOWPLACEMENT> for WindowPlacement {
 
 #[cfg(test)]
 mod tests {
-  use crate::utils::{Point, Rect, Sizing, WindowPlacement};
+  use crate::common::{Point, Rect, Sizing, WindowPlacement};
   use windows::Win32::Foundation::POINT;
   use windows::Win32::UI::WindowsAndMessaging::{SW_SHOWNORMAL, WINDOWPLACEMENT, WINDOWPLACEMENT_FLAGS};
 

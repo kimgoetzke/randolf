@@ -1,4 +1,4 @@
-use crate::utils::Point;
+use crate::common::Point;
 use std::fmt::Display;
 use windows::Win32::Foundation::RECT;
 
@@ -86,7 +86,7 @@ impl Display for Rect {
 
 #[cfg(test)]
 mod tests {
-  use crate::utils::{Point, Rect};
+  use crate::common::{Point, Rect};
   use windows::Win32::Foundation::RECT;
 
   impl Rect {

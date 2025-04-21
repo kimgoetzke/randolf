@@ -49,15 +49,3 @@ impl LogManager {
     info!("Initialised [{}] logger(s)", count);
   }
 }
-
-#[cfg(test)]
-pub mod test {
-  use crate::utils::with_test_logger;
-
-  #[test]
-  fn your_test() {
-    // with_test_logger();
-
-    debug!("This debug message should now be visible");
-  }
-}

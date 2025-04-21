@@ -1,5 +1,5 @@
 use crate::api::WindowsApi;
-use crate::utils::{Monitor, MonitorHandle, PersistentWorkspaceId, Rect, Sizing, Window, WindowHandle};
+use crate::common::{Monitor, MonitorHandle, PersistentWorkspaceId, Rect, Sizing, Window, WindowHandle};
 use std::fmt::Display;
 
 #[derive(Debug, Clone)]
@@ -254,7 +254,7 @@ impl Display for Workspace {
 mod tests {
   use super::*;
   use crate::api::MockWindowsApi;
-  use crate::utils::{Monitor, Rect, Sizing, Window};
+  use crate::common::{Monitor, Rect, Sizing, Window};
 
   impl Workspace {
     /// Creates a new workspace for testing purposes with margin set to 0 and inactive by default.

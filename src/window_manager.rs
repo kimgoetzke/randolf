@@ -1,8 +1,9 @@
 use crate::api::WindowsApi;
+use crate::common::*;
 use crate::configuration_provider::{
   ADDITIONAL_WORKSPACE_COUNT, ALLOW_SELECTING_SAME_CENTER_WINDOWS, ConfigurationProvider, WINDOW_MARGIN,
 };
-use crate::utils::*;
+use crate::utils::CONFIGURATION_PROVIDER_LOCK;
 use crate::workspace_manager::WorkspaceManager;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -408,8 +409,8 @@ fn log_actual_vs_expected(handle: &WindowHandle, sizing: &Sizing, rc: Rect) {
 #[cfg(test)]
 mod tests {
   use crate::api::{MockWindowsApi, WindowsApi};
+  use crate::common::{Direction, MonitorHandle, Point, Rect, Sizing, WindowHandle, WindowPlacement};
   use crate::configuration_provider::ConfigurationProvider;
-  use crate::utils::{Direction, MonitorHandle, Point, Rect, Sizing, WindowHandle, WindowPlacement};
   use crate::window_manager::{WindowManager, is_of_expected_size};
   use crate::workspace_manager::WorkspaceManager;
   use std::sync::{Arc, Mutex};

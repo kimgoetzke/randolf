@@ -74,8 +74,8 @@ impl<T: WindowsApi> ApplicationLauncher<T> {
 mod tests {
   use super::*;
   use crate::api::MockWindowsApi;
+  use crate::common::{Point, Sizing, WindowHandle};
   use crate::configuration_provider::ConfigurationProvider;
-  use crate::utils::{Point, Sizing, WindowHandle};
   use log::Level::Warn;
 
   #[test]

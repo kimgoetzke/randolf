@@ -1,6 +1,5 @@
-use crate::utils::MonitorHandle;
-use crate::utils::utils::id_to_string;
-use crate::utils::{Direction, Point, Rect};
+use crate::common::{Direction, MonitorHandle, Point, Rect};
+use crate::utils::id_to_string;
 use std::fmt::Display;
 use windows::Win32::Graphics::Gdi::MONITORINFO;
 
@@ -64,7 +63,7 @@ impl Display for Monitor {
 
 #[cfg(test)]
 mod tests {
-  use crate::utils::{Direction, Monitor, MonitorHandle, Point, Rect};
+  use crate::common::{Direction, Monitor, MonitorHandle, Point, Rect};
 
   impl Monitor {
     pub fn new_test(handle: isize, monitor_area: Rect) -> Self {

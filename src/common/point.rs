@@ -1,4 +1,4 @@
-use crate::utils::{Rect, Sizing};
+use crate::common::{Rect, Sizing};
 use std::fmt::Formatter;
 use windows::Win32::Foundation::POINT;
 

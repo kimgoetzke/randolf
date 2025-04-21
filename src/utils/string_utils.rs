@@ -1,4 +1,4 @@
-use crate::utils::MonitorHandle;
+use crate::common::MonitorHandle;
 
 pub fn id_to_string(id: &[u16; 32], handle: &MonitorHandle) -> String {
   let device_name = String::from_utf16_lossy(id).trim_end_matches('\0').to_string();

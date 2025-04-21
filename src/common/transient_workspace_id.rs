@@ -1,4 +1,4 @@
-use crate::utils::{MonitorHandle, PersistentWorkspaceId};
+use crate::common::{MonitorHandle, PersistentWorkspaceId};
 use std::fmt::Display;
 
 #[derive(Debug, Copy, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
@@ -26,7 +26,7 @@ impl Display for TransientWorkspaceId {
 
 #[cfg(test)]
 mod tests {
-  use crate::utils::{MonitorHandle, TransientWorkspaceId};
+  use crate::common::{MonitorHandle, TransientWorkspaceId};
 
   impl TransientWorkspaceId {
     pub fn new(monitor_id: [u16; 32], monitor_handle: MonitorHandle, workspace: usize) -> Self {

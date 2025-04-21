@@ -1,4 +1,5 @@
-use crate::utils::{Direction, Monitor, MonitorHandle, print_monitor_layout_to_canvas};
+use crate::common::{Direction, Monitor, MonitorHandle};
+use crate::utils::print_monitor_layout_to_canvas;
 
 pub struct Monitors {
   monitors: Vec<Monitor>,
@@ -51,7 +52,7 @@ impl Monitors {
 
 #[cfg(test)]
 mod tests {
-  use crate::utils::{Direction, Monitor, Monitors, Rect};
+  use crate::common::{Direction, Monitor, Monitors, Rect};
 
   #[test]
   fn from_sorts_monitors_by_handle() {

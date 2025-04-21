@@ -1,5 +1,4 @@
-use crate::utils::Direction;
-use crate::utils::persistent_workspace_id::PersistentWorkspaceId;
+use crate::common::{Direction, PersistentWorkspaceId};
 use std::fmt::Display;
 
 #[derive(Debug)]

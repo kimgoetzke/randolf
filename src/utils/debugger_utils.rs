@@ -1,4 +1,4 @@
-use crate::utils::{Monitor, Point, Rect};
+use crate::common::{Monitor, Point, Rect};
 use std::cmp::{max, min};
 
 /// The size of the canvas in characters.

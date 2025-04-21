@@ -1,5 +1,5 @@
 use crate::api::WindowsApi;
-use crate::utils::{Monitors, PersistentWorkspaceId, TransientWorkspaceId, Workspace};
+use crate::common::{Monitors, PersistentWorkspaceId, TransientWorkspaceId, Workspace};
 use crate::workspace_guard::WorkspaceGuard;
 use std::collections::HashMap;
 
@@ -81,8 +81,7 @@ impl<T: WindowsApi + Copy> WorkspaceManager<T> {
 pub mod tests {
   use super::*;
   use crate::api::MockWindowsApi;
-  use crate::utils::{Monitor, MonitorHandle, Point, Rect, TransientWorkspaceId, Window, Workspace};
-  use crate::utils::{Sizing, WindowHandle};
+  use crate::common::{Monitor, MonitorHandle, Point, Rect, Sizing, TransientWorkspaceId, Window, WindowHandle, Workspace};
   use std::sync::OnceLock;
 
   static PRIMARY_MONITOR: OnceLock<Monitor> = OnceLock::new();

@@ -2,7 +2,7 @@
 #[cfg(test)]
 pub(crate) mod test {
   use crate::api::WindowsApi;
-  use crate::utils::{
+  use crate::common::{
     Monitor, MonitorHandle, MonitorInfo, Monitors, Point, Rect, Sizing, Window, WindowHandle, WindowPlacement,
   };
   use std::cell::RefCell;

@@ -52,7 +52,7 @@ impl Display for MonitorHandle {
 
 #[cfg(test)]
 mod tests {
-  use crate::utils::MonitorHandle;
+  use crate::common::MonitorHandle;
   use windows::Win32::Graphics::Gdi::HMONITOR;
 
   #[test]

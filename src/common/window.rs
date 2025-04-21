@@ -1,5 +1,4 @@
-use crate::utils::window_handle::WindowHandle;
-use crate::utils::{Point, Rect};
+use crate::common::{Point, Rect, WindowHandle};
 use windows::Win32::Foundation::HWND;
 
 const CHAR_LIMIT: usize = 15;
@@ -48,9 +47,8 @@ impl PartialEq for Window {
 
 #[cfg(test)]
 mod tests {
-  use crate::utils::window::CHAR_LIMIT;
-  use crate::utils::window_handle::WindowHandle;
-  use crate::utils::{Point, Rect, Window};
+  use crate::common::window::CHAR_LIMIT;
+  use crate::common::{Point, Rect, Window, WindowHandle};
 
   impl Window {
     pub fn new_test(isize: isize, rect: Rect) -> Self {

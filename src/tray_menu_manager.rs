@@ -1,6 +1,7 @@
 use crate::api::get_all_monitors;
+use crate::common::Command;
 use crate::configuration_provider::{ALLOW_SELECTING_SAME_CENTER_WINDOWS, ConfigurationProvider, WINDOW_MARGIN};
-use crate::utils::{CONFIGURATION_PROVIDER_LOCK, Command};
+use crate::utils::CONFIGURATION_PROVIDER_LOCK;
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;

@@ -1,5 +1,5 @@
 use crate::api::WindowsApi;
-use crate::utils::{MonitorHandle, PersistentWorkspaceId, TransientWorkspaceId, Window, Workspace};
+use crate::common::{MonitorHandle, PersistentWorkspaceId, TransientWorkspaceId, Window, Workspace};
 use crate::workspace_manager::WorkspaceManager;
 use std::collections::HashMap;
 
@@ -356,7 +356,7 @@ impl<'a, T: WindowsApi + Copy> WorkspaceGuard<'a, T> {
 #[cfg(test)]
 mod tests {
   use crate::api::MockWindowsApi;
-  use crate::utils::{MonitorHandle, Point, Rect};
+  use crate::common::{MonitorHandle, Point, Rect};
   use crate::workspace_guard::WorkspaceGuard;
   use crate::workspace_manager::WorkspaceManager;
 

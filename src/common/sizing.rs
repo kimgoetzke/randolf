@@ -1,4 +1,4 @@
-use crate::utils::Rect;
+use crate::common::Rect;
 
 #[derive(Clone, Default, PartialEq, Eq, Debug)]
 pub struct Sizing {
@@ -79,7 +79,7 @@ impl From<Sizing> for Rect {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::utils::Rect;
+  use crate::common::Rect;
 
   #[test]
   fn right_half_of_screen_calculates_correct_sizing() {

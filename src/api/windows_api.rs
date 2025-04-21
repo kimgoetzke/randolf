@@ -1,5 +1,4 @@
-use crate::utils::{MonitorHandle, WindowHandle};
-use crate::utils::{MonitorInfo, Monitors, Point, Rect, Window, WindowPlacement};
+use crate::common::{MonitorHandle, MonitorInfo, Monitors, Point, Rect, Window, WindowHandle, WindowPlacement};
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
 
 pub trait WindowsApi {

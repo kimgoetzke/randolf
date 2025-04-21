@@ -1,4 +1,4 @@
-use crate::utils::TransientWorkspaceId;
+use crate::common::TransientWorkspaceId;
 use crate::utils::id_to_string_or_panic;
 use std::fmt::Display;
 
@@ -44,7 +44,7 @@ impl Display for PersistentWorkspaceId {
 
 #[cfg(test)]
 mod tests {
-  use crate::utils::{PersistentWorkspaceId, TransientWorkspaceId};
+  use crate::common::{PersistentWorkspaceId, TransientWorkspaceId};
 
   impl PersistentWorkspaceId {
     pub fn new_test(workspace: usize) -> Self {
