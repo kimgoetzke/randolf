@@ -8,7 +8,7 @@ Randolf is a basic window manager for Windows 11 that provides window tiling-lik
 to:
 
 - `Win` + `\` - near-maximise the foreground window (maximise minus margin).
-- `Win` + `Shift` + `\` - minimise the foreground window (maximise minus margin).
+- `Win` + `Shift` + `\` - minimise the foreground window.
 - `Win` + `Shift` + `Left`/`Top`/`Right`/`Down` or `h`/`j`/`k`/`l` - near-snap (snap minus margin) the foreground window
   to the left, top, right, or bottom of the screen.
 - `Win` + `Left`/`Top`/`Right`/`Down` - move the cursor to the closest window in the direction of the arrow key (and
