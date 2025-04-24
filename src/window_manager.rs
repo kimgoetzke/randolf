@@ -54,18 +54,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     };
 
     self.windows_api.do_close_window(window);
-    let cursor_position = self.windows_api.get_cursor_position();
-    if let Some(window) = self.find_closest_window(cursor_position, Some(window)) {
-      self.windows_api.set_foreground_window(window);
-      let window_info = self
-        .windows_api
-        .get_window_placement(window)
-        .expect("Failed to get window placement");
-      let target_point = Point::from_center_of_rect(&window_info.normal_position);
-      self.windows_api.set_cursor_position(&target_point);
-    } else {
-      info!("No window found to move focus to after closing the current window");
-    }
+    self.find_and_select_closest_window(window);
   }
 
   pub fn switch_workspace(&mut self, id: PersistentWorkspaceId) {
@@ -154,6 +143,15 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
         self.near_maximize_window(handle, monitor_info, self.margin());
       }
     }
+  }
+
+  pub fn minimise_window(&mut self) {
+    let Some(window) = self.windows_api.get_foreground_window() else {
+      return;
+    };
+
+    self.windows_api.do_minimise_window(window);
+    self.find_and_select_closest_window(window);
   }
 
   pub fn restore_all_managed_windows(&mut self) {
@@ -415,6 +413,21 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
 
         Some(smallest_window)
       }
+    }
+  }
+
+  fn find_and_select_closest_window(&mut self, window: WindowHandle) {
+    let cursor_position = self.windows_api.get_cursor_position();
+    if let Some(window) = self.find_closest_window(cursor_position, Some(window)) {
+      self.windows_api.set_foreground_window(window);
+      let window_info = self
+        .windows_api
+        .get_window_placement(window)
+        .expect("Failed to get window placement");
+      let target_point = Point::from_center_of_rect(&window_info.normal_position);
+      self.windows_api.set_cursor_position(&target_point);
+    } else {
+      info!("No window found to move focus to after closing the current window");
     }
   }
 }
@@ -782,5 +795,40 @@ mod tests {
     let result = manager.find_closest_window(cursor_position, Some(expected_window_handle));
 
     assert!(result.is_none());
+  }
+
+  #[test]
+  fn minimise_window_when_no_other_window_present() {
+    let window_handle = WindowHandle::new(1);
+    MockWindowsApi::add_or_update_window(window_handle, "Test".to_string(), Sizing::default(), false, false, true);
+    let mut manager = WindowManager::default(MockWindowsApi);
+    assert!(!manager.windows_api.is_window_minimised(window_handle));
+
+    manager.minimise_window();
+
+    assert!(manager.windows_api.is_window_minimised(window_handle));
+    assert_eq!(manager.windows_api.get_cursor_position(), Point::default());
+    assert_eq!(manager.windows_api.get_foreground_window(), None);
+  }
+
+  #[test]
+  fn minimise_window_when_another_window_is_present() {
+    let window_handle = WindowHandle::new(1);
+    let sizing = Sizing::new(50, 50, 100, 100);
+    let other_window_handle = WindowHandle::new(2);
+    MockWindowsApi::add_or_update_window(window_handle, "Test".to_string(), Sizing::default(), false, false, true);
+    MockWindowsApi::add_or_update_window(other_window_handle, "Other".to_string(), sizing.clone(), false, false, false);
+    let mut manager = WindowManager::default(MockWindowsApi);
+    assert!(!manager.windows_api.is_window_minimised(window_handle));
+
+    manager.minimise_window();
+
+    assert!(manager.windows_api.is_window_minimised(window_handle));
+    assert_eq!(
+      manager.windows_api.get_cursor_position(),
+      Point::from_center_of_sizing(&sizing),
+      "Cursor position should be set to the center of the closest, non-minimised window"
+    );
+    assert_eq!(manager.windows_api.get_foreground_window(), Some(other_window_handle));
   }
 }

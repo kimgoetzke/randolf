@@ -23,6 +23,7 @@ pub trait WindowsApi {
   );
   fn do_restore_window(&self, window: &Window, is_minimised: &bool);
   fn do_maximise_window(&self, handle: WindowHandle);
+  fn do_minimise_window(&self, handle: WindowHandle);
   fn do_hide_window(&self, handle: WindowHandle);
   fn do_close_window(&self, handle: WindowHandle);
   fn get_window_placement(&self, handle: WindowHandle) -> Option<WindowPlacement>;

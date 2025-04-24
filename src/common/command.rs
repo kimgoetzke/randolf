@@ -5,6 +5,7 @@ use std::fmt::Display;
 pub enum Command {
   CloseWindow,
   NearMaximiseWindow,
+  MinimiseWindow,
   MoveWindow(Direction),
   MoveCursor(Direction),
   SwitchWorkspace(PersistentWorkspaceId),
@@ -18,6 +19,7 @@ impl Display for Command {
     match self {
       Command::CloseWindow => write!(f, "Close window"),
       Command::NearMaximiseWindow => write!(f, "Near maximise window"),
+      Command::MinimiseWindow => write!(f, "Minimise window"),
       Command::MoveWindow(direction) => write!(f, "Move window [{:?}]", direction),
       Command::MoveCursor(direction) => write!(f, "Move cursor [{:?}]", direction),
       Command::SwitchWorkspace(id) => write!(f, "Switch to workspace [{id}]"),

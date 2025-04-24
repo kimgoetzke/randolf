@@ -13,10 +13,10 @@ use windows::Win32::UI::HiDpi::{GetDpiForMonitor, PROCESS_PER_MONITOR_DPI_AWARE,
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
 use windows::Win32::UI::WindowsAndMessaging::{
   DispatchMessageA, EnumWindows, GetClassNameW, GetCursorPos, GetForegroundWindow, GetWindowInfo, GetWindowPlacement,
-  GetWindowTextW, IsIconic, IsWindowVisible, MSG, PM_REMOVE, PeekMessageA, PostMessageW, SW_HIDE, SW_MAXIMIZE, SW_RESTORE,
-  SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOZORDER, SWP_SHOWWINDOW, SendMessageW, SetCursorPos, SetForegroundWindow,
-  SetWindowPlacement, SetWindowPos, ShowWindow, TranslateMessage, WINDOWINFO, WINDOWPLACEMENT, WM_CLOSE, WM_PAINT,
-  WS_VISIBLE,
+  GetWindowTextW, IsIconic, IsWindowVisible, MSG, PM_REMOVE, PeekMessageA, PostMessageW, SW_HIDE, SW_MAXIMIZE, SW_MINIMIZE,
+  SW_RESTORE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOZORDER, SWP_SHOWWINDOW, SendMessageW, SetCursorPos,
+  SetForegroundWindow, SetWindowPlacement, SetWindowPos, ShowWindow, TranslateMessage, WINDOWINFO, WINDOWPLACEMENT,
+  WM_CLOSE, WM_PAINT, WS_VISIBLE,
 };
 use windows::core::BOOL;
 
@@ -279,6 +279,14 @@ impl WindowsApi for RealWindowsApi {
     unsafe {
       if !ShowWindow(handle.as_hwnd(), SW_MAXIMIZE).as_bool() {
         warn!("Failed to maximise window {handle}");
+      }
+    }
+  }
+
+  fn do_minimise_window(&self, handle: WindowHandle) {
+    unsafe {
+      if !ShowWindow(handle.as_hwnd(), SW_MINIMIZE).as_bool() {
+        warn!("Failed to minimise window {handle}");
       }
     }
   }

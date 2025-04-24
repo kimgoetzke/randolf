@@ -279,6 +279,21 @@ pub(crate) mod test {
       trace!("Mock windows API maximises window {handle} - not implemented yet");
     }
 
+    fn do_minimise_window(&self, handle: WindowHandle) {
+      trace!("Mock windows API minimises window {handle}");
+      MOCK_STATE.with(|state| {
+        if let Some(window_state) = state.borrow_mut().windows.get_mut(&handle) {
+          if window_state.is_hidden {
+            panic!("Window with handle {handle} is hidden and cannot be minimised");
+          }
+          window_state.is_minimised = true;
+        } else {
+          panic!("Window with handle {handle} not found - did you forget to add it?");
+        }
+        state.borrow_mut().foreground_window = None;
+      });
+    }
+
     fn do_hide_window(&self, handle: WindowHandle) {
       trace!("Mock windows API hides window {handle}");
       MOCK_STATE.with(|state| {

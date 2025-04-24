@@ -74,6 +74,7 @@ fn main() {
       info!("Command received: {}", command);
       match command {
         Command::NearMaximiseWindow => wm.borrow_mut().near_maximise_or_restore(),
+        Command::MinimiseWindow => wm.borrow_mut().minimise_window(),
         Command::MoveWindow(direction) => wm.borrow_mut().move_window(direction),
         Command::MoveCursor(direction) => wm.borrow_mut().move_cursor(direction),
         Command::CloseWindow => wm.borrow_mut().close_window(),

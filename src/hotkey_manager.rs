@@ -50,6 +50,7 @@ impl HotkeyManager {
     // Other window management
     hotkey_manager.register_close_window_hotkey(VKey::Q);
     hotkey_manager.register_near_maximise_window_hotkey(VKey::CustomKeyCode(BACKSLASH as u16));
+    hotkey_manager.register_minimise_window_hotkey(VKey::CustomKeyCode(BACKSLASH as u16));
 
     // Workspace management
     hotkey_manager.register_switch_workspace_hotkeys(&workspace_ids);
@@ -76,6 +77,13 @@ impl HotkeyManager {
       .hkm
       .register_hotkey(key, &[MAIN_MOD], || Command::NearMaximiseWindow)
       .unwrap_or_else(|err| panic!("Failed to register hotkey for {:?}: {err}", Command::NearMaximiseWindow));
+  }
+
+  fn register_minimise_window_hotkey(&mut self, key: VKey) {
+    self
+      .hkm
+      .register_hotkey(key, &[MAIN_MOD, SECONDARY_MOD], || Command::MinimiseWindow)
+      .unwrap_or_else(|err| panic!("Failed to register hotkey for {:?}: {err}", Command::MinimiseWindow));
   }
 
   fn register_close_window_hotkey(&mut self, key: VKey) {
