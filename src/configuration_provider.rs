@@ -16,6 +16,8 @@ struct Configuration {
   pub general: GeneralConfiguration,
   #[serde(default)]
   pub hotkey: Vec<CustomHotkey>,
+  #[serde(default)]
+  pub exclusion_settings: ExclusionSettings,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -97,9 +99,9 @@ fn validate_workspace_count(config_str: &str, configuration_provider: &mut Confi
 impl Default for GeneralConfiguration {
   fn default() -> Self {
     Self {
-      window_margin: DEFAULT_WINDOW_MARGIN_VALUE,
-      allow_selecting_same_center_windows: true,
-      additional_workspace_count: 2,
+      window_margin: default_window_margin(),
+      allow_selecting_same_center_windows: default_allow_selecting_same_center_windows(),
+      additional_workspace_count: default_additional_workspace_count(),
     }
   }
 }
@@ -110,6 +112,73 @@ pub struct CustomHotkey {
   pub path: String,
   pub hotkey: String,
   pub execute_as_admin: bool,
+}
+
+/// Settings for excluding certain windows from being managed by the application. This is useful for ignoring
+/// system windows or other applications that should not be affected by this application at all i.e. they should not
+/// be moved, selected, etc.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ExclusionSettings {
+  #[serde(default = "default_excluded_window_titles")]
+  pub window_titles: Vec<String>,
+  #[serde(default = "default_excluded_window_classes")]
+  pub window_class_names: Vec<String>,
+}
+
+impl Default for ExclusionSettings {
+  fn default() -> Self {
+    Self {
+      window_titles: default_excluded_window_titles(),
+      window_class_names: default_excluded_window_classes(),
+    }
+  }
+}
+
+fn default_excluded_window_titles() -> Vec<String> {
+  vec![
+    "Program Manager".to_string(),
+    "Windows Input Experience".to_string(),
+    "Settings".to_string(),
+    "".to_string(),
+    "Windows Shell Experience Host".to_string(),
+    "ZPToolBarParentWnd".to_string(),
+  ]
+}
+
+fn validate_excluded_window_titles(config_str: &str, configuration_provider: &mut ConfigurationProvider) {
+  if !config_str.contains("window_titles") {
+    warn!(
+      "[{}] was missing; saving it now with default value: {:#?}",
+      "window_titles",
+      default_excluded_window_titles()
+    );
+    if let Err(err) = configuration_provider.save_config() {
+      error!("Failed to save configuration: {}", err);
+    }
+  }
+}
+
+fn default_excluded_window_classes() -> Vec<String> {
+  vec![
+    "Progman".to_string(),
+    "WorkerW".to_string(),
+    "Shell_TrayWnd".to_string(),
+    "Shell_SecondaryTrayWnd".to_string(),
+    "DV2ControlHost".to_string(),
+  ]
+}
+
+fn validate_excluded_window_classes(config_str: &str, configuration_provider: &mut ConfigurationProvider) {
+  if !config_str.contains("window_class_names") {
+    warn!(
+      "[{}] was missing; saving it now with default value: {:#?}",
+      "window_class_names",
+      default_excluded_window_classes()
+    );
+    if let Err(err) = configuration_provider.save_config() {
+      error!("Failed to save configuration: {}", err);
+    }
+  }
 }
 
 pub struct ConfigurationProvider {
@@ -201,6 +270,8 @@ impl ConfigurationProvider {
       validate_window_margin(&config_as_string, self);
       validate_allow_selecting_same_center_windows(&config_as_string, self);
       validate_workspace_count(&config_as_string, self);
+      validate_excluded_window_titles(&config_as_string, self);
+      validate_excluded_window_classes(&config_as_string, self);
     } else {
       warn!("Failed to validate configuration: configuration string not available");
     }
@@ -269,6 +340,10 @@ impl ConfigurationProvider {
     &self.config.hotkey
   }
 
+  pub fn get_exclusion_settings(&self) -> &ExclusionSettings {
+    &self.config.exclusion_settings
+  }
+
   fn save_config(&self) -> Result<(), Box<dyn Error>> {
     info!("Saving configuration to file: {}", self.config_path.display());
     let toml_string = toml::to_string_pretty(&self.config)?;
@@ -299,6 +374,7 @@ mod tests {
         config: Configuration {
           general: GeneralConfiguration::default(),
           hotkey: hotkeys,
+          exclusion_settings: ExclusionSettings::default(),
         },
         config_path: PathBuf::new(),
         config_string: None,
@@ -347,6 +423,7 @@ mod tests {
         hotkey: "y".to_string(),
         execute_as_admin: true,
       }],
+      exclusion_settings: ExclusionSettings::default(),
     };
     let toml_string = toml::to_string_pretty(&custom_config).expect("Failed to serialize config");
     fs::write(&path, toml_string).expect("Failed to write config file");
@@ -361,6 +438,14 @@ mod tests {
     assert_eq!(loaded_config.hotkey.len(), 1);
     assert_eq!(loaded_config.hotkey[0].name, "Test App");
     assert!(loaded_config.hotkey[0].execute_as_admin);
+    assert_eq!(
+      loaded_config.exclusion_settings.window_titles,
+      default_excluded_window_titles()
+    );
+    assert_eq!(
+      loaded_config.exclusion_settings.window_class_names,
+      default_excluded_window_classes()
+    );
   }
 
   #[test]
@@ -408,6 +493,16 @@ mod tests {
     );
     assert_eq!(loaded_config.hotkey.len(), 1);
     assert_eq!(loaded_config.hotkey[0].name, "Test App");
+    assert_eq!(
+      loaded_config.exclusion_settings.window_titles,
+      default_excluded_window_titles(),
+      "Should use default value for [default_excluded_window_titles]"
+    );
+    assert_eq!(
+      loaded_config.exclusion_settings.window_class_names,
+      default_excluded_window_classes(),
+      "Should use default value for [default_excluded_window_classes]"
+    );
   }
 
   #[test]

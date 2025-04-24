@@ -3,12 +3,12 @@ use crate::common::{MonitorHandle, PersistentWorkspaceId, TransientWorkspaceId, 
 use crate::workspace_manager::WorkspaceManager;
 use std::collections::HashMap;
 
-pub struct WorkspaceGuard<'a, T: WindowsApi + Copy> {
+pub struct WorkspaceGuard<'a, T: WindowsApi + Clone> {
   pub(crate) manager: &'a mut WorkspaceManager<T>,
   id_map: HashMap<PersistentWorkspaceId, TransientWorkspaceId>,
 }
 
-impl<'a, T: WindowsApi + Copy> WorkspaceGuard<'a, T> {
+impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
   pub fn new(manager: &'a mut WorkspaceManager<T>) -> Self {
     let monitors = manager.windows_api.get_all_monitors();
     for workspace in manager.workspaces.values_mut() {

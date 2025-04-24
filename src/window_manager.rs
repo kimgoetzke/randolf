@@ -19,7 +19,7 @@ pub struct WindowManager<T: WindowsApi> {
   windows_api: T,
 }
 
-impl<T: WindowsApi + Copy> WindowManager<T> {
+impl<T: WindowsApi + Clone> WindowManager<T> {
   pub fn new(configuration_provider: Arc<Mutex<ConfigurationProvider>>, api: T) -> Self {
     let additional_workspace_count = configuration_provider
       .lock()
@@ -29,7 +29,7 @@ impl<T: WindowsApi + Copy> WindowManager<T> {
       .lock()
       .expect(CONFIGURATION_PROVIDER_LOCK)
       .get_i32(WINDOW_MARGIN);
-    let workspace_manager = WorkspaceManager::new(additional_workspace_count, window_margin, api);
+    let workspace_manager = WorkspaceManager::new(additional_workspace_count, window_margin, api.clone());
     Self {
       known_windows: HashMap::new(),
       virtual_desktop_manager: Some(

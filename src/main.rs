@@ -36,15 +36,21 @@ const HEART_BEAT_DURATION: Duration = Duration::from_secs(5);
 
 fn main() {
   LogManager::new_initialised();
-  let windows_api = RealWindowsApi::new();
 
   // Create configuration manager and tray menu
   let configuration_manager = Arc::new(Mutex::new(ConfigurationProvider::new()));
   let (command_sender, command_receiver) = unbounded();
   TrayMenuManager::new_initialised(configuration_manager.clone(), command_sender.clone());
+
+  let windows_api = RealWindowsApi::new(
+    configuration_manager
+      .lock()
+      .expect(CONFIGURATION_PROVIDER_LOCK)
+      .get_exclusion_settings(),
+  );
   let launcher = Rc::new(RefCell::new(ApplicationLauncher::new_initialised(
     configuration_manager.clone(),
-    windows_api,
+    windows_api.clone(),
   )));
   configuration_manager
     .lock()
@@ -52,7 +58,10 @@ fn main() {
     .log_current_config();
 
   // Create window manager and register hotkeys
-  let wm = Rc::new(RefCell::new(WindowManager::new(configuration_manager.clone(), windows_api)));
+  let wm = Rc::new(RefCell::new(WindowManager::new(
+    configuration_manager.clone(),
+    windows_api.clone(),
+  )));
   let workspace_ids = wm.borrow_mut().get_ordered_permanent_workspace_ids();
   let hkm = HotkeyManager::new_with_hotkeys(configuration_manager.clone(), workspace_ids);
   let interrupt_handle = hkm.initialise(command_sender);

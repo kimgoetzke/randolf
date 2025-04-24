@@ -1,5 +1,6 @@
 use crate::api::WindowsApi;
 use crate::common::{Monitor, MonitorHandle, MonitorInfo, Monitors, Point, Rect, Window, WindowHandle, WindowPlacement};
+use crate::configuration_provider::ExclusionSettings;
 use std::mem::MaybeUninit;
 use std::{mem, ptr};
 use windows::Win32::Foundation::{HWND, LPARAM, POINT, RECT, WPARAM};
@@ -19,27 +20,18 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::BOOL;
 
-const IGNORED_WINDOW_TITLES: [&str; 5] = [
-  "Program Manager",
-  "Windows Input Experience",
-  "Settings",
-  "",
-  "Windows Shell Experience Host",
-];
-const IGNORED_CLASS_NAMES: [&str; 5] = [
-  "Progman",
-  "WorkerW",
-  "Shell_TrayWnd",
-  "Shell_SecondaryTrayWnd",
-  "DV2ControlHost",
-];
-
-#[derive(Copy, Clone)]
-pub struct RealWindowsApi;
+#[derive(Clone)]
+pub struct RealWindowsApi {
+  ignored_window_titles: Vec<String>,
+  ignored_class_names: Vec<String>,
+}
 
 impl RealWindowsApi {
-  pub fn new() -> Self {
-    Self
+  pub fn new(settings: &ExclusionSettings) -> Self {
+    Self {
+      ignored_window_titles: settings.window_titles.clone(),
+      ignored_class_names: settings.window_class_names.clone(),
+    }
   }
 }
 
@@ -127,12 +119,12 @@ impl WindowsApi for RealWindowsApi {
   fn is_not_a_managed_window(&self, handle: &WindowHandle) -> bool {
     let mut result = false;
     let class_name = self.get_window_class_name(handle);
-    if IGNORED_CLASS_NAMES.contains(&class_name.as_str()) {
+    if self.ignored_class_names.contains(&class_name) {
       result = true;
     }
 
     let title = self.get_window_title(handle);
-    if IGNORED_WINDOW_TITLES.contains(&title.as_str()) {
+    if self.ignored_window_titles.contains(&title) {
       result = true;
     }
 

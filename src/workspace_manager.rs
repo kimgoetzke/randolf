@@ -10,7 +10,7 @@ pub struct WorkspaceManager<T: WindowsApi> {
   additional_workspace_count: i32,
 }
 
-impl<T: WindowsApi + Copy> WorkspaceManager<T> {
+impl<T: WindowsApi + Clone> WorkspaceManager<T> {
   pub fn new(additional_workspace_count: i32, margin: i32, api: T) -> Self {
     let mut workspace_manager = Self {
       workspaces: HashMap::new(),
