@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/randolf.png" width="180" height="180" alt="Randolf"/>
+  <img src="./assets/randolf.png" width="150" height="150" alt="Randolf"/>
 </p>
 
 # Meet Randolf
@@ -7,14 +7,15 @@
 Randolf is a basic window manager for Windows 11 that provides window tiling-like functionality. Randolf allows you
 to:
 
-- `Win` + `\` - near-maximise the active window (maximise minus margin).
-- `Win` + `Shift` + `Left`/`Top`/`Right`/`Down` or `h`/`j`/`k`/`l` - near-snap (snap minus margin) the active window
+- `Win` + `\` - near-maximise the foreground window (maximise minus margin).
+- `Win` + `Shift` + `\` - minimise the foreground window (maximise minus margin).
+- `Win` + `Shift` + `Left`/`Top`/`Right`/`Down` or `h`/`j`/`k`/`l` - near-snap (snap minus margin) the foreground window
   to the left, top, right, or bottom of the screen.
 - `Win` + `Left`/`Top`/`Right`/`Down` - move the cursor to the closest window in the direction of the arrow key (and
   activate the window) or to the center of the window-free monitor, if it exists.
-- `Win` + `q` - close the active window.
+- `Win` + `q` - close the foreground window.
 - `Win` + `1`/`2`/... - switch between workspaces.
-- `Win` + `Shift` + `1`/`2`/... - move the active window to respective workspace.
+- `Win` + `Shift` + `1`/`2`/... - move the foreground window to respective workspace.
 - Configure an arbitrary number of hotkeys for launching applications (e.g. `Win` + `f` to launch Firefox) via the
   configuration file.
 
@@ -59,13 +60,28 @@ Switching between workspaces and moving windows between them:
 ## How to configure
 
 The configuration file `randolf.toml` is located in the same directory as the executable after the first start. The
-configuration file is created with the following default values:
+configuration file is created with the following default values when the application is first started:
 
 ```toml
 [general]
 window_margin = 20
 allow_selecting_same_center_windows = true
 additional_workspace_count = 3
+
+[exclusion_settings]
+window_titles = [
+    "Program Manager",
+    "Windows Input Experience",
+    "Settings",
+    # And more...
+]
+window_class_names = [
+    "Progman",
+    "WorkerW",
+    "Shell_TrayWnd",
+    "Shell_SecondaryTrayWnd",
+    # And more...
+]
 ```
 
 ##### window_margin
@@ -94,7 +110,8 @@ desktops but only apply to a single monitor and are much faster to switch.
 
 ##### Launcher hotkeys
 
-In addition to the above, the application also supports setting custom application launcher hotkeys via the configuration file like so:
+In addition to the above, the application also supports setting custom application launcher hotkeys via the
+configuration file like so:
 
 ```toml
 [[hotkey]]
@@ -121,6 +138,13 @@ execute_as_admin = false
 - You can define an arbitrary number of hotkeys.
 - Using the same key for multiple hotkeys is not supported.
 - Hotkeys cannot be configured via the tray icon context menu.
+
+#### Exclusion settings
+
+Randolf allows excluding certain windows from being interactable (e.g. selectable/movable) via the application. You can
+exclude windows by their title or class name, however Randolf currently does not provide any features to find the title
+or class name of a window (other than logging the title of a window when it is being interacted with via the
+application). A small number of windows are excluded by default, in order for the application to function properly.
 
 ## FAQ
 
