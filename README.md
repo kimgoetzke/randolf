@@ -4,11 +4,9 @@
 
 # Meet Randolf
 
-Randolf is a basic window manager for Windows 11 that provides window tiling-like functionality. Randolf allows you
-to:
+Randolf is a window management utility for Windows 11 that allows you to:
 
 - `Win` + `\` - near-maximise the foreground window (maximise minus margin).
-- `Win` + `Shift` + `\` - minimise the foreground window.
 - `Win` + `Shift` + `Left`/`Top`/`Right`/`Down` or `h`/`j`/`k`/`l` - near-snap (snap minus margin) the foreground window
   to the left, top, right, or bottom of the screen.
 - `Win` + `Left`/`Top`/`Right`/`Down` - move the cursor to the closest window in the direction of the arrow key (and
@@ -21,19 +19,22 @@ to:
 
 My goal for this project was to implement some key window navigation concepts
 from [my Linux configuration](https://github.com/kimgoetzke/nixos-config) for Windows, offering an experience,
-somewhat closer to that of Linux window managers/compositors such as [Hyprland](https://hyprland.org/). The
-application was created to meet my own needs and started as migration of [Randy](https://github.com/kimgoetzke/randy)
-from C#/.NET to Rust, however contributions and suggestions (via issues) are welcome.
+somewhat closer to that of Linux window managers/compositors such as [Hyprland](https://hyprland.org/) without 
+_enforcing_ window tiling. The application was created to meet my own needs and started as migration of 
+[Randy](https://github.com/kimgoetzke/randy) from C#/.NET to Rust, however contributions and suggestions (via
+issues) are welcome.
 
 #### Additional features
 
 - Pressing `Win` + `\` on a near-maximised window will reset the window to its previous size and position (i.e. undo the
   near-maximisation)
+- Pressing `Win` + `Shift` + `\` will minimise the foreground window
 - Writes application logs to a file in the directory of the executable
 - Stores and loads configuration from `randolf.toml` in the directory of the executable
-- Tray icon with a context menu
+- Displays a tray icon with a context menu
     - Allows customising the window margin
-    - Allows closing the application
+    - Allows printing a visual representation of the perceived monitor layout to the log file
+    - Allows closing the application (and auto-restoring all hidden windows)
 
 ## Demo
 
@@ -160,7 +161,7 @@ You can create a shortcut to the executable and place it in the startup folder (
 ### Why does this application even exist? What is its purpose?
 
 While [Komorebi](https://github.com/LGUG2Z/komorebi/) is the most feature-rich window tiling manager for Windows I
-know, it requires a commercial license (particularly problematic for since I only use Windows for work), depends on a
+know, it requires a commercial license (particularly problematic for me since I only use Windows for work), depends on a
 separate hotkey daemon, and enforces tiling for all windows unless explicitly excepted. I also experienced stability and
 configuration issues during my usage.
 
@@ -170,9 +171,9 @@ Randolf was created as a simpler alternative that:
 - Runs as a standalone application
 - Only includes a handful of essential window management features
 - Provides hotkeys to facilitate a clean desktop without forcing automatic tiling
-- Serves as a fun, little personal learning project
+- Served as a fun, little personal learning project
 
-If you are looking for something more sophisticated and feature-rich, I strongly recommend checking
+If you are looking for a feature-rich window manager, I strongly recommend checking
 out [Komorebi](https://github.com/LGUG2Z/komorebi/).
 
 ## How to develop
