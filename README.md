@@ -38,16 +38,16 @@ issues) are welcome.
 
 ## Demo
 
-Selecting and moving windows using hotkeys:
+Selecting and moving windows using hotkeys only:
 ![Demo GIF 1](assets/demo_1.gif)
 
-Opening and closing applications using hotkeys:
+Opening and closing applications using hotkeys only:
 
 ![Demo GIF 2](assets/demo_2.gif)
 _Note that the newly opened application is focussed upon opening and, after closing a window, the closest window  (if
 any) is selected._
 
-Switching between workspaces and moving windows between them:
+Switching between workspaces and moving windows between them using hotkeys only:
 ![Demo GIF 3](assets/demo_3.gif)
 
 #### Features currently under consideration
