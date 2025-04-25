@@ -3,6 +3,8 @@ use crate::configuration_provider::ConfigurationProvider;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
+const FIXED_DELAY: u64 = 750;
+
 pub struct ApplicationLauncher<T: WindowsApi> {
   _configuration_provider: Arc<Mutex<ConfigurationProvider>>,
   windows_api: T,
@@ -16,7 +18,7 @@ impl<T: WindowsApi> ApplicationLauncher<T> {
     }
   }
 
-  pub fn launch(&self, path_to_executable: String, as_admin: bool) {
+  pub fn launch(&self, path_to_executable: String, args: Option<&str>, as_admin: bool) {
     if path_to_executable.is_empty() {
       warn!("Path to executable is empty");
       return;
@@ -25,31 +27,62 @@ impl<T: WindowsApi> ApplicationLauncher<T> {
       warn!("Path to executable is not a valid executable");
       return;
     }
-    if self.execute_command(&path_to_executable, as_admin) {
-      std::thread::sleep(std::time::Duration::from_millis(750));
+    if self.execute_command(&path_to_executable, args, as_admin) {
+      std::thread::sleep(std::time::Duration::from_millis(FIXED_DELAY));
       self.set_cursor_position();
     }
   }
 
-  fn execute_command(&self, path_to_executable: &String, as_admin: bool) -> bool {
+  pub fn get_executable_folder(&self) -> String {
+    if let Ok(executable_path) = std::env::current_exe() {
+      let executable_directory = executable_path
+        .parent()
+        .expect("Failed to get parent directory")
+        .to_str()
+        .expect("Failed to convert path to string");
+      if executable_directory.is_empty() {
+        warn!("Path to Randolf folder is empty");
+      }
+
+      executable_directory.to_string()
+    } else {
+      warn!("Failed to get current executable path");
+
+      "".to_string()
+    }
+  }
+
+  fn execute_command(&self, path_to_executable: &str, args: Option<&str>, as_admin: bool) -> bool {
     if as_admin {
-      match Command::new("powershell")
-        .args(["-Command", "Start-Process", path_to_executable, "-Verb", "RunAs"])
-        .spawn()
-      {
+      let mut powershell_args = vec!["-Command", "Start-Process", path_to_executable];
+      if let Some(arg) = args {
+        powershell_args.push("-ArgumentList");
+        powershell_args.push(arg);
+      }
+      powershell_args.push("-Verb");
+      powershell_args.push("RunAs");
+      match Command::new("powershell").args(powershell_args).spawn() {
         Ok(_) => true,
         Err(err) => {
-          warn!("Failed to launch application as admin: {}", err);
-
+          warn!(
+            "Failed to launch application [{path_to_executable}] with arg(s) [{:?}] as admin: {}",
+            args, err
+          );
           false
         }
       }
     } else {
-      match Command::new(path_to_executable).spawn() {
+      let mut command = Command::new(path_to_executable);
+      if let Some(arg) = args {
+        command.arg(arg);
+      }
+      match command.spawn() {
         Ok(_) => true,
-        Err(_) => {
-          warn!("Failed to launch application: {}", path_to_executable);
-
+        Err(err) => {
+          warn!(
+            "Failed to launch application [{path_to_executable}] with arg(s) [{:?}] because: {}",
+            args, err
+          );
           false
         }
       }
@@ -87,15 +120,15 @@ mod tests {
     let configuration_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
     let launcher = ApplicationLauncher::new_initialised(configuration_provider.clone(), mock_api);
 
-    launcher.launch("C:\\does\\not\\exist.exe".to_string(), false);
-    launcher.launch("not an executable".to_string(), false);
-    launcher.launch("".to_string(), false);
+    launcher.launch("C:\\does\\not\\exist.exe".to_string(), Some("C:\\does\\not\\exist"), false);
+    launcher.launch("not an executable".to_string(), None, false);
+    launcher.launch("".to_string(), None, false);
 
     testing_logger::validate(|captured_logs| {
       assert_eq!(captured_logs.len(), 4);
       assert_eq!(
         captured_logs[1].body,
-        "Failed to launch application: C:\\does\\not\\exist.exe".to_string()
+        "Failed to launch application [C:\\does\\not\\exist.exe] with arg(s) [Some(\"C:\\\\does\\\\not\\\\exist\")] because: The system cannot find the path specified. (os error 3)".to_string()
       );
       assert_eq!(captured_logs[1].level, Warn);
       assert_eq!(
@@ -149,5 +182,16 @@ mod tests {
     launcher.set_cursor_position();
 
     assert_eq!(mock_api.get_cursor_position(), Point::new(75, 75));
+  }
+
+  #[test]
+  fn get_executable_folder_returns_correct_path() {
+    let mock_api = MockWindowsApi;
+    let config_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
+    let launcher = ApplicationLauncher::new_initialised(config_provider, mock_api);
+
+    let folder = launcher.get_executable_folder();
+
+    assert!(folder.ends_with("randolf\\target\\debug\\deps"));
   }
 }

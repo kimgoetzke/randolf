@@ -80,7 +80,11 @@ fn main() {
         Command::CloseWindow => wm.borrow_mut().close_window(),
         Command::SwitchWorkspace(id) => wm.borrow_mut().switch_workspace(id),
         Command::MoveWindowToWorkspace(id) => wm.borrow_mut().move_window_to_workspace(id),
-        Command::OpenApplication(path, as_admin) => launcher.borrow_mut().launch(path, as_admin),
+        Command::OpenApplication(path, as_admin) => launcher.borrow_mut().launch(path, None, as_admin),
+        Command::OpenRandolfFolder => {
+          let args = launcher.borrow_mut().get_executable_folder();
+          launcher.borrow_mut().launch("explorer.exe".to_string(), Some(&args), false);
+        }
         Command::Exit => {
           wm.borrow_mut().restore_all_managed_windows();
           interrupt_handle.interrupt();

@@ -22,6 +22,7 @@ enum Event {
   SetMargin(i32),
   ToggleSelectingSameCenterWindows,
   LogMonitorLayout,
+  OpenRandolfFolder,
 }
 
 impl TrayMenuManager {
@@ -78,9 +79,10 @@ impl TrayMenuManager {
       })
       .separator()
       .submenu(
-        "Configure debug settings",
+        "Explore debug settings",
         MenuBuilder::new().item("Print monitor layout to log file", Event::LogMonitorLayout),
       )
+      .item("Open Randolf folder in Explorer", Event::OpenRandolfFolder)
       .separator()
       .submenu(
         "Set window margin to...",
@@ -159,6 +161,11 @@ impl TrayMenuManager {
         Event::LogMonitorLayout => {
           get_all_monitors().print_layout();
           info!("Logged monitor layout");
+        }
+        Event::OpenRandolfFolder => {
+          command_sender
+            .send(Command::OpenRandolfFolder)
+            .expect("Failed to send open randolf folder command");
         }
         e => {
           error!("Received unhandled tray menu event: {:?}", e);

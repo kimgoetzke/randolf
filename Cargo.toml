@@ -1,6 +1,6 @@
 [package]
 name = "randolf"
-description = "A window manager for Windows 11"
+description = "A window management utility for Windows 11"
 version = "0.10.0"
 edition = "2024"
 

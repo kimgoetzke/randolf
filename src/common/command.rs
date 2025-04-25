@@ -11,6 +11,7 @@ pub enum Command {
   SwitchWorkspace(PersistentWorkspaceId),
   MoveWindowToWorkspace(PersistentWorkspaceId),
   OpenApplication(String, bool),
+  OpenRandolfFolder,
   Exit,
 }
 
@@ -25,6 +26,7 @@ impl Display for Command {
       Command::SwitchWorkspace(id) => write!(f, "Switch to workspace [{id}]"),
       Command::MoveWindowToWorkspace(id) => write!(f, "Move window to workspace [{id}]"),
       Command::OpenApplication(path, as_admin) => write!(f, "Open [{path}] as admin [{as_admin}]"),
+      Command::OpenRandolfFolder => write!(f, "Open Randolf folder in Explorer"),
       Command::Exit => write!(f, "Exit application"),
     }
   }
