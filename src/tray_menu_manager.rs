@@ -22,6 +22,7 @@ enum Event {
   SetMargin(i32),
   ToggleSelectingSameCenterWindows,
   LogMonitorLayout,
+  ReloadConfiguration,
   OpenRandolfFolder,
 }
 
@@ -82,6 +83,7 @@ impl TrayMenuManager {
         "Explore debug settings",
         MenuBuilder::new().item("Print monitor layout to log file", Event::LogMonitorLayout),
       )
+      .item("Reload randolf.toml", Event::ReloadConfiguration)
       .item("Open Randolf folder in Explorer", Event::OpenRandolfFolder)
       .separator()
       .submenu(
@@ -166,6 +168,10 @@ impl TrayMenuManager {
           command_sender
             .send(Command::OpenRandolfFolder)
             .expect("Failed to send open randolf folder command");
+        }
+        Event::ReloadConfiguration => {
+          let mut config = unlocked_config_provider(&config_provider);
+          config.reload_configuration();
         }
         e => {
           error!("Received unhandled tray menu event: {:?}", e);
