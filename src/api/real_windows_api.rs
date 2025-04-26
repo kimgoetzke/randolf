@@ -12,11 +12,11 @@ use windows::Win32::System::Com::{CLSCTX_ALL, COINIT_APARTMENTTHREADED, CoCreate
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, PROCESS_PER_MONITOR_DPI_AWARE, SetProcessDpiAwareness};
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
 use windows::Win32::UI::WindowsAndMessaging::{
-  DispatchMessageA, EnumWindows, GetClassNameW, GetCursorPos, GetForegroundWindow, GetWindowInfo, GetWindowPlacement,
-  GetWindowTextW, IsIconic, IsWindowVisible, MSG, PM_REMOVE, PeekMessageA, PostMessageW, SW_HIDE, SW_MAXIMIZE, SW_MINIMIZE,
-  SW_RESTORE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOZORDER, SWP_SHOWWINDOW, SendMessageW, SetCursorPos,
-  SetForegroundWindow, SetWindowPlacement, SetWindowPos, ShowWindow, TranslateMessage, WINDOWINFO, WINDOWPLACEMENT,
-  WM_CLOSE, WM_PAINT, WS_VISIBLE,
+  DispatchMessageA, EnumWindows, GetClassNameW, GetCursorPos, GetDesktopWindow, GetForegroundWindow, GetWindowInfo,
+  GetWindowPlacement, GetWindowTextW, IsIconic, IsWindowVisible, MSG, PM_REMOVE, PeekMessageA, PostMessageW, SW_HIDE,
+  SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOZORDER, SWP_SHOWWINDOW, SendMessageW,
+  SetCursorPos, SetForegroundWindow, SetWindowPlacement, SetWindowPos, ShowWindow, TranslateMessage, WINDOWINFO,
+  WINDOWPLACEMENT, WM_CLOSE, WM_PAINT, WS_VISIBLE,
 };
 use windows::core::BOOL;
 
@@ -252,7 +252,6 @@ impl WindowsApi for RealWindowsApi {
   }
 
   fn do_restore_window(&self, window: &Window, is_minimised: &bool) {
-    debug!("Restoring window {}", window.handle);
     unsafe {
       if !*is_minimised {
         let _ = !ShowWindow(window.handle.as_hwnd(), SW_RESTORE);
@@ -296,6 +295,10 @@ impl WindowsApi for RealWindowsApi {
       if !ShowWindow(handle.as_hwnd(), SW_HIDE).as_bool() {
         warn!("Failed to hide window {handle}");
       }
+      let desktop_hwnd = GetDesktopWindow();
+      let desktop_handle = WindowHandle::from(desktop_hwnd);
+      self.set_foreground_window(desktop_handle);
+      trace!("Hid window {handle} and selected native desktop window {}", desktop_handle);
     }
   }
 

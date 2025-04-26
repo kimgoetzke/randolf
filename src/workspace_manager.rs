@@ -298,10 +298,9 @@ pub mod tests {
     assert_eq!(active_workspaces.len(), 2, "The number of active workspaces shouldn't change");
     assert!(active_workspaces.contains(transient_target_ws_id));
     assert!(active_workspaces.contains(secondary_active_ws_id()));
-    assert_eq!(
-      workspace_manager.windows_api.get_foreground_window().unwrap(),
-      WindowHandle::new(1),
-      "The foreground window should not be changed because the target workspace doesn't have any windows"
+    assert!(
+      workspace_manager.windows_api.get_foreground_window().is_none(),
+      "No foreground window should be set because the target workspace doesn't have any windows"
     );
     assert_eq!(
       workspace_manager.windows_api.get_cursor_position(),
@@ -480,6 +479,10 @@ pub mod tests {
     assert_eq!(active_workspaces.len(), 2);
     assert!(active_workspaces.contains(primary_active_ws_id()));
     assert!(active_workspaces.contains(secondary_active_ws_id()));
+
+    // And the foreground window is no longer set (in reality, it would be set to the native desktop window as it is
+    // impossible not to set a foreground window)
+    assert!(workspace_manager.windows_api.get_foreground_window().is_none());
   }
 
   #[test]
@@ -502,8 +505,7 @@ pub mod tests {
     let target_workspace_id = secondary_active_ws_id();
     workspace_manager.move_window_to_workspace(PersistentWorkspaceId::from(*target_workspace_id));
 
-    // Then the window was moved to the target workspace, is still in the foreground, and its size was clamped to
-    // fit within the target workspace
+    // Then the window was moved to the target workspace and its size was clamped to fit within the target workspace
     let active_window = workspace_manager
       .windows_api
       .get_foreground_window()

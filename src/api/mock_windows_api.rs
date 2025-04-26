@@ -302,6 +302,9 @@ pub(crate) mod test {
         } else {
           panic!("Window with handle {handle} not found - did you forget to add it?");
         }
+        if state.borrow().foreground_window == Some(handle) {
+          state.borrow_mut().foreground_window = None;
+        }
       });
     }
 
