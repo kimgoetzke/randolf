@@ -138,7 +138,6 @@ fn default_excluded_window_titles() -> Vec<String> {
   vec![
     "Program Manager".to_string(),
     "Windows Input Experience".to_string(),
-    "Settings".to_string(),
     "".to_string(),
     "Windows Shell Experience Host".to_string(),
     "ZPToolBarParentWnd".to_string(),
