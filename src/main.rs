@@ -45,6 +45,7 @@ fn main() {
     command_sender.clone(),
   )));
 
+  // Create Windows API, application launcher, and log current configuration
   let windows_api = RealWindowsApi::new(
     configuration_manager
       .lock()

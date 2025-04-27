@@ -148,6 +148,19 @@ impl TrayMenuManager {
             .show_menu()
             .expect("Failed to open tray menu");
         }
+        Event::LogMonitorLayout => {
+          get_all_monitors().print_layout();
+          info!("Logged monitor layout");
+        }
+        Event::ReloadConfiguration => {
+          let mut config = unlocked_config_provider(&config_provider);
+          config.reload_configuration();
+        }
+        Event::OpenRandolfFolder => {
+          command_sender
+            .send(Command::OpenRandolfFolder)
+            .expect("Failed to send open randolf folder command");
+        }
         Event::SetMargin(margin) => {
           let mut config = unlocked_config_provider(&config_provider);
           if config.get_i32(WINDOW_MARGIN) != margin {
@@ -178,19 +191,6 @@ impl TrayMenuManager {
         Event::Exit => {
           info!("Attempting to exit application...");
           command_sender.send(Command::Exit).expect("Failed to send exit command");
-        }
-        Event::LogMonitorLayout => {
-          get_all_monitors().print_layout();
-          info!("Logged monitor layout");
-        }
-        Event::OpenRandolfFolder => {
-          command_sender
-            .send(Command::OpenRandolfFolder)
-            .expect("Failed to send open randolf folder command");
-        }
-        Event::ReloadConfiguration => {
-          let mut config = unlocked_config_provider(&config_provider);
-          config.reload_configuration();
         }
         e => {
           error!("Received unhandled tray menu event: {:?}", e);
