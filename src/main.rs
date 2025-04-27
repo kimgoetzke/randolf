@@ -40,7 +40,10 @@ fn main() {
   // Create configuration manager and tray menu
   let configuration_manager = Arc::new(Mutex::new(ConfigurationProvider::new()));
   let (command_sender, command_receiver) = unbounded();
-  TrayMenuManager::new_initialised(configuration_manager.clone(), command_sender.clone());
+  let tray_menu_manager = Rc::new(RefCell::new(TrayMenuManager::new_initialised(
+    configuration_manager.clone(),
+    command_sender.clone(),
+  )));
 
   let windows_api = RealWindowsApi::new(
     configuration_manager
@@ -78,7 +81,10 @@ fn main() {
         Command::MoveWindow(direction) => wm.borrow_mut().move_window(direction),
         Command::MoveCursor(direction) => wm.borrow_mut().move_cursor(direction),
         Command::CloseWindow => wm.borrow_mut().close_window(),
-        Command::SwitchWorkspace(id) => wm.borrow_mut().switch_workspace(id),
+        Command::SwitchWorkspace(id) => {
+          wm.borrow_mut().switch_workspace(id);
+          tray_menu_manager.borrow_mut().update_tray_icon(id);
+        }
         Command::MoveWindowToWorkspace(id) => wm.borrow_mut().move_window_to_workspace(id),
         Command::OpenApplication(path, as_admin) => launcher.borrow_mut().launch(path, None, as_admin),
         Command::OpenRandolfFolder => {

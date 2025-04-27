@@ -1,4 +1,3 @@
-use crate::common::TransientWorkspaceId;
 use crate::utils::id_to_string_or_panic;
 use std::fmt::Display;
 
@@ -6,15 +5,24 @@ use std::fmt::Display;
 pub struct PersistentWorkspaceId {
   pub monitor_id: [u16; 32],
   pub workspace: usize,
+  is_on_primary_monitor: bool,
 }
 
 impl PersistentWorkspaceId {
-  pub fn new(monitor_id: [u16; 32], workspace: usize) -> Self {
-    PersistentWorkspaceId { monitor_id, workspace }
+  pub fn new(monitor_id: [u16; 32], workspace: usize, is_on_primary_monitor: bool) -> Self {
+    PersistentWorkspaceId {
+      monitor_id,
+      workspace,
+      is_on_primary_monitor,
+    }
   }
 
   pub fn id_to_string(&self) -> String {
     id_to_string_or_panic(&self.monitor_id)
+  }
+
+  pub fn is_on_primary_monitor(&self) -> bool {
+    self.is_on_primary_monitor
   }
 
   #[allow(unused)]
@@ -24,15 +32,6 @@ impl PersistentWorkspaceId {
 
   pub fn is_same_workspace(&self, other: &Self) -> bool {
     self.workspace == other.workspace
-  }
-}
-
-impl From<TransientWorkspaceId> for PersistentWorkspaceId {
-  fn from(value: TransientWorkspaceId) -> Self {
-    PersistentWorkspaceId {
-      monitor_id: value.monitor_id,
-      workspace: value.workspace,
-    }
   }
 }
 
@@ -47,6 +46,8 @@ mod tests {
   use crate::common::{PersistentWorkspaceId, TransientWorkspaceId};
 
   impl PersistentWorkspaceId {
+    /// Creates a new instance of `PersistentWorkspaceId` for testing purposes for a primary monitor with a fixed
+    /// monitor ID of `"P_DISPLAY"`
     pub fn new_test(workspace: usize) -> Self {
       PersistentWorkspaceId {
         monitor_id: "P_DISPLAY"
@@ -58,6 +59,17 @@ mod tests {
           .try_into()
           .unwrap(),
         workspace,
+        is_on_primary_monitor: true,
+      }
+    }
+  }
+
+  impl From<TransientWorkspaceId> for PersistentWorkspaceId {
+    fn from(value: TransientWorkspaceId) -> Self {
+      PersistentWorkspaceId {
+        monitor_id: value.monitor_id,
+        workspace: value.workspace,
+        is_on_primary_monitor: false,
       }
     }
   }
@@ -94,37 +106,37 @@ mod tests {
   #[test]
   #[should_panic(expected = "Failed to convert id to string")]
   fn id_to_string_panics_on_empty_id() {
-    PersistentWorkspaceId::new([0; 32], 1).id_to_string();
+    PersistentWorkspaceId::new([0; 32], 1, false).id_to_string();
   }
 
   #[test]
   fn workspace_id_same_monitor_returns_true() {
-    let id1 = PersistentWorkspaceId::new([1; 32], 1);
-    let id2 = PersistentWorkspaceId::new([1; 32], 2);
+    let id1 = PersistentWorkspaceId::new([1; 32], 1, true);
+    let id2 = PersistentWorkspaceId::new([1; 32], 2, true);
 
     assert!(id1.is_same_monitor(&id2));
   }
 
   #[test]
   fn workspace_id_different_monitor_returns_false() {
-    let id1 = PersistentWorkspaceId::new([1; 32], 1);
-    let id2 = PersistentWorkspaceId::new([2; 32], 1);
+    let id1 = PersistentWorkspaceId::new([1; 32], 1, true);
+    let id2 = PersistentWorkspaceId::new([2; 32], 1, false);
 
     assert!(!id1.is_same_monitor(&id2));
   }
 
   #[test]
   fn workspace_id_same_workspace_returns_true() {
-    let id1 = PersistentWorkspaceId::new([1; 32], 1);
-    let id2 = PersistentWorkspaceId::new([2; 32], 1);
+    let id1 = PersistentWorkspaceId::new([1; 32], 1, true);
+    let id2 = PersistentWorkspaceId::new([2; 32], 1, false);
 
     assert!(id1.is_same_workspace(&id2));
   }
 
   #[test]
   fn workspace_id_different_workspace_returns_false() {
-    let id1 = PersistentWorkspaceId::new([1; 32], 1);
-    let id2 = PersistentWorkspaceId::new([1; 32], 2);
+    let id1 = PersistentWorkspaceId::new([1; 32], 1, true);
+    let id2 = PersistentWorkspaceId::new([1; 32], 2, true);
 
     assert!(!id1.is_same_workspace(&id2));
   }

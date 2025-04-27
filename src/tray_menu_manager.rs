@@ -1,5 +1,5 @@
 use crate::api::get_all_monitors;
-use crate::common::Command;
+use crate::common::{Command, PersistentWorkspaceId};
 use crate::configuration_provider::{ALLOW_SELECTING_SAME_CENTER_WINDOWS, ConfigurationProvider, WINDOW_MARGIN};
 use crate::utils::CONFIGURATION_PROVIDER_LOCK;
 use crossbeam_channel::{Receiver, Sender, unbounded};
@@ -10,6 +10,7 @@ use trayicon::*;
 pub struct TrayMenuManager {
   configuration_provider: Arc<Mutex<ConfigurationProvider>>,
   menu: Option<Arc<Mutex<TrayIcon<Event>>>>,
+  tray_icons: Vec<Icon>,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -31,6 +32,7 @@ impl TrayMenuManager {
     Self {
       configuration_provider,
       menu: None,
+      tray_icons: vec![],
     }
   }
 
@@ -43,13 +45,30 @@ impl TrayMenuManager {
     let tray = manager.create_tray_icon(tray_event_sender);
     manager.menu = Some(Arc::from(Mutex::new(tray)));
     manager.initialise(tray_event_receiver, command_sender);
+    manager.tray_icons = (1..=9).map(Self::create_icon).collect();
     debug!("Created tray icon & menu");
 
     manager
   }
 
+  fn create_icon(index: u8) -> Icon {
+    let icon_data = match index {
+      1 => include_bytes!("../assets/randolf-1.ico"),
+      2 => include_bytes!("../assets/randolf-2.ico"),
+      3 => include_bytes!("../assets/randolf-3.ico"),
+      4 => include_bytes!("../assets/randolf-4.ico"),
+      5 => include_bytes!("../assets/randolf-5.ico"),
+      6 => include_bytes!("../assets/randolf-6.ico"),
+      7 => include_bytes!("../assets/randolf-7.ico"),
+      8 => include_bytes!("../assets/randolf-8.ico"),
+      9 => include_bytes!("../assets/randolf-9.ico"),
+      _ => panic!("Invalid icon index"),
+    };
+
+    Icon::from_buffer(icon_data, Some(32), Some(32)).expect("Failed to create icon from buffer")
+  }
+
   fn create_tray_icon(&mut self, tx: Sender<Event>) -> TrayIcon<Event> {
-    let icon_bytes = include_bytes!("../assets/randolf.ico");
     let version = env!("CARGO_PKG_VERSION");
     let configuration = self.configuration_provider.lock().expect(CONFIGURATION_PROVIDER_LOCK);
 
@@ -57,7 +76,7 @@ impl TrayMenuManager {
       .sender(move |e| {
         let _ = tx.send(*e);
       })
-      .icon_from_buffer(icon_bytes)
+      .icon_from_buffer(include_bytes!("../assets/randolf.ico"))
       .tooltip("Randolf")
       .on_right_click(Event::RightClickTrayIcon)
       .on_click(Event::LeftClickTrayIcon)
@@ -179,8 +198,128 @@ impl TrayMenuManager {
       })
     });
   }
+
+  pub fn update_tray_icon(&self, workspace_id: PersistentWorkspaceId) {
+    if !workspace_id.is_on_primary_monitor() {
+      return;
+    }
+    if workspace_id.workspace > self.tray_icons.len() {
+      error!(
+        "Workspace ID [{}] is out of bounds for tray icons (max: [{}]) - ignoring request",
+        workspace_id.workspace,
+        self.tray_icons.len()
+      );
+      return;
+    }
+    let icon = &self.tray_icons[workspace_id.workspace - 1];
+    let tray_icon = Arc::clone(self.menu.as_ref().unwrap());
+    tray_icon
+      .lock()
+      .expect("Failed to lock tray icon")
+      .set_icon(icon)
+      .expect("Failed to set tray icon");
+    debug!(
+      "Set tray icon [{}/{}] to reflect active workspace on primary monitor",
+      workspace_id.workspace,
+      self.tray_icons.len()
+    );
+  }
 }
 
 fn unlocked_config_provider(config_provider: &Arc<Mutex<ConfigurationProvider>>) -> MutexGuard<ConfigurationProvider> {
   config_provider.lock().expect(CONFIGURATION_PROVIDER_LOCK)
+}
+
+#[cfg(test)]
+mod test {
+  use super::*;
+  use crate::configuration_provider::ConfigurationProvider;
+  use std::sync::{Arc, Mutex};
+
+  #[test]
+  fn new_initialised_returns_initialised_tray_menu_manager() {
+    let configuration_provider = Arc::new(Mutex::new(ConfigurationProvider::new()));
+    let command_sender = unbounded().0;
+    let tray_menu_manager = TrayMenuManager::new_initialised(configuration_provider.clone(), command_sender);
+
+    assert!(tray_menu_manager.menu.is_some());
+    assert_eq!(tray_menu_manager.tray_icons.len(), 9);
+  }
+
+  #[test]
+  fn update_tray_icon_sets_icon_for_primary_monitor_workspace() {
+    testing_logger::setup();
+    let configuration_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
+    let manager = TrayMenuManager::new_initialised(configuration_provider, unbounded().0);
+
+    let workspace_id = PersistentWorkspaceId::new_test(1);
+    manager.update_tray_icon(workspace_id);
+
+    testing_logger::validate(|captured_logs| {
+      assert_eq!(captured_logs.len(), 2);
+      assert_eq!(
+        captured_logs[1].body,
+        format!(
+          "Set tray icon [{}/{}] to reflect active workspace on primary monitor",
+          workspace_id.workspace,
+          manager.tray_icons.len()
+        )
+      );
+    });
+  }
+
+  #[test]
+  fn update_tray_icon_does_not_set_icon_for_non_primary_monitor_workspaces() {
+    testing_logger::setup();
+    let configuration_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
+    let manager = TrayMenuManager::new_initialised(configuration_provider, unbounded().0);
+
+    manager.update_tray_icon(PersistentWorkspaceId::new([1; 32], 1, false));
+    manager.update_tray_icon(PersistentWorkspaceId::new([2; 32], 2, false));
+    manager.update_tray_icon(PersistentWorkspaceId::new([3; 32], 3, false));
+
+    testing_logger::validate(|captured_logs| {
+      assert_eq!(captured_logs.len(), 1);
+      assert!(!captured_logs[0].body.contains("Set tray icon"));
+    });
+  }
+
+  #[test]
+  fn update_tray_icon_ignores_request_when_index_out_of_bounds() {
+    testing_logger::setup();
+    let configuration_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
+    let manager = TrayMenuManager::new_initialised(configuration_provider, unbounded().0);
+
+    manager.update_tray_icon(PersistentWorkspaceId::new_test(123));
+
+    testing_logger::validate(|captured_logs| {
+      assert_eq!(captured_logs.len(), 2);
+      assert_eq!(
+        captured_logs[1].body,
+        "Workspace ID [123] is out of bounds for tray icons (max: [9]) - ignoring request"
+      );
+    });
+  }
+
+  #[test]
+  fn create_icon_creates_icon() {
+    let icon = TrayMenuManager::create_icon(4);
+    assert_eq!(
+      icon,
+      Icon::from_buffer(include_bytes!("../assets/randolf-4.ico"), Some(32), Some(32),).unwrap()
+    );
+  }
+
+  #[test]
+  #[should_panic(expected = "Invalid icon index")]
+  fn create_icon_panics_for_invalid_index() {
+    TrayMenuManager::create_icon(10);
+  }
+
+  #[test]
+  fn create_icon_creates_different_icons_for_different_indices() {
+    let icon1 = TrayMenuManager::create_icon(1);
+    let icon2 = TrayMenuManager::create_icon(2);
+    assert_ne!(icon1, icon2);
+  }
 }

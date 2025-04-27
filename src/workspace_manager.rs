@@ -40,7 +40,7 @@ impl<T: WindowsApi + Clone> WorkspaceManager<T> {
     for monitor in all_monitors.get_all() {
       if monitor.is_primary {
         for layer in 1..=self.additional_workspace_count + 1 {
-          let id = PersistentWorkspaceId::new(monitor.id, layer as usize);
+          let id = PersistentWorkspaceId::new(monitor.id, layer as usize, true);
           let workspace = if layer == 1 {
             Workspace::new_active(id, monitor, self.margin)
           } else {
@@ -49,7 +49,7 @@ impl<T: WindowsApi + Clone> WorkspaceManager<T> {
           workspaces.insert(id, workspace);
         }
       } else {
-        let id = PersistentWorkspaceId::new(monitor.id, 1);
+        let id = PersistentWorkspaceId::new(monitor.id, 1, false);
         workspaces.insert(id, Workspace::new_active(id, monitor, self.margin));
       }
     }
@@ -224,9 +224,9 @@ pub mod tests {
     let left_monitor = Monitor::new_test(1, Rect::new(0, 0, 99, 100));
     let center_monitor = Monitor::new_test(2, Rect::new(100, 0, 199, 100));
     let right_monitor = Monitor::new_test(3, Rect::new(200, 0, 299, 100));
-    let left_workspace = Workspace::new_test(PersistentWorkspaceId::new(left_monitor.id, 1), &left_monitor);
-    let center_workspace = Workspace::new_test(PersistentWorkspaceId::new(center_monitor.id, 1), &center_monitor);
-    let right_workspace = Workspace::new_test(PersistentWorkspaceId::new(right_monitor.id, 1), &right_monitor);
+    let left_workspace = Workspace::new_test(PersistentWorkspaceId::new(left_monitor.id, 1, false), &left_monitor);
+    let center_workspace = Workspace::new_test(PersistentWorkspaceId::new(center_monitor.id, 1, false), &center_monitor);
+    let right_workspace = Workspace::new_test(PersistentWorkspaceId::new(right_monitor.id, 1, true), &right_monitor);
     let mut workspace_manager =
       WorkspaceManager::from_workspaces(&[&left_workspace, &center_workspace, &right_workspace], 0);
 
@@ -243,9 +243,9 @@ pub mod tests {
     let top_monitor = Monitor::new_test(1, Rect::new(0, 0, 100, 99));
     let center_monitor = Monitor::new_test(2, Rect::new(0, 100, 100, 199));
     let bottom_monitor = Monitor::new_test(3, Rect::new(0, 200, 100, 299));
-    let top_workspace = Workspace::new_test(PersistentWorkspaceId::new(top_monitor.id, 1), &top_monitor);
-    let center_workspace = Workspace::new_test(PersistentWorkspaceId::new(center_monitor.id, 1), &center_monitor);
-    let bottom_workspace = Workspace::new_test(PersistentWorkspaceId::new(bottom_monitor.id, 1), &bottom_monitor);
+    let top_workspace = Workspace::new_test(PersistentWorkspaceId::new(top_monitor.id, 1, true), &top_monitor);
+    let center_workspace = Workspace::new_test(PersistentWorkspaceId::new(center_monitor.id, 1, false), &center_monitor);
+    let bottom_workspace = Workspace::new_test(PersistentWorkspaceId::new(bottom_monitor.id, 1, false), &bottom_monitor);
     let mut workspace_manager =
       WorkspaceManager::from_workspaces(&[&top_workspace, &center_workspace, &bottom_workspace], 0);
 
@@ -261,10 +261,10 @@ pub mod tests {
   fn get_ordered_workspace_ids_with_multiple_workspaces_on_same_monitor() {
     let top_monitor = Monitor::new_test(1, Rect::new(0, 0, 100, 99));
     let bottom_monitor = Monitor::new_test(3, Rect::new(0, 200, 100, 299));
-    let top_workspace_1 = Workspace::new_test(PersistentWorkspaceId::new(top_monitor.id, 1), &top_monitor);
-    let top_workspace_2 = Workspace::new_test(PersistentWorkspaceId::new(top_monitor.id, 2), &top_monitor);
-    let bottom_workspace_1 = Workspace::new_test(PersistentWorkspaceId::new(bottom_monitor.id, 1), &bottom_monitor);
-    let bottom_workspace_2 = Workspace::new_test(PersistentWorkspaceId::new(bottom_monitor.id, 2), &bottom_monitor);
+    let top_workspace_1 = Workspace::new_test(PersistentWorkspaceId::new(top_monitor.id, 1, true), &top_monitor);
+    let top_workspace_2 = Workspace::new_test(PersistentWorkspaceId::new(top_monitor.id, 2, true), &top_monitor);
+    let bottom_workspace_1 = Workspace::new_test(PersistentWorkspaceId::new(bottom_monitor.id, 1, false), &bottom_monitor);
+    let bottom_workspace_2 = Workspace::new_test(PersistentWorkspaceId::new(bottom_monitor.id, 2, false), &bottom_monitor);
     let mut workspace_manager = WorkspaceManager::from_workspaces(
       &[&top_workspace_1, &top_workspace_2, &bottom_workspace_1, &bottom_workspace_2],
       0,
