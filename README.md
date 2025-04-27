@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/randolf.png" width="150" height="150" alt="Randolf"/>
+  <img src="./assets/randolf.png" width="160" height="160" alt="Randolf"/>
 </p>
 
 # Meet Randolf
@@ -18,9 +18,9 @@ Randolf is a window management utility for Windows 11 that allows you to:
   configuration file.
 
 My goal for this project was to implement some key window navigation concepts
-from [my Linux configuration](https://github.com/kimgoetzke/nixos-config) for Windows, offering an experience,
-somewhat closer to that of Linux window managers/compositors such as [Hyprland](https://hyprland.org/) without 
-_enforcing_ window tiling. The application was created to meet my own needs and started as migration of 
+from [my Linux configuration](https://github.com/kimgoetzke/nixos-config) for Windows, offering an experience, somewhat
+closer to that of Linux window managers/compositors such as [Hyprland](https://hyprland.org/) without
+_enforcing_ window tiling. The application was created to meet my own needs and started as migration of
 [Randy](https://github.com/kimgoetzke/randy) from C#/.NET to Rust, however contributions and suggestions (via
 issues) are welcome.
 
@@ -31,10 +31,13 @@ issues) are welcome.
 - Pressing `Win` + `Shift` + `\` will minimise the foreground window
 - Writes application logs to a file in the directory of the executable
 - Stores and loads configuration from `randolf.toml` in the directory of the executable
-- Displays a tray icon with a context menu
-    - Allows customising the window margin
-    - Allows printing a visual representation of the perceived monitor layout to the log file
-    - Allows closing the application (and auto-restoring all hidden windows)
+- Displays a tray icon that also functions as a workspace indicator and has a context menu that allows you to...
+    - Customise the window margin
+    - Print a visual representation of the perceived monitor layout to the log file
+    - Close the application which restores all hidden windows
+    - Open the folder containing the Randolf executable in File Explorer
+    - Reload the `randolf.toml` configuration file (but changes to hotkeys or exclusion settings still require
+      restarting the application)
 
 ## Demo
 
@@ -67,7 +70,7 @@ configuration file is created with the following default values when the applica
 [general]
 window_margin = 20
 allow_selecting_same_center_windows = true
-additional_workspace_count = 3
+additional_workspace_count = 2
 
 [exclusion_settings]
 window_titles = [
@@ -104,7 +107,7 @@ tray icon context menu.
 
 ##### additional_workspace_count
 
-Default: `3`
+Default: `2`
 
 The number of virtual workspaces that are created on the primary monitor by Randolf. Workspaces are similar to Windows
 desktops but only apply to a single monitor and are much faster to switch.
@@ -142,10 +145,12 @@ execute_as_admin = false
 
 #### Exclusion settings
 
-Randolf allows excluding certain windows from being interactable (e.g. selectable/movable) via the application. You can
-exclude windows by their title or class name, however Randolf currently does not provide any features to find the title
-or class name of a window (other than logging the title of a window when it is being interacted with via the
-application). A small number of windows are excluded by default, in order for the application to function properly.
+Randolf allows excluding certain windows from being interactable (e.g. selectable/movable) via the application. A small
+number of windows are excluded by default in order for the application to function properly.
+
+You can add additional windows to the exclusion list by adding their title or class name to the `[exclusion_settings]`
+section. Randolf currently does not provide any features to identify the title or class name of a window other than
+logging the _title_ of a window when it is being interacted with via the application.
 
 ## FAQ
 
@@ -160,8 +165,8 @@ You can create a shortcut to the executable and place it in the startup folder (
 
 ### Why does this application even exist? What is its purpose?
 
-While [Komorebi](https://github.com/LGUG2Z/komorebi/) is the most feature-rich window tiling manager for Windows I
-know, it requires a commercial license (particularly problematic for me since I only use Windows for work), depends on a
+While [Komorebi](https://github.com/LGUG2Z/komorebi/) is the most feature-rich window tiling manager for Windows I know,
+it requires a commercial license (particularly problematic for me since I only use Windows for work), depends on a
 separate hotkey daemon, and enforces tiling for all windows unless explicitly excepted. I also experienced stability and
 configuration issues during my usage.
 

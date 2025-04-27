@@ -344,6 +344,14 @@ impl ConfigurationProvider {
     &self.config.exclusion_settings
   }
 
+  pub fn reload_configuration(&mut self) {
+    info!("Reloading configuration from file: {}", self.config_path.display());
+    let (config, config_string) = Self::load_or_create_config(&self.config_path).expect("Failed to load configuration");
+    self.config = config;
+    self.config_string = config_string;
+    self.validate_config();
+  }
+
   fn save_config(&self) -> Result<(), Box<dyn Error>> {
     info!("Saving configuration to file: {}", self.config_path.display());
     let toml_string = toml::to_string_pretty(&self.config)?;
@@ -591,5 +599,54 @@ mod tests {
 
     assert!(config_string.unwrap().contains("additional_workspace_count = 15"));
     assert_eq!(configuration_provider.config.general.additional_workspace_count, 8);
+  }
+
+  #[test]
+  fn reload_configuration_replaces_prior_settings() {
+    let directory = create_temp_directory();
+    let path = directory.path().join(CONFIGURATION_FILE_NAME);
+    let custom_config = Configuration {
+      general: GeneralConfiguration {
+        window_margin: 50,
+        allow_selecting_same_center_windows: false,
+        additional_workspace_count: 2,
+      },
+      hotkey: vec![],
+      exclusion_settings: ExclusionSettings::default(),
+    };
+    let toml_string = toml::to_string_pretty(&custom_config).expect("Failed to serialize config");
+    fs::write(&path, toml_string).expect("Failed to write config file");
+    let (config, config_string) = ConfigurationProvider::load_or_create_config(&path).expect("Failed to load config");
+    let mut configuration_provider = ConfigurationProvider {
+      config,
+      config_path: path,
+      config_string: config_string.clone(),
+    };
+
+    let new_config = Configuration {
+      general: GeneralConfiguration {
+        window_margin: 100,
+        allow_selecting_same_center_windows: true,
+        additional_workspace_count: 8,
+      },
+      hotkey: vec![CustomHotkey {
+        name: "Test App".to_string(),
+        path: "C:\\test.exe".to_string(),
+        hotkey: "y".to_string(),
+        execute_as_admin: true,
+      }],
+      exclusion_settings: ExclusionSettings::default(),
+    };
+    let new_toml_string = toml::to_string_pretty(&new_config).expect("Failed to serialize new config");
+    fs::write(&configuration_provider.config_path, new_toml_string).expect("Failed to write new config file");
+
+    configuration_provider.reload_configuration();
+
+    assert_eq!(configuration_provider.config.general.window_margin, 100);
+    assert!(configuration_provider.config.general.allow_selecting_same_center_windows);
+    assert_eq!(configuration_provider.config.general.additional_workspace_count, 8);
+    assert_eq!(configuration_provider.config.hotkey.len(), 1);
+    assert_eq!(configuration_provider.config.hotkey[0].name, "Test App");
+    assert!(configuration_provider.config.hotkey[0].execute_as_admin);
   }
 }

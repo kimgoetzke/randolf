@@ -40,8 +40,12 @@ fn main() {
   // Create configuration manager and tray menu
   let configuration_manager = Arc::new(Mutex::new(ConfigurationProvider::new()));
   let (command_sender, command_receiver) = unbounded();
-  TrayMenuManager::new_initialised(configuration_manager.clone(), command_sender.clone());
+  let tray_menu_manager = Rc::new(RefCell::new(TrayMenuManager::new_initialised(
+    configuration_manager.clone(),
+    command_sender.clone(),
+  )));
 
+  // Create Windows API, application launcher, and log current configuration
   let windows_api = RealWindowsApi::new(
     configuration_manager
       .lock()
@@ -78,9 +82,16 @@ fn main() {
         Command::MoveWindow(direction) => wm.borrow_mut().move_window(direction),
         Command::MoveCursor(direction) => wm.borrow_mut().move_cursor(direction),
         Command::CloseWindow => wm.borrow_mut().close_window(),
-        Command::SwitchWorkspace(id) => wm.borrow_mut().switch_workspace(id),
+        Command::SwitchWorkspace(id) => {
+          wm.borrow_mut().switch_workspace(id);
+          tray_menu_manager.borrow_mut().update_tray_icon(id);
+        }
         Command::MoveWindowToWorkspace(id) => wm.borrow_mut().move_window_to_workspace(id),
-        Command::OpenApplication(path, as_admin) => launcher.borrow_mut().launch(path, as_admin),
+        Command::OpenApplication(path, as_admin) => launcher.borrow_mut().launch(path, None, as_admin),
+        Command::OpenRandolfFolder => {
+          let args = launcher.borrow_mut().get_executable_folder();
+          launcher.borrow_mut().launch("explorer.exe".to_string(), Some(&args), false);
+        }
         Command::Exit => {
           wm.borrow_mut().restore_all_managed_windows();
           interrupt_handle.interrupt();

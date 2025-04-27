@@ -122,9 +122,7 @@ impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
 
     // Hide and store all windows in the target workspace, if required
     if !target_workspace_id.is_same_workspace(&target_monitor_active_workspace_id) {
-      if let Some(target_monitor_active_workspace) =
-        self.manager.workspaces.get_mut(&target_monitor_active_workspace_id.into())
-      {
+      if let Some(target_monitor_active_workspace) = self.manager.workspaces.get_mut(&target_monitor_active_workspace_id) {
         let current_windows = self
           .manager
           .windows_api
@@ -141,27 +139,9 @@ impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
       };
     }
 
-    // Attempt to find the largest window on the target workspace
-    let largest_window = if let Some(new_workspace) = self.manager.workspaces.get(&target_workspace_id.into()) {
-      let visible_windows = self
-        .manager
-        .windows_api
-        .get_all_visible_windows_within_area(new_workspace.monitor.work_area);
-      let mut windows: Vec<Window> = visible_windows
-        .iter()
-        .filter(|w| !self.manager.workspaces.values().any(|workspace| workspace.stores(&w.handle)))
-        .cloned()
-        .collect();
-      if let Some(window) = new_workspace.get_largest_window() {
-        windows.push(window);
-      }
-      windows.iter().max_by_key(|w| w.rect.area()).cloned().to_owned()
-    } else {
-      None
-    };
-
     // Restore windows for the new workspace and set the cursor position
-    if let Some(new_workspace) = self.manager.workspaces.get_mut(&target_workspace_id.into()) {
+    let largest_window = self.find_largest_visible_window_in_workspace(&target_workspace_id);
+    if let Some(new_workspace) = self.manager.workspaces.get_mut(&target_workspace_id) {
       new_workspace.restore_windows(&self.manager.windows_api);
       if let Some(largest_window) = largest_window {
         trace!(
@@ -180,7 +160,7 @@ impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
         "Failed to switch workspace because: The target workspace ({}) does not exist",
         target_workspace_id
       );
-      if let Some(original_workspace) = self.manager.workspaces.get_mut(&current_workspace_id.into()) {
+      if let Some(original_workspace) = self.manager.workspaces.get_mut(&current_workspace_id) {
         original_workspace.restore_windows(&self.manager.windows_api);
         self
           .manager
@@ -216,11 +196,13 @@ impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
   }
 
   pub fn move_window_to_workspace(&mut self, target_workspace_id: PersistentWorkspaceId) {
-    if self.resolve_to_transient(target_workspace_id).is_none()
-      && self.get_current_workspace_id_if_different_to(target_workspace_id).is_none()
-    {
+    if self.resolve_to_transient(target_workspace_id).is_none() {
       return;
     }
+    let current_workspace_id = match self.get_current_workspace_id_if_different_to(target_workspace_id) {
+      Some(id) => id,
+      None => return,
+    };
 
     // Collect all relevant information
     let Some(foreground_window) = self.manager.windows_api.get_foreground_window() else {
@@ -236,13 +218,36 @@ impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
     let current_monitor = self.manager.windows_api.get_monitor_handle_for_window_handle(window.handle);
 
     // Move or store the window
-    if let Some(target_workspace) = self.manager.workspaces.get_mut(&target_workspace_id.into()) {
+    if let Some(target_workspace) = self.manager.workspaces.get_mut(&target_workspace_id) {
       target_workspace.move_or_store_and_hide_window(window.clone(), current_monitor, &self.manager.windows_api);
     } else {
       warn!(
         "Failed to move window to workspace because: The target workspace ({}) does not exist",
         target_workspace_id
       );
+    }
+
+    // Set the foreground window to the largest visible window in the current workspace, if the target workspace is not
+    // active (if it is, then the focus will stay on the moved window)
+    let is_target_workspace_active = if let Some(workspace) = self.manager.workspaces.get(&target_workspace_id) {
+      workspace.is_active()
+    } else {
+      false
+    };
+    if !is_target_workspace_active {
+      trace!(
+        "Setting foreground window to the largest visible window in the current workspace [{}]",
+        current_workspace_id
+      );
+      if let Some(largest_window) = self.find_largest_visible_window_in_workspace(&current_workspace_id) {
+        trace!(
+          "Setting foreground window to {} \"{}\"",
+          largest_window.handle,
+          largest_window.title_trunc()
+        );
+        self.manager.windows_api.set_foreground_window(largest_window.handle);
+        self.manager.windows_api.set_cursor_position(&largest_window.center);
+      }
     }
 
     info!(
@@ -328,6 +333,27 @@ impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
       .for_each(|(_, workspace)| {
         workspace.set_active(is_active);
       });
+  }
+
+  fn find_largest_visible_window_in_workspace(&mut self, target_workspace_id: &PersistentWorkspaceId) -> Option<Window> {
+    let largest_window = if let Some(new_workspace) = self.manager.workspaces.get(&target_workspace_id) {
+      let visible_windows = self
+        .manager
+        .windows_api
+        .get_all_visible_windows_within_area(new_workspace.monitor.work_area);
+      let mut windows: Vec<Window> = visible_windows
+        .iter()
+        .filter(|w| !self.manager.workspaces.values().any(|workspace| workspace.stores(&w.handle)))
+        .cloned()
+        .collect();
+      if let Some(window) = new_workspace.get_largest_window() {
+        windows.push(window);
+      }
+      windows.iter().max_by_key(|w| w.rect.area()).cloned().to_owned()
+    } else {
+      None
+    };
+    largest_window
   }
 
   fn log_initialised_workspaces(&mut self) {
