@@ -103,7 +103,7 @@ impl TrayMenuManager {
         MenuBuilder::new().item("Print monitor layout to log file", Event::LogMonitorLayout),
       )
       .item("Reload randolf.toml", Event::ReloadConfiguration)
-      .item("Open Randolf folder in Explorer", Event::OpenRandolfFolder)
+      .item("Open the folder containing Randolf", Event::OpenRandolfFolder)
       .separator()
       .submenu(
         "Set window margin to...",
