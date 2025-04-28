@@ -153,6 +153,11 @@ pub(crate) mod test {
   }
 
   impl WindowsApi for MockWindowsApi {
+    fn is_running_as_admin(&self) -> bool {
+      trace!("Mock windows API checks if running as admin");
+      true
+    }
+
     fn get_foreground_window(&self) -> Option<WindowHandle> {
       trace!("Mock windows API gets foreground window");
       MOCK_STATE.with(|state| state.borrow_mut().foreground_window)

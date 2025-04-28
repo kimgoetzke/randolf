@@ -1,6 +1,8 @@
 use crate::api::get_all_monitors;
 use crate::common::{Command, PersistentWorkspaceId};
-use crate::configuration_provider::{ALLOW_SELECTING_SAME_CENTER_WINDOWS, ConfigurationProvider, WINDOW_MARGIN};
+use crate::configuration_provider::{
+  ALLOW_SELECTING_SAME_CENTER_WINDOWS, ConfigurationProvider, FORCE_USING_ADMIN_PRIVILEGES, WINDOW_MARGIN,
+};
 use crate::utils::CONFIGURATION_PROVIDER_LOCK;
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -22,8 +24,9 @@ enum Event {
   DisabledItem,
   SetMargin(i32),
   ToggleSelectingSameCenterWindows,
+  ToggleForceUsingAdminPrivileges,
   LogMonitorLayout,
-  ReloadConfiguration,
+  RestartRandolf,
   OpenRandolfFolder,
 }
 
@@ -102,9 +105,6 @@ impl TrayMenuManager {
         "Explore debug settings",
         MenuBuilder::new().item("Print monitor layout to log file", Event::LogMonitorLayout),
       )
-      .item("Reload randolf.toml", Event::ReloadConfiguration)
-      .item("Open the folder containing Randolf", Event::OpenRandolfFolder)
-      .separator()
       .submenu(
         "Set window margin to...",
         MenuBuilder::new()
@@ -121,8 +121,15 @@ impl TrayMenuManager {
         config.get_bool(ALLOW_SELECTING_SAME_CENTER_WINDOWS),
         Event::ToggleSelectingSameCenterWindows,
       )
+      .checkable(
+        "Force using admin privileges",
+        config.get_bool(FORCE_USING_ADMIN_PRIVILEGES),
+        Event::ToggleForceUsingAdminPrivileges,
+      )
       .separator()
-      .item("Exit  👋", Event::Exit)
+      .item("Open the folder containing Randolf", Event::OpenRandolfFolder)
+      .item("Restart Randolf", Event::RestartRandolf)
+      .item("Exit Randolf (restores any hidden windows)", Event::Exit)
   }
 
   // TODO: Update margins of "known" windows when the margin is changed
@@ -139,7 +146,7 @@ impl TrayMenuManager {
             .expect("Failed to open tray menu");
         }
         Event::DoubleClickTrayIcon => {
-          debug!("Double clicking tray icon is not implemented");
+          trace!("Tray icon double clicked: Not implemented");
         }
         Event::LeftClickTrayIcon => {
           tray_icon
@@ -151,15 +158,6 @@ impl TrayMenuManager {
         Event::LogMonitorLayout => {
           get_all_monitors().print_layout();
           info!("Logged monitor layout");
-        }
-        Event::ReloadConfiguration => {
-          let mut config = unlocked_config_provider(&config_provider);
-          config.reload_configuration();
-        }
-        Event::OpenRandolfFolder => {
-          command_sender
-            .send(Command::OpenRandolfFolder)
-            .expect("Failed to send open randolf folder command");
         }
         Event::SetMargin(margin) => {
           let mut config = unlocked_config_provider(&config_provider);
@@ -188,8 +186,32 @@ impl TrayMenuManager {
           config.set_bool(ALLOW_SELECTING_SAME_CENTER_WINDOWS, !is_enabled);
           debug!("Set [{:?}] to [{}]", Event::ToggleSelectingSameCenterWindows, !is_enabled);
         }
+        Event::ToggleForceUsingAdminPrivileges => {
+          let mut config = unlocked_config_provider(&config_provider);
+          let is_enabled = config.get_bool(FORCE_USING_ADMIN_PRIVILEGES);
+          if let Err(result) = tray_icon
+            .lock()
+            .expect("Failed to lock tray icon")
+            .set_menu_item_checkable(Event::ToggleForceUsingAdminPrivileges, !is_enabled)
+          {
+            error!("Failed to toggle menu item: {result}");
+          }
+          config.set_bool(FORCE_USING_ADMIN_PRIVILEGES, !is_enabled);
+          debug!("Set [{:?}] to [{}]", Event::ToggleForceUsingAdminPrivileges, !is_enabled);
+        }
+        Event::OpenRandolfFolder => {
+          command_sender
+            .send(Command::OpenRandolfFolder)
+            .expect("Failed to send open randolf folder command");
+        }
+        Event::RestartRandolf => {
+          let mut config = unlocked_config_provider(&config_provider);
+          config.reload_configuration();
+          command_sender
+            .send(Command::RestartRandolf)
+            .expect("Failed to send restart command");
+        }
         Event::Exit => {
-          info!("Attempting to exit application...");
           command_sender.send(Command::Exit).expect("Failed to send exit command");
         }
         e => {

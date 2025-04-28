@@ -10,7 +10,7 @@ use windows::Win32::Graphics::Gdi::{
 };
 use windows::Win32::System::Com::{CLSCTX_ALL, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx};
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, PROCESS_PER_MONITOR_DPI_AWARE, SetProcessDpiAwareness};
-use windows::Win32::UI::Shell::IVirtualDesktopManager;
+use windows::Win32::UI::Shell::{IVirtualDesktopManager, IsUserAnAdmin};
 use windows::Win32::UI::WindowsAndMessaging::{
   DispatchMessageA, EnumWindows, GetClassNameW, GetCursorPos, GetDesktopWindow, GetForegroundWindow, GetWindowInfo,
   GetWindowPlacement, GetWindowTextW, IsIconic, IsWindowVisible, MSG, PM_REMOVE, PeekMessageA, PostMessageW, SW_HIDE,
@@ -36,6 +36,20 @@ impl RealWindowsApi {
 }
 
 impl WindowsApi for RealWindowsApi {
+  fn is_running_as_admin(&self) -> bool {
+    unsafe {
+      let is_admin = IsUserAnAdmin();
+      if is_admin.as_bool() {
+        trace!("This application is running with with admin privileges");
+      } else {
+        warn!(
+          "This application is NOT running with with admin privileges - it cannot interact with windows of applications that have admin privileges"
+        );
+      }
+      is_admin.as_bool()
+    }
+  }
+
   fn get_foreground_window(&self) -> Option<WindowHandle> {
     let hwnd = unsafe { GetForegroundWindow() };
 

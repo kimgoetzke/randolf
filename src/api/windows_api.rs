@@ -2,6 +2,7 @@ use crate::common::{MonitorHandle, MonitorInfo, Monitors, Point, Rect, Window, W
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
 
 pub trait WindowsApi {
+  fn is_running_as_admin(&self) -> bool;
   fn get_foreground_window(&self) -> Option<WindowHandle>;
   fn set_foreground_window(&self, handle: WindowHandle);
   fn get_all_visible_windows(&self) -> Vec<Window>;

@@ -16,9 +16,9 @@ mod workspace_manager;
 extern crate log;
 extern crate simplelog;
 
-use crate::api::RealWindowsApi;
+use crate::api::{RealWindowsApi, WindowsApi};
 use crate::application_launcher::ApplicationLauncher;
-use crate::configuration_provider::ConfigurationProvider;
+use crate::configuration_provider::{ConfigurationProvider, FORCE_USING_ADMIN_PRIVILEGES};
 use crate::hotkey_manager::HotkeyManager;
 use crate::log_manager::LogManager;
 use crate::tray_menu_manager::TrayMenuManager;
@@ -61,6 +61,18 @@ fn main() {
     .expect(CONFIGURATION_PROVIDER_LOCK)
     .log_current_config();
 
+  // Restart the application with admin privileges, if required
+  if !windows_api.is_running_as_admin()
+    && configuration_manager
+      .lock()
+      .expect(CONFIGURATION_PROVIDER_LOCK)
+      .get_bool(FORCE_USING_ADMIN_PRIVILEGES)
+  {
+    let executable = launcher.borrow_mut().get_executable_path();
+    launcher.borrow_mut().launch(executable, None, true);
+    return;
+  }
+
   // Create window manager and register hotkeys
   let wm = Rc::new(RefCell::new(WindowManager::new(
     configuration_manager.clone(),
@@ -91,6 +103,17 @@ fn main() {
         Command::OpenRandolfFolder => {
           let args = launcher.borrow_mut().get_executable_folder();
           launcher.borrow_mut().launch("explorer.exe".to_string(), Some(&args), false);
+        }
+        Command::RestartRandolf => {
+          wm.borrow_mut().restore_all_managed_windows();
+          interrupt_handle.interrupt();
+          let as_admin = configuration_manager
+            .lock()
+            .expect(CONFIGURATION_PROVIDER_LOCK)
+            .get_bool(FORCE_USING_ADMIN_PRIVILEGES);
+          let args = launcher.borrow_mut().get_executable_path();
+          launcher.borrow_mut().launch(args, None, as_admin);
+          std::process::exit(0);
         }
         Command::Exit => {
           wm.borrow_mut().restore_all_managed_windows();
