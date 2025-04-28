@@ -104,6 +104,17 @@ fn main() {
           let args = launcher.borrow_mut().get_executable_folder();
           launcher.borrow_mut().launch("explorer.exe".to_string(), Some(&args), false);
         }
+        Command::RestartRandolf => {
+          wm.borrow_mut().restore_all_managed_windows();
+          interrupt_handle.interrupt();
+          let as_admin = configuration_manager
+            .lock()
+            .expect(CONFIGURATION_PROVIDER_LOCK)
+            .get_bool(FORCE_USING_ADMIN_PRIVILEGES);
+          let args = launcher.borrow_mut().get_executable_path();
+          launcher.borrow_mut().launch(args, None, as_admin);
+          std::process::exit(0);
+        }
         Command::Exit => {
           wm.borrow_mut().restore_all_managed_windows();
           interrupt_handle.interrupt();

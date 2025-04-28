@@ -75,17 +75,16 @@ additional_workspace_count = 2
 
 [exclusion_settings]
 window_titles = [
-  "Program Manager",
-  "Windows Input Experience",
-  "Settings",
-  # And more...
+    "Program Manager",
+    "Windows Input Experience",
+    # And more...
 ]
 window_class_names = [
-  "Progman",
-  "WorkerW",
-  "Shell_TrayWnd",
-  "Shell_SecondaryTrayWnd",
-  # And more...
+    "Progman",
+    "WorkerW",
+    "Shell_TrayWnd",
+    "Shell_SecondaryTrayWnd",
+    # And more...
 ]
 ```
 
@@ -113,7 +112,7 @@ Default: `false`
 Whether to force the application to run with admin privileges. This will restart the application with admin privileges
 if it is not already running with them. Without admin privileges, the application will not be able to interact at all
 with other applications that are running with admin privileges. If you (semi-)regularly use applications that require
-admin privileges, you should set this to `true` or start Randolf with admin privileges directly.
+admin privileges, you should set this to `true` or, even better, simply start Randolf with admin privileges directly.
 
 ##### additional_workspace_count
 
