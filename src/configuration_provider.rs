@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 pub const WINDOW_MARGIN: &str = "window_margin";
 pub const ALLOW_SELECTING_SAME_CENTER_WINDOWS: &str = "allow_selecting_same_center_windows";
+pub const FORCE_USING_ADMIN_PRIVILEGES: &str = "force_using_admin_privileges";
 pub const ADDITIONAL_WORKSPACE_COUNT: &str = "additional_workspace_count";
 
 const CONFIGURATION_FILE_NAME: &str = "randolf.toml";
@@ -26,6 +27,8 @@ struct GeneralConfiguration {
   window_margin: i32,
   #[serde(default = "default_allow_selecting_same_center_windows")]
   allow_selecting_same_center_windows: bool,
+  #[serde(default = "default_force_using_admin_privileges")]
+  force_using_admin_privileges: bool,
   #[serde(default = "default_additional_workspace_count")]
   additional_workspace_count: i32,
 }
@@ -68,6 +71,21 @@ fn validate_allow_selecting_same_center_windows(config_str: &str, configuration_
   }
 }
 
+fn default_force_using_admin_privileges() -> bool {
+  false
+}
+
+fn validate_force_using_admin_privileges(config_str: &str, configuration_provider: &mut ConfigurationProvider) {
+  if !config_str.contains(FORCE_USING_ADMIN_PRIVILEGES) {
+    warn!(
+      "[{}] was missing; adding it now with default value: {}",
+      FORCE_USING_ADMIN_PRIVILEGES,
+      default_force_using_admin_privileges()
+    );
+    configuration_provider.set_bool(FORCE_USING_ADMIN_PRIVILEGES, default_force_using_admin_privileges());
+  }
+}
+
 fn default_additional_workspace_count() -> i32 {
   2
 }
@@ -101,6 +119,7 @@ impl Default for GeneralConfiguration {
     Self {
       window_margin: default_window_margin(),
       allow_selecting_same_center_windows: default_allow_selecting_same_center_windows(),
+      force_using_admin_privileges: default_force_using_admin_privileges(),
       additional_workspace_count: default_additional_workspace_count(),
     }
   }
@@ -268,6 +287,7 @@ impl ConfigurationProvider {
     if let Some(config_as_string) = self.config_string.clone() {
       validate_window_margin(&config_as_string, self);
       validate_allow_selecting_same_center_windows(&config_as_string, self);
+      validate_force_using_admin_privileges(&config_as_string, self);
       validate_workspace_count(&config_as_string, self);
       validate_excluded_window_titles(&config_as_string, self);
       validate_excluded_window_classes(&config_as_string, self);
@@ -279,6 +299,7 @@ impl ConfigurationProvider {
   pub fn get_bool(&self, name: &str) -> bool {
     match name {
       ALLOW_SELECTING_SAME_CENTER_WINDOWS => self.config.general.allow_selecting_same_center_windows,
+      FORCE_USING_ADMIN_PRIVILEGES => self.config.general.force_using_admin_privileges,
       &_ => {
         warn!("Failed to get configuration because [{name}] is unknown");
 
@@ -292,6 +313,12 @@ impl ConfigurationProvider {
     match name {
       ALLOW_SELECTING_SAME_CENTER_WINDOWS => {
         self.config.general.allow_selecting_same_center_windows = value;
+        if let Err(err) = self.save_config() {
+          error!("Failed to save configuration: {}", err);
+        }
+      }
+      FORCE_USING_ADMIN_PRIVILEGES => {
+        self.config.general.force_using_admin_privileges = value;
         if let Err(err) = self.save_config() {
           error!("Failed to save configuration: {}", err);
         }
@@ -422,6 +449,7 @@ mod tests {
       general: GeneralConfiguration {
         window_margin: 50,
         allow_selecting_same_center_windows: false,
+        force_using_admin_privileges: true,
         additional_workspace_count: 5,
       },
       hotkey: vec![CustomHotkey {
@@ -441,6 +469,7 @@ mod tests {
     let loaded_config = result.unwrap().0;
     assert_eq!(loaded_config.general.window_margin, 50);
     assert!(!loaded_config.general.allow_selecting_same_center_windows);
+    assert!(loaded_config.general.force_using_admin_privileges);
     assert_eq!(loaded_config.general.additional_workspace_count, 5);
     assert_eq!(loaded_config.hotkey.len(), 1);
     assert_eq!(loaded_config.hotkey[0].name, "Test App");
@@ -608,6 +637,7 @@ mod tests {
       general: GeneralConfiguration {
         window_margin: 50,
         allow_selecting_same_center_windows: false,
+        force_using_admin_privileges: false,
         additional_workspace_count: 2,
       },
       hotkey: vec![],
@@ -626,6 +656,7 @@ mod tests {
       general: GeneralConfiguration {
         window_margin: 100,
         allow_selecting_same_center_windows: true,
+        force_using_admin_privileges: true,
         additional_workspace_count: 8,
       },
       hotkey: vec![CustomHotkey {
@@ -643,6 +674,7 @@ mod tests {
 
     assert_eq!(configuration_provider.config.general.window_margin, 100);
     assert!(configuration_provider.config.general.allow_selecting_same_center_windows);
+    assert!(configuration_provider.config.general.force_using_admin_privileges);
     assert_eq!(configuration_provider.config.general.additional_workspace_count, 8);
     assert_eq!(configuration_provider.config.hotkey.len(), 1);
     assert_eq!(configuration_provider.config.hotkey[0].name, "Test App");

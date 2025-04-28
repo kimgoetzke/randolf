@@ -122,7 +122,7 @@ impl TrayMenuManager {
         Event::ToggleSelectingSameCenterWindows,
       )
       .separator()
-      .item("Exit  👋", Event::Exit)
+      .item("Exit Randolf (after restoring any hidden windows)", Event::Exit)
   }
 
   // TODO: Update margins of "known" windows when the margin is changed

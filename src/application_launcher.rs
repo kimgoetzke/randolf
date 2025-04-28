@@ -33,6 +33,19 @@ impl<T: WindowsApi> ApplicationLauncher<T> {
     }
   }
 
+  pub fn get_executable_path(&self) -> String {
+    if let Ok(executable_path) = std::env::current_exe() {
+      executable_path
+        .to_str()
+        .expect("Failed to convert Randolf's executable path to string")
+        .to_string()
+    } else {
+      warn!("Failed to get Randolf's executable path");
+
+      "".to_string()
+    }
+  }
+
   pub fn get_executable_folder(&self) -> String {
     if let Ok(executable_path) = std::env::current_exe() {
       let executable_directory = executable_path
@@ -186,12 +199,21 @@ mod tests {
 
   #[test]
   fn get_executable_folder_returns_correct_path() {
-    let mock_api = MockWindowsApi;
     let config_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
-    let launcher = ApplicationLauncher::new_initialised(config_provider, mock_api);
+    let launcher = ApplicationLauncher::new_initialised(config_provider, MockWindowsApi);
 
     let folder = launcher.get_executable_folder();
 
     assert!(folder.ends_with("randolf\\target\\debug\\deps"));
+  }
+
+  #[test]
+  fn get_executable_path_returns_path_to_an_executable() {
+    let config_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
+    let launcher = ApplicationLauncher::new_initialised(config_provider, MockWindowsApi);
+
+    let path = launcher.get_executable_path();
+
+    assert!(path.ends_with(".exe"));
   }
 }

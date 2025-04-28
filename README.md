@@ -70,21 +70,22 @@ configuration file is created with the following default values when the applica
 [general]
 window_margin = 20
 allow_selecting_same_center_windows = true
+force_using_admin_privileges = false
 additional_workspace_count = 2
 
 [exclusion_settings]
 window_titles = [
-    "Program Manager",
-    "Windows Input Experience",
-    "Settings",
-    # And more...
+  "Program Manager",
+  "Windows Input Experience",
+  "Settings",
+  # And more...
 ]
 window_class_names = [
-    "Progman",
-    "WorkerW",
-    "Shell_TrayWnd",
-    "Shell_SecondaryTrayWnd",
-    # And more...
+  "Progman",
+  "WorkerW",
+  "Shell_TrayWnd",
+  "Shell_SecondaryTrayWnd",
+  # And more...
 ]
 ```
 
@@ -104,6 +105,15 @@ effectively means that the cursor cannot be moved away from two windows of the s
 same) until at least one of them is moved/resized. Disabling this, however, means that you will no longer be able to
 select the non-foreground window of the windows with the same center using this application. Can be configured via the
 tray icon context menu.
+
+##### force_using_admin_privileges
+
+Default: `false`
+
+Whether to force the application to run with admin privileges. This will restart the application with admin privileges
+if it is not already running with them. Without admin privileges, the application will not be able to interact at all
+with other applications that are running with admin privileges. If you (semi-)regularly use applications that require
+admin privileges, you should set this to `true` or start Randolf with admin privileges directly.
 
 ##### additional_workspace_count
 
