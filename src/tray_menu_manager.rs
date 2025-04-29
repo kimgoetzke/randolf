@@ -108,14 +108,17 @@ impl TrayMenuManager {
       .submenu(
         "Set window margin to...",
         MenuBuilder::new()
-          .checkable("5 px", 5 == current_margin, Event::SetMargin(5))
           .checkable("10 px", 10 == current_margin, Event::SetMargin(10))
           .checkable("15 px", 15 == current_margin, Event::SetMargin(15))
           .checkable("20 px (default)", 20 == current_margin, Event::SetMargin(20))
           .checkable("30 px", 30 == current_margin, Event::SetMargin(30))
           .checkable("40 px", 40 == current_margin, Event::SetMargin(40))
-          .checkable("50 px", 50 == current_margin, Event::SetMargin(50)),
+          .checkable("50 px", 50 == current_margin, Event::SetMargin(50))
+          .checkable("75 px", 75 == current_margin, Event::SetMargin(75))
+          .checkable("100 px", 100 == current_margin, Event::SetMargin(100))
+          .checkable("150 px", 150 == current_margin, Event::SetMargin(150)),
       )
+      .separator()
       .checkable(
         "Allow selecting same center windows",
         config.get_bool(ALLOW_SELECTING_SAME_CENTER_WINDOWS),
