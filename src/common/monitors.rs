@@ -45,6 +45,19 @@ impl Monitors {
     self.monitors.iter().collect()
   }
 
+  pub fn log_detected_monitors(&self) {
+    debug!("┌| Detected monitors:");
+    let last_monitor = self.monitors.len().saturating_sub(1);
+    for (i, monitor) in self.monitors.iter().enumerate() {
+      if i != last_monitor {
+        debug!("├> {}", monitor);
+      } else {
+        debug!("└> {}", monitor);
+      }
+    }
+  }
+
+  /// Prints the layout of the monitors to the logger i.e. console or file.
   pub fn print_layout(&self) {
     print_monitor_layout_to_canvas(&self.monitors);
   }

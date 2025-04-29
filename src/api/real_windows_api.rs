@@ -563,10 +563,6 @@ pub fn get_all_monitors() -> Monitors {
     }
   }
 
-  for monitor in &monitors {
-    trace!("- {}", monitor);
-  }
-
   Monitors::from(monitors)
 }
 

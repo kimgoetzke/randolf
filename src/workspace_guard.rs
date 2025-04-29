@@ -11,6 +11,7 @@ pub struct WorkspaceGuard<'a, T: WindowsApi + Clone> {
 impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
   pub fn new(manager: &'a mut WorkspaceManager<T>) -> Self {
     let monitors = manager.windows_api.get_all_monitors();
+    monitors.log_detected_monitors();
     for workspace in manager.workspaces.values_mut() {
       if let Some(monitor) = monitors.get_by_id(&workspace.id.monitor_id) {
         workspace.update_handle(monitor.handle);
