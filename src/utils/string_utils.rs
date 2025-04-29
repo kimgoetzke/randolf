@@ -14,6 +14,6 @@ pub fn id_to_string_or_panic(id: &[u16; 32]) -> String {
   if !device_name.is_empty() {
     device_name
   } else {
-    panic!("Failed to convert id to string");
+    panic!("Failed to convert ID to string");
   }
 }

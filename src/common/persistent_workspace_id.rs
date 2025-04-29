@@ -104,7 +104,7 @@ mod tests {
   }
 
   #[test]
-  #[should_panic(expected = "Failed to convert id to string")]
+  #[should_panic(expected = "Failed to convert ID to string")]
   fn id_to_string_panics_on_empty_id() {
     PersistentWorkspaceId::new([0; 32], 1, false).id_to_string();
   }
