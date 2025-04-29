@@ -3,7 +3,7 @@ use crate::common::{Command, PersistentWorkspaceId};
 use crate::configuration_provider::{
   ALLOW_SELECTING_SAME_CENTER_WINDOWS, ConfigurationProvider, FORCE_USING_ADMIN_PRIVILEGES, WINDOW_MARGIN,
 };
-use crate::utils::CONFIGURATION_PROVIDER_LOCK;
+use crate::utils::{CONFIGURATION_PROVIDER_LOCK, TRAY_ICON_LOCK, TRAY_ICON_OPEN};
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
@@ -72,9 +72,6 @@ impl TrayMenuManager {
   }
 
   fn create_tray_icon(&mut self, tx: Sender<Event>) -> TrayIcon<Event> {
-    let version = env!("CARGO_PKG_VERSION");
-    let configuration = self.configuration_provider.lock().expect(CONFIGURATION_PROVIDER_LOCK);
-
     TrayIconBuilder::new()
       .sender(move |e| {
         let _ = tx.send(*e);
@@ -84,55 +81,9 @@ impl TrayMenuManager {
       .on_right_click(Event::RightClickTrayIcon)
       .on_click(Event::LeftClickTrayIcon)
       .on_double_click(Event::DoubleClickTrayIcon)
-      .menu(self.menu_builder(version, configuration))
+      .menu(build_menu(&self.configuration_provider))
       .build()
       .expect("Failed to build tray icon")
-  }
-
-  fn menu_builder(&self, version: &str, config: MutexGuard<ConfigurationProvider>) -> MenuBuilder<Event> {
-    let current_margin: i32 = config.get_i32(WINDOW_MARGIN);
-    let icon_bytes = include_bytes!("../assets/randolf.ico");
-
-    MenuBuilder::new()
-      .with(MenuItem::Item {
-        name: format!("Randolf v{version}"),
-        disabled: true,
-        id: Event::DisabledItem,
-        icon: Some(Icon::from_buffer(icon_bytes, Some(32), Some(32)).unwrap()),
-      })
-      .separator()
-      .submenu(
-        "Explore debug settings",
-        MenuBuilder::new().item("Print monitor layout to log file", Event::LogMonitorLayout),
-      )
-      .submenu(
-        "Set window margin to...",
-        MenuBuilder::new()
-          .checkable("10 px", 10 == current_margin, Event::SetMargin(10))
-          .checkable("15 px", 15 == current_margin, Event::SetMargin(15))
-          .checkable("20 px (default)", 20 == current_margin, Event::SetMargin(20))
-          .checkable("30 px", 30 == current_margin, Event::SetMargin(30))
-          .checkable("40 px", 40 == current_margin, Event::SetMargin(40))
-          .checkable("50 px", 50 == current_margin, Event::SetMargin(50))
-          .checkable("75 px", 75 == current_margin, Event::SetMargin(75))
-          .checkable("100 px", 100 == current_margin, Event::SetMargin(100))
-          .checkable("150 px", 150 == current_margin, Event::SetMargin(150)),
-      )
-      .separator()
-      .checkable(
-        "Allow selecting same center windows",
-        config.get_bool(ALLOW_SELECTING_SAME_CENTER_WINDOWS),
-        Event::ToggleSelectingSameCenterWindows,
-      )
-      .checkable(
-        "Force using admin privileges",
-        config.get_bool(FORCE_USING_ADMIN_PRIVILEGES),
-        Event::ToggleForceUsingAdminPrivileges,
-      )
-      .separator()
-      .item("Open the folder containing Randolf", Event::OpenRandolfFolder)
-      .item("Restart Randolf", Event::RestartRandolf)
-      .item("Exit Randolf (restores any hidden windows)", Event::Exit)
   }
 
   // TODO: Update margins of "known" windows when the margin is changed
@@ -142,37 +93,26 @@ impl TrayMenuManager {
     thread::spawn(move || {
       rx.iter().for_each(|m| match m {
         Event::RightClickTrayIcon => {
-          tray_icon
-            .lock()
-            .expect("Failed to lock tray icon")
-            .show_menu()
-            .expect("Failed to open tray menu");
+          tray_icon.lock().expect(TRAY_ICON_LOCK).show_menu().expect(TRAY_ICON_OPEN);
         }
         Event::DoubleClickTrayIcon => {
           trace!("Tray icon double clicked: Not implemented");
         }
         Event::LeftClickTrayIcon => {
-          tray_icon
-            .lock()
-            .expect("Failed to lock tray icon")
-            .show_menu()
-            .expect("Failed to open tray menu");
+          tray_icon.lock().expect(TRAY_ICON_LOCK).show_menu().expect(TRAY_ICON_OPEN);
         }
         Event::LogMonitorLayout => {
           get_all_monitors().print_layout();
           info!("Logged monitor layout");
         }
         Event::SetMargin(margin) => {
-          let mut config = unlocked_config_provider(&config_provider);
-          if config.get_i32(WINDOW_MARGIN) != margin {
-            let mut tray_icon = tray_icon.lock().expect("Failed to lock tray icon");
-            tray_icon
-              .set_menu_item_checkable(Event::SetMargin(margin), true)
-              .expect("Failed to toggle menu item");
-            tray_icon
-              .set_menu_item_checkable(Event::SetMargin(config.get_i32(WINDOW_MARGIN)), false)
-              .expect("Failed to toggle menu item");
-            config.set_i32(WINDOW_MARGIN, margin);
+          let current_margin = { unlocked_config_provider(&config_provider).get_i32(WINDOW_MARGIN) };
+          if current_margin != margin {
+            unlocked_config_provider(&config_provider).set_i32(WINDOW_MARGIN, margin);
+            let menu = build_menu(&config_provider);
+            if let Err(err) = tray_icon.lock().expect(TRAY_ICON_LOCK).set_menu(&menu) {
+              error!("Failed to set menu: {err}");
+            }
             debug!("Set window margin to [{}]", margin);
           }
         }
@@ -181,7 +121,7 @@ impl TrayMenuManager {
           let is_enabled = config.get_bool(ALLOW_SELECTING_SAME_CENTER_WINDOWS);
           if let Err(result) = tray_icon
             .lock()
-            .expect("Failed to lock tray icon")
+            .expect(TRAY_ICON_LOCK)
             .set_menu_item_checkable(Event::ToggleSelectingSameCenterWindows, !is_enabled)
           {
             error!("Failed to toggle menu item: {result}");
@@ -194,7 +134,7 @@ impl TrayMenuManager {
           let is_enabled = config.get_bool(FORCE_USING_ADMIN_PRIVILEGES);
           if let Err(result) = tray_icon
             .lock()
-            .expect("Failed to lock tray icon")
+            .expect(TRAY_ICON_LOCK)
             .set_menu_item_checkable(Event::ToggleForceUsingAdminPrivileges, !is_enabled)
           {
             error!("Failed to toggle menu item: {result}");
@@ -240,7 +180,7 @@ impl TrayMenuManager {
     let tray_icon = Arc::clone(self.menu.as_ref().unwrap());
     tray_icon
       .lock()
-      .expect("Failed to lock tray icon")
+      .expect(TRAY_ICON_LOCK)
       .set_icon(icon)
       .expect("Failed to set tray icon");
     debug!(
@@ -253,6 +193,53 @@ impl TrayMenuManager {
 
 fn unlocked_config_provider(config_provider: &Arc<Mutex<ConfigurationProvider>>) -> MutexGuard<ConfigurationProvider> {
   config_provider.lock().expect(CONFIGURATION_PROVIDER_LOCK)
+}
+
+fn build_menu(config_provider: &Arc<Mutex<ConfigurationProvider>>) -> MenuBuilder<Event> {
+  let config = unlocked_config_provider(config_provider);
+  let current_margin: i32 = config.get_i32(WINDOW_MARGIN);
+  let icon_bytes = include_bytes!("../assets/randolf.ico");
+
+  MenuBuilder::new()
+    .with(MenuItem::Item {
+      name: format!("Randolf v{}", env!("CARGO_PKG_VERSION")),
+      disabled: true,
+      id: Event::DisabledItem,
+      icon: Some(Icon::from_buffer(icon_bytes, Some(32), Some(32)).unwrap()),
+    })
+    .separator()
+    .submenu(
+      "Explore debug settings",
+      MenuBuilder::new().item("Print monitor layout to log file", Event::LogMonitorLayout),
+    )
+    .submenu(
+      "Set window margin to...",
+      MenuBuilder::new()
+        .checkable("10 px", 10 == current_margin, Event::SetMargin(10))
+        .checkable("15 px", 15 == current_margin, Event::SetMargin(15))
+        .checkable("20 px (default)", 20 == current_margin, Event::SetMargin(20))
+        .checkable("30 px", 30 == current_margin, Event::SetMargin(30))
+        .checkable("40 px", 40 == current_margin, Event::SetMargin(40))
+        .checkable("50 px", 50 == current_margin, Event::SetMargin(50))
+        .checkable("75 px", 75 == current_margin, Event::SetMargin(75))
+        .checkable("100 px", 100 == current_margin, Event::SetMargin(100))
+        .checkable("150 px", 150 == current_margin, Event::SetMargin(150)),
+    )
+    .separator()
+    .checkable(
+      "Allow selecting same center windows",
+      config.get_bool(ALLOW_SELECTING_SAME_CENTER_WINDOWS),
+      Event::ToggleSelectingSameCenterWindows,
+    )
+    .checkable(
+      "Force using admin privileges",
+      config.get_bool(FORCE_USING_ADMIN_PRIVILEGES),
+      Event::ToggleForceUsingAdminPrivileges,
+    )
+    .separator()
+    .item("Open the folder containing Randolf", Event::OpenRandolfFolder)
+    .item("Restart Randolf", Event::RestartRandolf)
+    .item("Exit Randolf (restores any hidden windows)", Event::Exit)
 }
 
 #[cfg(test)]
