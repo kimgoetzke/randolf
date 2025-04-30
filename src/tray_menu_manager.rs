@@ -26,7 +26,7 @@ enum Event {
   ToggleSelectingSameCenterWindows,
   ToggleForceUsingAdminPrivileges,
   LogMonitorLayout,
-  RestartRandolf,
+  RestartRandolf(bool),
   OpenRandolfFolder,
 }
 
@@ -147,11 +147,11 @@ impl TrayMenuManager {
             .send(Command::OpenRandolfFolder)
             .expect("Failed to send open randolf folder command");
         }
-        Event::RestartRandolf => {
+        Event::RestartRandolf(as_admin) => {
           let mut config = unlocked_config_provider(&config_provider);
           config.reload_configuration();
           command_sender
-            .send(Command::RestartRandolf)
+            .send(Command::RestartRandolf(as_admin))
             .expect("Failed to send restart command");
         }
         Event::Exit => {
@@ -237,9 +237,10 @@ fn build_menu(config_provider: &Arc<Mutex<ConfigurationProvider>>) -> MenuBuilde
       Event::ToggleForceUsingAdminPrivileges,
     )
     .separator()
-    .item("Open the folder containing Randolf", Event::OpenRandolfFolder)
-    .item("Restart Randolf", Event::RestartRandolf)
-    .item("Exit Randolf (restores any hidden windows)", Event::Exit)
+    .item("Open the folder containing executable", Event::OpenRandolfFolder)
+    .item("Restart with admin privileges", Event::RestartRandolf(true))
+    .item("Restart", Event::RestartRandolf(false))
+    .item("Exit (restores any hidden windows)", Event::Exit)
 }
 
 #[cfg(test)]
