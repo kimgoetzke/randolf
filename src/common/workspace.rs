@@ -14,6 +14,7 @@ pub struct Workspace {
 }
 
 impl Workspace {
+  /// Creates a new, empty workspace with the specified ID and monitor that is marked as active.
   pub fn new_active(id: PersistentWorkspaceId, monitor: &Monitor, margin: i32) -> Self {
     Workspace {
       id,
@@ -26,6 +27,7 @@ impl Workspace {
     }
   }
 
+  /// Creates a new, empty workspace with the specified ID and monitor that is marked as inactive.
   pub fn new_inactive(id: PersistentWorkspaceId, monitor: &Monitor, margin: i32) -> Self {
     Workspace {
       id,
@@ -38,18 +40,25 @@ impl Workspace {
     }
   }
 
+  /// Returns `true` if the workspace is active.
   pub fn is_active(&self) -> bool {
     self.is_active
   }
 
+  /// Sets the workspace as active (if `true`) or inactive (if `false`).
   pub fn set_active(&mut self, is_active: bool) {
     self.is_active = is_active;
   }
 
+  /// Allows you to update the `MonitorHandle`, which is a non-persistent identifier of a monitor, for this workspace.
+  /// Must be called prior to interacting with the workspace.
   pub fn update_handle(&mut self, monitor_handle: MonitorHandle) {
     self.monitor_handle = monitor_handle.handle as i64;
   }
 
+  /// Returns the largest window in the workspace or `None` if none is present. The largest window is defined as the
+  /// one covering with the largest area. If multiple windows have the same area, the first one found is returned (not
+  /// deterministic).
   pub fn get_largest_window(&self) -> Option<Window> {
     self.windows.iter().max_by_key(|w| w.rect.area()).cloned().to_owned()
   }
@@ -69,10 +78,12 @@ impl Workspace {
     }
   }
 
+  /// Returns `true` if the workspace stores the specified window.
   pub fn stores(&self, handle: &WindowHandle) -> bool {
     self.windows.iter().any(|window| window.handle == *handle)
   }
 
+  /// Stores and hides the specified windows. Clears the list of stored windows before storing the new ones.
   pub fn store_and_hide_windows(
     &mut self,
     windows: Vec<Window>,
@@ -82,6 +93,19 @@ impl Workspace {
     self.clear_windows();
     for window in windows.iter() {
       self.store_and_hide_window(window.clone(), current_monitor, windows_api);
+    }
+  }
+
+  /// Removes the specified windows from the workspace. This method should be called after switching workspace and after
+  /// a window is moved to a workspace to ensure windows don't exist in multiple workspaces. The reason why this is
+  /// currently important is that Randolf does not listen to window events. The application does not know, for example,
+  /// when another application has moved a hidden window from a workspace into the foreground. In order to allow the
+  /// user to then move/hide this window again without Randolf storing it in multiple workspaces, this method is
+  /// required to be called on every action that changes the window state in relation to a workspace.
+  pub fn remove_windows_if_present(&mut self, windows: &[Window]) {
+    for window in windows.iter() {
+      self.windows.retain(|w| w.handle != window.handle);
+      self.minimised_windows.retain(|(w, _)| *w != window.handle);
     }
   }
 
@@ -498,5 +522,65 @@ mod tests {
     workspace.restore_windows(&mock_api);
 
     assert!(workspace.get_windows().is_empty());
+  }
+
+  #[test]
+  fn remove_windows_if_present_removes_specified_windows() {
+    let mut workspace = Workspace::new_test(PersistentWorkspaceId::new_test(1), &Monitor::mock_1());
+    let window_1 = Window::new_test(1, Rect::new(0, 0, 100, 100));
+    let window_2 = Window::new_test(2, Rect::new(100, 100, 200, 200));
+    workspace.windows.push(window_1.clone());
+    workspace.windows.push(window_2.clone());
+    workspace.minimised_windows.push((window_1.handle, false));
+    workspace.minimised_windows.push((window_2.handle, true));
+
+    workspace.remove_windows_if_present(&[window_1.clone()]);
+
+    assert_eq!(workspace.windows.len(), 1);
+    assert_eq!(workspace.windows[0].handle, window_2.handle);
+    assert_eq!(workspace.minimised_windows.len(), 1);
+    assert_eq!(workspace.minimised_windows[0].0, window_2.handle);
+  }
+
+  #[test]
+  fn remove_windows_if_present_does_nothing_if_windows_not_present() {
+    let mut workspace = Workspace::new_test(PersistentWorkspaceId::new_test(1), &Monitor::mock_1());
+    let window_1 = Window::new_test(1, Rect::new(0, 0, 100, 100));
+    let window_2 = Window::new_test(2, Rect::new(100, 100, 200, 200));
+    workspace.windows.push(window_1.clone());
+    workspace.minimised_windows.push((window_1.handle, false));
+
+    workspace.remove_windows_if_present(&[window_2.clone()]);
+
+    assert_eq!(workspace.windows.len(), 1);
+    assert_eq!(workspace.windows[0].handle, window_1.handle);
+    assert_eq!(workspace.minimised_windows.len(), 1);
+    assert_eq!(workspace.minimised_windows[0].0, window_1.handle);
+  }
+
+  #[test]
+  fn remove_windows_if_present_handles_empty_input() {
+    let mut workspace = Workspace::new_test(PersistentWorkspaceId::new_test(1), &Monitor::mock_1());
+    let window = Window::new_test(1, Rect::new(0, 0, 100, 100));
+    workspace.windows.push(window.clone());
+    workspace.minimised_windows.push((window.handle, false));
+
+    workspace.remove_windows_if_present(&[]);
+
+    assert_eq!(workspace.windows.len(), 1);
+    assert_eq!(workspace.windows[0].handle, window.handle);
+    assert_eq!(workspace.minimised_windows.len(), 1);
+    assert_eq!(workspace.minimised_windows[0].0, window.handle);
+  }
+
+  #[test]
+  fn remove_windows_if_present_handles_empty_workspace() {
+    let mut workspace = Workspace::new_test(PersistentWorkspaceId::new_test(1), &Monitor::mock_1());
+    let window = Window::new_test(1, Rect::new(0, 0, 100, 100));
+
+    workspace.remove_windows_if_present(&[window]);
+
+    assert!(workspace.windows.is_empty());
+    assert!(workspace.minimised_windows.is_empty());
   }
 }
