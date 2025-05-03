@@ -10,6 +10,7 @@ fn main() {
   res.set("InternalName", "Randolf");
   res.set("OriginalFilename", "randolf.exe");
   res.set("LegalCopyright", "© 2025 Kim Goetzke");
+  res.set_icon("assets/randolf.ico");
   res.set_manifest(&format!(
     r#"
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
