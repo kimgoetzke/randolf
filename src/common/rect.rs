@@ -40,6 +40,10 @@ impl Rect {
     point.x() >= self.left && point.x() <= self.right && point.y() >= self.top && point.y() <= self.bottom
   }
 
+  pub fn intersects(&self, other: &Self) -> bool {
+    self.left < other.right && self.right > other.left && self.top < other.bottom && self.bottom > other.top
+  }
+
   pub fn clamp(&self, other: &Self, margin: i32) -> Self {
     Self {
       left: self.left.max(other.left + margin),
@@ -101,10 +105,6 @@ mod tests {
         right: 0,
         bottom: 0,
       }
-    }
-
-    pub fn intersects(&self, other: &Self) -> bool {
-      self.left < other.right && self.right > other.left && self.top < other.bottom && self.bottom > other.top
     }
   }
 
@@ -239,5 +239,61 @@ mod tests {
     assert_eq!(clamped.top, -580);
     assert_eq!(clamped.right, -20);
     assert_eq!(clamped.bottom, -20);
+  }
+
+  #[test]
+  fn intersects_returns_true_for_overlapping_rects() {
+    let rect1 = Rect::new(0, 0, 10, 10);
+    let rect2 = Rect::new(5, 5, 15, 15);
+
+    assert!(rect1.intersects(&rect2));
+  }
+
+  #[test]
+  fn intersects_returns_false_for_non_overlapping_rects() {
+    let rect1 = Rect::new(0, 0, 10, 10);
+    let rect2 = Rect::new(20, 20, 30, 30);
+
+    assert!(!rect1.intersects(&rect2));
+  }
+
+  #[test]
+  fn intersects_returns_true_for_touching_rects() {
+    let rect1 = Rect::new(0, 0, 10, 10);
+    let rect2 = Rect::new(10, 10, 20, 20);
+
+    assert!(!rect1.intersects(&rect2));
+  }
+
+  #[test]
+  fn intersects_returns_false_for_adjacent_rects_without_overlap() {
+    let rect1 = Rect::new(0, 0, 10, 10);
+    let rect2 = Rect::new(10, 0, 20, 10);
+
+    assert!(!rect1.intersects(&rect2));
+  }
+
+  #[test]
+  fn intersects_handles_negative_coordinates_correctly() {
+    let rect1 = Rect::new(-10, -10, 0, 0);
+    let rect2 = Rect::new(-5, -5, 5, 5);
+
+    assert!(rect1.intersects(&rect2));
+  }
+
+  #[test]
+  fn intersects_returns_true_for_completely_contained_rects_1() {
+    let rect1 = Rect::new(0, 0, 10, 10);
+    let rect2 = Rect::new(2, 2, 8, 8);
+
+    assert!(rect2.intersects(&rect1));
+  }
+
+  #[test]
+  fn intersects_returns_true_for_completely_contained_rects_2() {
+    let rect1 = Rect::new(0, 0, 10, 10);
+    let rect2 = Rect::new(2, 2, 8, 8);
+
+    assert!(rect1.intersects(&rect2));
   }
 }

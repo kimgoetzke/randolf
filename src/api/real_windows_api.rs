@@ -104,10 +104,7 @@ impl WindowsApi for RealWindowsApi {
       if self.is_not_a_managed_window(&window.handle) {
         false
       } else {
-        !(window.rect.left < rect.left
-          || window.rect.right > rect.right
-          || window.rect.top < rect.top
-          || window.rect.bottom > rect.bottom)
+        window.rect.intersects(&rect)
       }
     });
 
