@@ -3,6 +3,11 @@ use crate::common::{MonitorHandle, PersistentWorkspaceId, TransientWorkspaceId, 
 use crate::workspace_manager::WorkspaceManager;
 use std::collections::HashMap;
 
+/// This struct is used by `WorkspaceManager`, implementing the RAII pattern to ensure that the workspace manager
+/// has the correct `MonitorHandle`s for each `Workspace`. The handle of a monitor changes in the Windows API in many
+/// situations, but it is required by most of the API calls, which is why we need to update the handles prior to using
+/// them. This is why this application uses a persistent ID for the monitor but creates and maps transient IDs upon
+/// every use of workspaces.
 pub struct WorkspaceGuard<'a, T: WindowsApi + Clone> {
   pub(crate) manager: &'a mut WorkspaceManager<T>,
   id_map: HashMap<PersistentWorkspaceId, TransientWorkspaceId>,
@@ -11,6 +16,7 @@ pub struct WorkspaceGuard<'a, T: WindowsApi + Clone> {
 impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
   pub fn new(manager: &'a mut WorkspaceManager<T>) -> Self {
     let monitors = manager.windows_api.get_all_monitors();
+    monitors.log_detected_monitors();
     for workspace in manager.workspaces.values_mut() {
       if let Some(monitor) = monitors.get_by_id(&workspace.id.monitor_id) {
         workspace.update_handle(monitor.handle);
@@ -122,13 +128,21 @@ impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
 
     // Hide and store all windows in the target workspace, if required
     if !target_workspace_id.is_same_workspace(&target_monitor_active_workspace_id) {
-      if let Some(target_monitor_active_workspace) = self.manager.workspaces.get_mut(&target_monitor_active_workspace_id) {
+      let current_windows = if let Some(target_monitor_active_workspace) =
+        self.manager.workspaces.get_mut(&target_monitor_active_workspace_id)
+      {
         let current_windows = self
           .manager
           .windows_api
           .get_all_visible_windows_within_area(target_monitor_active_workspace.monitor.monitor_area);
         let current_monitor = MonitorHandle::from(target_monitor_active_workspace.monitor_handle);
-        target_monitor_active_workspace.store_and_hide_windows(current_windows, current_monitor, &self.manager.windows_api);
+        target_monitor_active_workspace.store_and_hide_windows(
+          current_windows.clone(),
+          current_monitor,
+          &self.manager.windows_api,
+        );
+
+        current_windows
       } else {
         warn!(
           "Failed to switch workspace because: The workspace ({}) to store the window doesn't exist",
@@ -137,6 +151,15 @@ impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
         self.log_initialised_workspaces();
         return;
       };
+
+      // Remove stored windows from all other workspaces
+      for (workspace_id, workspace) in self.manager.workspaces.iter_mut() {
+        if workspace_id.monitor_id != target_monitor_active_workspace_id.monitor_id
+          && workspace_id.workspace != target_monitor_active_workspace_id.workspace
+        {
+          workspace.remove_windows_if_present(&current_windows);
+        }
+      }
     }
 
     // Restore windows for the new workspace and set the cursor position
@@ -225,6 +248,14 @@ impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
         "Failed to move window to workspace because: The target workspace ({}) does not exist",
         target_workspace_id
       );
+    }
+
+    // Remove the window from all other workspaces
+    for (workspace_id, workspace) in self.manager.workspaces.iter_mut() {
+      if workspace_id.monitor_id != target_workspace_id.monitor_id && workspace_id.workspace != target_workspace_id.workspace
+      {
+        workspace.remove_windows_if_present(&[window.clone()]);
+      }
     }
 
     // Set the foreground window to the largest visible window in the current workspace, if the target workspace is not

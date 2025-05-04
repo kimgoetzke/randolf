@@ -26,18 +26,17 @@ issues) are welcome.
 
 #### Additional features
 
-- Pressing `Win` + `\` on a near-maximised window will reset the window to its previous size and position (i.e. undo the
-  near-maximisation)
-- Pressing `Win` + `Shift` + `\` will minimise the foreground window
-- Writes application logs to a file in the directory of the executable
-- Stores and loads configuration from `randolf.toml` in the directory of the executable
-- Displays a tray icon that also functions as a workspace indicator and has a context menu that allows you to...
-    - Customise the window margin
+- Reset the window to its previous size and position (i.e. undo the near-maximisation) by pressing `Win` + `\` on a
+  near-maximised window will
+- Minimise the foreground window by pressing `Win` + `Shift` + `\`
+- Write application logs to a file in the directory of the executable
+- Store and load configuration from `randolf.toml` in the directory of the executable
+- Display a tray icon that also functions as a workspace indicator and has a context menu that allows you to...
     - Print a visual representation of the perceived monitor layout to the log file
-    - Close the application which restores all hidden windows
+    - Customise the window margin
     - Open the folder containing the Randolf executable in File Explorer
-    - Reload the `randolf.toml` configuration file (but changes to hotkeys or exclusion settings still require
-      restarting the application)
+    - Restart the application (which will reload `randolf.toml` prior to restarting) with or without admin privileges
+    - Close the application which restores all hidden windows
 
 ## Demo
 
@@ -52,14 +51,6 @@ any) is selected._
 
 Switching between workspaces and moving windows between them using hotkeys only:
 ![Demo GIF 3](assets/demo_3.gif)
-
-#### Features currently under consideration
-
-- Allow customising modifier keys and/or customising window/workspace management hotkeys
-- Allow auto-start application on startup
-- Group "snapped" window on a single screen and allow resizing them together
-- Allow moving windows with `Win` + `Left Mouse Button` dragging
-- Allow resizing windows with `Win` + `Right Mouse Button` dragging
 
 ## How to configure
 

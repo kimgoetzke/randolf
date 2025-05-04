@@ -23,17 +23,6 @@ impl<T: WindowsApi + Clone> WorkspaceManager<T> {
     workspace_manager
   }
 
-  pub(crate) fn create_workspace_id_map(&self, monitors: Monitors) -> HashMap<PersistentWorkspaceId, TransientWorkspaceId> {
-    let mut workspace_id_map = HashMap::new();
-    for workspace in self.workspaces.values() {
-      if let Some(monitor) = monitors.get_by_id(&workspace.id.monitor_id) {
-        workspace_id_map.insert(workspace.id, TransientWorkspaceId::from(workspace.id, monitor.handle));
-      }
-    }
-
-    workspace_id_map
-  }
-
   fn initialise_workspaces(&mut self) {
     let mut workspaces = HashMap::new();
     let all_monitors = self.windows_api.get_all_monitors();
@@ -54,6 +43,17 @@ impl<T: WindowsApi + Clone> WorkspaceManager<T> {
       }
     }
     self.workspaces = workspaces;
+  }
+
+  pub(crate) fn create_workspace_id_map(&self, monitors: Monitors) -> HashMap<PersistentWorkspaceId, TransientWorkspaceId> {
+    let mut workspace_id_map = HashMap::new();
+    for workspace in self.workspaces.values() {
+      if let Some(monitor) = monitors.get_by_id(&workspace.id.monitor_id) {
+        workspace_id_map.insert(workspace.id, TransientWorkspaceId::from(workspace.id, monitor.handle));
+      }
+    }
+
+    workspace_id_map
   }
 
   pub fn get_ordered_permanent_workspace_ids(&mut self) -> Vec<PersistentWorkspaceId> {

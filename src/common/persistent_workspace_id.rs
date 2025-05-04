@@ -1,4 +1,3 @@
-use crate::utils::id_to_string_or_panic;
 use std::fmt::Display;
 
 #[derive(Debug, Copy, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
@@ -18,7 +17,12 @@ impl PersistentWorkspaceId {
   }
 
   pub fn id_to_string(&self) -> String {
-    id_to_string_or_panic(&self.monitor_id)
+    let device_name = String::from_utf16_lossy(&self.monitor_id).trim_end_matches('\0').to_string();
+    if !device_name.is_empty() {
+      device_name
+    } else {
+      panic!("Failed to convert ID to string");
+    }
   }
 
   pub fn is_on_primary_monitor(&self) -> bool {
@@ -104,7 +108,7 @@ mod tests {
   }
 
   #[test]
-  #[should_panic(expected = "Failed to convert id to string")]
+  #[should_panic(expected = "Failed to convert ID to string")]
   fn id_to_string_panics_on_empty_id() {
     PersistentWorkspaceId::new([0; 32], 1, false).id_to_string();
   }

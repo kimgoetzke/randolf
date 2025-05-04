@@ -104,10 +104,7 @@ impl WindowsApi for RealWindowsApi {
       if self.is_not_a_managed_window(&window.handle) {
         false
       } else {
-        !(window.rect.left < rect.left
-          || window.rect.right > rect.right
-          || window.rect.top < rect.top
-          || window.rect.bottom > rect.bottom)
+        window.rect.intersects(&rect)
       }
     });
 
@@ -561,10 +558,6 @@ pub fn get_all_monitors() -> Monitors {
     {
       warn!("Failed to enumerate monitors");
     }
-  }
-
-  for monitor in &monitors {
-    trace!("- {}", monitor);
   }
 
   Monitors::from(monitors)
