@@ -1,5 +1,4 @@
 use crate::common::{Direction, MonitorHandle, Point, Rect};
-use crate::utils::id_to_string;
 use std::fmt::Display;
 use windows::Win32::Graphics::Gdi::MONITORINFO;
 
@@ -42,7 +41,12 @@ impl Monitor {
   }
 
   pub fn id_to_string(&self) -> String {
-    id_to_string(&self.id, &self.handle)
+    let device_name = String::from_utf16_lossy(&self.id).trim_end_matches('\0').to_string();
+    if !device_name.is_empty() {
+      device_name
+    } else {
+      format!("Unidentified Monitor {}", &self.handle)
+    }
   }
 }
 
