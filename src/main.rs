@@ -4,6 +4,7 @@ mod api;
 mod application_launcher;
 mod common;
 mod configuration_provider;
+mod files;
 mod hotkey_manager;
 mod log_manager;
 mod tray_menu_manager;
