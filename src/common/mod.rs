@@ -13,6 +13,8 @@ mod window;
 mod window_handle;
 mod window_placement;
 mod workspace;
+mod workspace_action;
+mod workspaces_file;
 
 pub use crate::common::command::Command;
 pub use crate::common::direction::Direction;
@@ -29,3 +31,5 @@ pub use crate::common::window::Window;
 pub use crate::common::window_handle::WindowHandle;
 pub use crate::common::window_placement::WindowPlacement;
 pub use crate::common::workspace::Workspace;
+pub use crate::common::workspace_action::WorkspaceAction;
+pub use crate::common::workspaces_file::WorkspacesFile;

@@ -1,5 +1,5 @@
 use crate::api::WindowsApi;
-use crate::common::{MonitorHandle, PersistentWorkspaceId, TransientWorkspaceId, Window, Workspace};
+use crate::common::{MonitorHandle, PersistentWorkspaceId, TransientWorkspaceId, Window, Workspace, WorkspaceAction};
 use crate::workspace_manager::WorkspaceManager;
 use std::collections::HashMap;
 
@@ -151,6 +151,11 @@ impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
         self.log_initialised_workspaces();
         return;
       };
+      self.manager.workspace_file.add_all(
+        &self.manager.file_manager,
+        &target_monitor_active_workspace_id,
+        &current_windows,
+      );
 
       // Remove stored windows from all other workspaces
       for (workspace_id, workspace) in self.manager.workspaces.iter_mut() {
@@ -160,6 +165,11 @@ impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
           workspace.remove_windows_if_present(&current_windows);
         }
       }
+      self.manager.workspace_file.remove_all_excluding(
+        &self.manager.file_manager,
+        &target_monitor_active_workspace_id,
+        &current_windows,
+      );
     }
 
     // Restore windows for the new workspace and set the cursor position
@@ -206,6 +216,12 @@ impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
       return;
     };
 
+    // Remove the workspace file entry for the current workspace
+    self
+      .manager
+      .workspace_file
+      .remove_workspace(&self.manager.file_manager, &target_workspace_id);
+
     // Update the active workspaces
     if !target_workspace_id.is_same_workspace(&target_monitor_active_workspace_id) {
       self.set_active_workspace(&target_workspace_id, true);
@@ -222,12 +238,12 @@ impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
     if self.resolve_to_transient(target_workspace_id).is_none() {
       return;
     }
+
+    // Collect all relevant information
     let current_workspace_id = match self.get_current_workspace_id_if_different_to(target_workspace_id) {
       Some(id) => id,
       None => return,
     };
-
-    // Collect all relevant information
     let Some(foreground_window) = self.manager.windows_api.get_foreground_window() else {
       debug!("Ignored request to move window to workspace because there is no foreground window");
       return;
@@ -242,15 +258,23 @@ impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
 
     // Move or store the window
     if let Some(target_workspace) = self.manager.workspaces.get_mut(&target_workspace_id) {
-      target_workspace.move_or_store_and_hide_window(window.clone(), current_monitor, &self.manager.windows_api);
+      if let WorkspaceAction::Stored =
+        target_workspace.move_or_store_and_hide_window(window.clone(), current_monitor, &self.manager.windows_api)
+      {
+        self
+          .manager
+          .workspace_file
+          .add(&self.manager.file_manager, &target_workspace_id, &window.handle)
+      }
     } else {
       warn!(
         "Failed to move window to workspace because: The target workspace ({}) does not exist",
         target_workspace_id
       );
+      return;
     }
 
-    // Remove the window from all other workspaces
+    // Remove the window from all other workspaces (only necessary when other apps have changed the state of the window)
     for (workspace_id, workspace) in self.manager.workspaces.iter_mut() {
       if workspace_id.monitor_id != target_workspace_id.monitor_id && workspace_id.workspace != target_workspace_id.workspace
       {
@@ -259,7 +283,7 @@ impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
     }
 
     // Set the foreground window to the largest visible window in the current workspace, if the target workspace is not
-    // active (if it is, then the focus will stay on the moved window)
+    // active - if it is, then the focus will stay on the moved window
     let is_target_workspace_active = if let Some(workspace) = self.manager.workspaces.get(&target_workspace_id) {
       workspace.is_active()
     } else {
@@ -293,6 +317,7 @@ impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
     for workspace in self.manager.workspaces.values_mut() {
       workspace.restore_windows(&self.manager.windows_api);
     }
+    self.manager.workspace_file.clear(&self.manager.file_manager);
   }
 
   pub(crate) fn get_current_workspace_id_if_different_to(
@@ -414,12 +439,17 @@ impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
 mod tests {
   use crate::api::MockWindowsApi;
   use crate::common::{MonitorHandle, Point, Rect};
+  use crate::utils::create_temp_directory;
   use crate::workspace_guard::WorkspaceGuard;
   use crate::workspace_manager::WorkspaceManager;
 
+  const TEST_WORKSPACE_FILE: &str = "test.toml";
+
   #[test]
   fn get_active_workspace_for_cursor_position_returns_workspace_if_one_active_workspace_found() {
-    let mut workspace_manager = WorkspaceManager::new_test(false);
+    let directory = create_temp_directory();
+    let path = directory.path().join(TEST_WORKSPACE_FILE);
+    let mut workspace_manager = WorkspaceManager::new_test(true, path.clone());
     let mut guard = WorkspaceGuard::new(&mut workspace_manager);
     // Cursor on primary monitor
     MockWindowsApi::set_cursor_position(Point::new(50, 50));

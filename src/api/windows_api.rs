@@ -5,6 +5,7 @@ pub trait WindowsApi {
   fn is_running_as_admin(&self) -> bool;
   fn get_foreground_window(&self) -> Option<WindowHandle>;
   fn set_foreground_window(&self, handle: WindowHandle);
+  fn get_all_windows(&self) -> Vec<Window>;
   fn get_all_visible_windows(&self) -> Vec<Window>;
   fn get_all_visible_windows_within_area(&self, rect: Rect) -> Vec<Window>;
   fn get_window_title(&self, handle: &WindowHandle) -> String;
@@ -26,6 +27,7 @@ pub trait WindowsApi {
   fn do_maximise_window(&self, handle: WindowHandle);
   fn do_minimise_window(&self, handle: WindowHandle);
   fn do_hide_window(&self, handle: WindowHandle);
+  fn do_unhide_window(&self, handle: WindowHandle);
   fn do_close_window(&self, handle: WindowHandle);
   fn get_window_placement(&self, handle: WindowHandle) -> Option<WindowPlacement>;
   fn set_window_placement_and_force_repaint(&self, handle: WindowHandle, placement: WindowPlacement);

@@ -326,10 +326,10 @@ impl ConfigurationProvider {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::utils::create_temp_directory;
   use std::fs::{self, File};
   use std::io::Write;
   use std::path::PathBuf;
-  use tempfile::TempDir;
 
   impl ConfigurationProvider {
     pub fn default() -> Self {
@@ -351,18 +351,14 @@ mod tests {
     }
 
     fn new_test(temp_path: PathBuf) -> Self {
-      let file_manager = FileManager::new_test_with_custom_path(temp_path);
+      let file_manager = FileManager::new_test(temp_path);
       Self::new_with(file_manager)
     }
 
     fn new_test_without_validation(temp_path: PathBuf, config: Configuration) -> Self {
-      let file_manager = FileManager::new_test_with_custom_path(temp_path);
+      let file_manager = FileManager::new_test(temp_path);
       Self { file_manager, config }
     }
-  }
-
-  fn create_temp_directory() -> TempDir {
-    TempDir::new().expect("Failed to create temporary directory")
   }
 
   #[test]

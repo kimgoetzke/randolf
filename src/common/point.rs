@@ -2,7 +2,7 @@ use crate::common::{Rect, Sizing};
 use std::fmt::Formatter;
 use windows::Win32::Foundation::POINT;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Hash)]
 pub struct Point {
   x: i32,
   y: i32,

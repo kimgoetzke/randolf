@@ -1,5 +1,5 @@
 use crate::api::WindowsApi;
-use crate::common::{Monitor, MonitorHandle, PersistentWorkspaceId, Rect, Sizing, Window, WindowHandle};
+use crate::common::{Monitor, MonitorHandle, PersistentWorkspaceId, Rect, Sizing, Window, WindowHandle, WorkspaceAction};
 use std::fmt::Display;
 
 #[derive(Debug, Clone)]
@@ -70,11 +70,15 @@ impl Workspace {
     window: Window,
     current_monitor: MonitorHandle,
     windows_api: &impl WindowsApi,
-  ) {
+  ) -> WorkspaceAction {
     if self.is_active {
       self.move_window(window, current_monitor, windows_api);
+
+      WorkspaceAction::Moved
     } else {
       self.store_and_hide_window(window, current_monitor, windows_api);
+
+      WorkspaceAction::Stored
     }
   }
 
