@@ -1,9 +1,10 @@
 use crate::common::{Point, Rect, WindowHandle};
+use std::hash::Hash;
 use windows::Win32::Foundation::HWND;
 
 const CHAR_LIMIT: usize = 15;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq)]
 pub struct Window {
   pub handle: WindowHandle,
   pub title: String,
@@ -42,6 +43,14 @@ impl Window {
 impl PartialEq for Window {
   fn eq(&self, other: &Self) -> bool {
     self.handle == other.handle && self.title == other.title && self.rect == other.rect
+  }
+}
+
+impl Hash for Window {
+  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    self.handle.hash(state);
+    self.title.hash(state);
+    self.rect.hash(state);
   }
 }
 

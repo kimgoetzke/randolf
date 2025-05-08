@@ -86,10 +86,10 @@ impl<T: FileType> FileManager<T> {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::utils::create_temp_directory;
   use serde::Deserialize;
   use std::fs::File;
   use std::io::Write;
-  use tempfile::TempDir;
 
   #[derive(Default, Serialize, Deserialize)]
   struct TestConfig {
@@ -106,27 +106,13 @@ mod tests {
       }
     }
 
-    pub fn new_test(file_name: &str) -> Self {
-      let directory = create_temp_directory();
-      let path = directory.path().join(file_name);
+    pub fn new_test(path: PathBuf) -> Self {
       FileManager {
         file_path: path,
         file_prefix: String::new(),
         _marker: Default::default(),
       }
     }
-
-    pub fn new_test_with_custom_path(path: PathBuf) -> Self {
-      FileManager {
-        file_path: path,
-        file_prefix: String::new(),
-        _marker: Default::default(),
-      }
-    }
-  }
-
-  fn create_temp_directory() -> TempDir {
-    TempDir::new().expect("Failed to create temporary directory")
   }
 
   #[test]
@@ -149,7 +135,7 @@ mod tests {
   fn load_or_create_creates_default_file_if_not_found() {
     let temp_dir = create_temp_directory();
     let file_path = temp_dir.path().join("nonexistent_config.toml");
-    let file_manager = FileManager::<TestConfig>::new_test_with_custom_path(file_path.clone());
+    let file_manager = FileManager::<TestConfig>::new_test(file_path.clone());
 
     let (config, content) = file_manager.load_or_create().expect("Failed to load or create config");
 
@@ -166,7 +152,7 @@ mod tests {
     let mut file = File::create(&file_path).unwrap();
     writeln!(file, "invalid_toml_content").unwrap();
 
-    let file_manager = FileManager::<TestConfig>::new_test_with_custom_path(file_path);
+    let file_manager = FileManager::<TestConfig>::new_test(file_path);
 
     let result = file_manager.load_or_create();
 
@@ -179,7 +165,7 @@ mod tests {
     let file_path = temp_dir.path().join("empty_config.toml");
     File::create(&file_path).unwrap();
 
-    let file_manager = FileManager::<TestConfig>::new_test_with_custom_path(file_path);
+    let file_manager = FileManager::<TestConfig>::new_test(file_path);
 
     let result = file_manager.load_or_create();
 

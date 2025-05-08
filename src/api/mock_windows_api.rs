@@ -170,6 +170,19 @@ pub(crate) mod test {
       });
     }
 
+    fn get_all_windows(&self) -> Vec<Window> {
+      trace!("Mock windows API gets all windows");
+      MOCK_STATE.with(|state| {
+        state
+          .borrow()
+          .windows
+          .values()
+          .filter(|ws| !ws.is_closed)
+          .map(|ws| ws.window.clone())
+          .collect()
+      })
+    }
+
     fn get_all_visible_windows(&self) -> Vec<Window> {
       trace!("Mock windows API gets all visible windows");
       MOCK_STATE.with(|state| {
@@ -310,6 +323,18 @@ pub(crate) mod test {
         if state.borrow().foreground_window == Some(handle) {
           state.borrow_mut().foreground_window = None;
         }
+      });
+    }
+
+    fn do_unhide_window(&self, handle: WindowHandle) {
+      trace!("Mock windows API unhides window {handle}");
+      MOCK_STATE.with(|state| {
+        if let Some(window_state) = state.borrow_mut().windows.get_mut(&handle) {
+          window_state.is_hidden = false;
+        } else {
+          panic!("Window with handle {handle} not found - did you forget to add it?");
+        }
+        state.borrow_mut().foreground_window = Some(handle);
       });
     }
 

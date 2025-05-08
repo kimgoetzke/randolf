@@ -16,7 +16,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
   GetWindowPlacement, GetWindowTextW, IsIconic, IsWindowVisible, MSG, PM_REMOVE, PeekMessageA, PostMessageW, SW_HIDE,
   SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOZORDER, SWP_SHOWWINDOW, SendMessageW,
   SetCursorPos, SetForegroundWindow, SetWindowPlacement, SetWindowPos, ShowWindow, TranslateMessage, WINDOWINFO,
-  WINDOWPLACEMENT, WM_CLOSE, WM_PAINT, WS_VISIBLE,
+  WINDOWPLACEMENT, WM_CLOSE, WM_PAINT,
 };
 use windows::core::BOOL;
 
@@ -69,13 +69,38 @@ impl WindowsApi for RealWindowsApi {
     }
   }
 
+  fn get_all_windows(&self) -> Vec<Window> {
+    let mut windows: Vec<Window> = Vec::new();
+    unsafe {
+      if let Err(err) = EnumWindows(Some(enum_windows_callback), LPARAM(&mut windows as *mut _ as isize)) {
+        warn!("Failed to enumerate windows because: {}", err.message());
+      }
+    }
+
+    windows.retain(|window| {
+      if self.is_not_a_managed_window(&window.handle) {
+        return false;
+      }
+      if window.rect.area() < 5 {
+        return false;
+      }
+
+      true
+    });
+
+    windows
+  }
+
   fn get_all_visible_windows(&self) -> Vec<Window> {
-    let mut windows = get_all_windows();
+    let mut windows = self.get_all_windows();
 
     trace!("┌| Found the following windows:");
     let mut i: usize = 1;
     windows.retain(|window| {
-      if self.is_not_a_managed_window(&window.handle) || self.is_window_minimised(window.handle) {
+      if self.is_not_a_managed_window(&window.handle)
+        || self.is_window_minimised(window.handle)
+        || self.is_window_hidden(&window.handle)
+      {
         false
       } else {
         let window_area = ((window.rect.right - window.rect.left) * (window.rect.bottom - window.rect.top)) / 1000;
@@ -98,10 +123,10 @@ impl WindowsApi for RealWindowsApi {
   }
 
   fn get_all_visible_windows_within_area(&self, rect: Rect) -> Vec<Window> {
-    let mut windows = get_all_windows();
+    let mut windows = self.get_all_windows();
 
     windows.retain(|window| {
-      if self.is_not_a_managed_window(&window.handle) {
+      if self.is_not_a_managed_window(&window.handle) || self.is_window_hidden(&window.handle) {
         false
       } else {
         window.rect.intersects(&rect)
@@ -313,6 +338,15 @@ impl WindowsApi for RealWindowsApi {
     }
   }
 
+  fn do_unhide_window(&self, handle: WindowHandle) {
+    unsafe {
+      if !ShowWindow(handle.as_hwnd(), SW_RESTORE).as_bool() {
+        warn!("Failed to unhide window {handle}");
+      }
+      self.set_foreground_window(handle);
+    }
+  }
+
   fn do_close_window(&self, handle: WindowHandle) {
     unsafe {
       if let Err(err) = PostMessageW(Option::from(handle.as_hwnd()), WM_CLOSE, WPARAM(0), LPARAM(0)) {
@@ -463,7 +497,7 @@ impl WindowsApi for RealWindowsApi {
   }
 }
 
-extern "system" fn enum_visible_windows_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
+extern "system" fn enum_windows_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
   unsafe {
     let windows = &mut *(lparam.0 as *mut Vec<Window>);
     if hwnd.0.is_null() {
@@ -474,9 +508,6 @@ extern "system" fn enum_visible_windows_callback(hwnd: HWND, lparam: LPARAM) -> 
       Ok(info) => info,
       Err(_) => return true.into(),
     };
-    if !info.dwStyle.contains(WS_VISIBLE) {
-      return true.into();
-    }
 
     let mut text: [u16; 512] = [0; 512];
     let len = GetWindowTextW(hwnd, &mut text);
@@ -489,17 +520,6 @@ extern "system" fn enum_visible_windows_callback(hwnd: HWND, lparam: LPARAM) -> 
 
     true.into()
   }
-}
-
-fn get_all_windows() -> Vec<Window> {
-  let mut windows: Vec<Window> = Vec::new();
-  unsafe {
-    if let Err(err) = EnumWindows(Some(enum_visible_windows_callback), LPARAM(&mut windows as *mut _ as isize)) {
-      warn!("Failed to enumerate windows because: {}", err.message());
-    }
-  }
-
-  windows
 }
 
 fn get_window_info(hwnd: HWND) -> Result<WINDOWINFO, &'static str> {
