@@ -5,7 +5,7 @@ extern crate winres;
 fn main() {
   let version = env!("CARGO_PKG_VERSION");
   let mut res = winres::WindowsResource::new();
-  res.set("FileDescription", "A windows management utility for Windows");
+  res.set("FileDescription", format!("Randolf v{version}").as_str());
   res.set("ProductName", "Randolf");
   res.set("InternalName", "Randolf");
   res.set("OriginalFilename", "randolf.exe");
@@ -17,7 +17,7 @@ fn main() {
   <assemblyIdentity
       version="{version}.0"
       processorArchitecture="*"
-      name="kimgoetzke.Randolf"
+      name="kimgoetzke.randolf"
       type="win32" />
   <description>A window management utility for Windows</description>
   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
