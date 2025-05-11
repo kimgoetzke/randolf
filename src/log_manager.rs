@@ -1,10 +1,14 @@
 #![allow(unused_imports)]
 
 use crate::configuration_provider::ConfigurationProvider;
+use crate::files::{FileManager, FileType};
 use log::LevelFilter;
 use simplelog::{ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode, WriteLogger};
 use std::fs::File;
 use std::sync::{Arc, Mutex};
+
+#[cfg(not(debug_assertions))]
+const LOG_FILE_NAME: &str = "randolf.log";
 
 pub struct LogManager;
 
@@ -34,13 +38,17 @@ impl LogManager {
     )];
 
     #[cfg(not(debug_assertions))]
-    match File::create("randolf.log") {
-      Ok(log_file) => {
-        let write_logger = WriteLogger::new(LevelFilter::Trace, config, log_file);
-        loggers.push(write_logger);
-      }
-      Err(err) => {
-        eprintln!("Failed to create log file: {}", err);
+    {
+      let path = FileManager::<String>::get_path_to_file(LOG_FILE_NAME, FileType::Data)
+        .unwrap_or_else(|err| panic!("Failed to get path to log file: {}", err));
+      match File::create(path) {
+        Ok(log_file) => {
+          let write_logger = WriteLogger::new(LevelFilter::Trace, config, log_file);
+          loggers.push(write_logger);
+        }
+        Err(err) => {
+          eprintln!("Failed to create log file: {}", err);
+        }
       }
     }
 

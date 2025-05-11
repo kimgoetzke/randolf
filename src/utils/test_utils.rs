@@ -2,6 +2,7 @@
 
 use simplelog::*;
 use std::sync::Once;
+use tempfile::TempDir;
 
 #[allow(dead_code)]
 static INIT: Once = Once::new();
@@ -15,4 +16,8 @@ pub fn with_test_logger() {
     TermLogger::init(LevelFilter::Trace, Config::default(), TerminalMode::Mixed, ColorChoice::Auto)
       .expect("Failed to init TermLogger");
   });
+}
+
+pub fn create_temp_directory() -> TempDir {
+  TempDir::new().expect("Failed to create temporary directory")
 }

@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
 #[derive(Debug, Copy, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
@@ -42,6 +43,45 @@ impl PersistentWorkspaceId {
 impl Display for PersistentWorkspaceId {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(f, "wsp#{}-{}", self.id_to_string(), self.workspace)
+  }
+}
+
+impl Serialize for PersistentWorkspaceId {
+  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: serde::Serializer,
+  {
+    let monitor_id_str = String::from_utf16_lossy(&self.monitor_id).trim_end_matches('\0').to_string();
+    let serialized = format!("{}|{}|{}", monitor_id_str, self.workspace, self.is_on_primary_monitor);
+    serializer.serialize_str(&serialized)
+  }
+}
+
+impl<'de> Deserialize<'de> for PersistentWorkspaceId {
+  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+  where
+    D: serde::Deserializer<'de>,
+  {
+    let s = String::deserialize(deserializer)?;
+    let parts: Vec<&str> = s.split('|').collect();
+    if parts.len() != 3 {
+      return Err(serde::de::Error::custom("Invalid format for PersistentWorkspaceId"));
+    }
+
+    let monitor_id = parts[0]
+      .encode_utf16()
+      .chain(std::iter::repeat(0).take(32 - parts[0].len()))
+      .collect::<Vec<u16>>()
+      .try_into()
+      .map_err(|_| serde::de::Error::custom("Invalid monitor_id length"))?;
+    let workspace = parts[1].parse().map_err(serde::de::Error::custom)?;
+    let is_on_primary_monitor = parts[2].parse().map_err(serde::de::Error::custom)?;
+
+    Ok(PersistentWorkspaceId {
+      monitor_id,
+      workspace,
+      is_on_primary_monitor,
+    })
   }
 }
 

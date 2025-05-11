@@ -1,5 +1,6 @@
 use crate::api::WindowsApi;
 use crate::configuration_provider::ConfigurationProvider;
+use crate::files::{FileManager, FileType};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
@@ -52,7 +53,7 @@ impl<T: WindowsApi> ApplicationLauncher<T> {
         .parent()
         .expect("Failed to get parent directory")
         .to_str()
-        .expect("Failed to convert path to string");
+        .expect("Failed to convert directory path to string");
       if executable_directory.is_empty() {
         warn!("Path to Randolf folder is empty");
       }
@@ -63,6 +64,14 @@ impl<T: WindowsApi> ApplicationLauncher<T> {
 
       "".to_string()
     }
+  }
+
+  pub fn get_project_folder(&self, file_type: FileType) -> String {
+    FileManager::<String>::get_path_to_directory(file_type)
+      .expect("Failed to get path to directory")
+      .to_str()
+      .expect("Failed to convert directory path to string")
+      .to_string()
   }
 
   fn execute_command(&self, path_to_executable: &str, args: Option<&str>, as_admin: bool) -> bool {
@@ -215,5 +224,21 @@ mod tests {
     let path = launcher.get_executable_path();
 
     assert!(path.ends_with(".exe"));
+  }
+
+  #[test]
+  fn get_project_folder_returns_a_path() {
+    let config_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
+    let launcher = ApplicationLauncher::new_initialised(config_provider, MockWindowsApi);
+
+    let folder = launcher.get_project_folder(FileType::Data);
+
+    assert!(!folder.is_empty());
+    assert!(folder.len() > 30);
+
+    let folder = launcher.get_project_folder(FileType::Config);
+
+    assert!(!folder.is_empty());
+    assert!(folder.len() > 30);
   }
 }

@@ -1,4 +1,4 @@
-use crate::files::FileManager;
+use crate::files::{FileManager, FileType};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 
@@ -206,8 +206,8 @@ pub struct ConfigurationProvider {
 
 impl ConfigurationProvider {
   pub fn new() -> Self {
-    let mut file_manager = FileManager::new(CONFIGURATION_FILE_NAME);
-    file_manager.set_prefix(CONFIGURATION_FILE_PREFIX);
+    let mut file_manager = FileManager::new(CONFIGURATION_FILE_NAME, FileType::Config);
+    file_manager.set_content_prefix(CONFIGURATION_FILE_PREFIX);
 
     Self::new_with(file_manager)
   }
@@ -326,10 +326,10 @@ impl ConfigurationProvider {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::utils::create_temp_directory;
   use std::fs::{self, File};
   use std::io::Write;
   use std::path::PathBuf;
-  use tempfile::TempDir;
 
   impl ConfigurationProvider {
     pub fn default() -> Self {
@@ -351,18 +351,14 @@ mod tests {
     }
 
     fn new_test(temp_path: PathBuf) -> Self {
-      let file_manager = FileManager::new_test_with_custom_path(temp_path);
+      let file_manager = FileManager::new_test(temp_path);
       Self::new_with(file_manager)
     }
 
     fn new_test_without_validation(temp_path: PathBuf, config: Configuration) -> Self {
-      let file_manager = FileManager::new_test_with_custom_path(temp_path);
+      let file_manager = FileManager::new_test(temp_path);
       Self { file_manager, config }
     }
-  }
-
-  fn create_temp_directory() -> TempDir {
-    TempDir::new().expect("Failed to create temporary directory")
   }
 
   #[test]
