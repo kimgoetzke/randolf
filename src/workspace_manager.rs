@@ -1,6 +1,6 @@
 use crate::api::WindowsApi;
 use crate::common::{Monitors, PersistentWorkspaceId, TransientWorkspaceId, Window, Workspace, WorkspacesFile};
-use crate::files::FileManager;
+use crate::files::{FileManager, FileType};
 use crate::workspace_guard::WorkspaceGuard;
 use std::collections::{HashMap, HashSet};
 
@@ -21,8 +21,8 @@ pub struct WorkspaceManager<T: WindowsApi> {
 
 impl<T: WindowsApi + Clone> WorkspaceManager<T> {
   pub fn new(additional_workspace_count: i32, window_margin: i32, api: T) -> Self {
-    let mut file_manager = FileManager::new(WORKSPACES_FILE_NAME);
-    file_manager.set_prefix(WORKSPACE_FILE_PREFIX);
+    let mut file_manager = FileManager::new(WORKSPACES_FILE_NAME, FileType::Data);
+    file_manager.set_content_prefix(WORKSPACE_FILE_PREFIX);
     let mut workspace_manager = Self {
       workspaces: HashMap::new(),
       windows_api: api,
@@ -125,6 +125,7 @@ pub mod tests {
   use super::*;
   use crate::api::MockWindowsApi;
   use crate::common::{Monitor, MonitorHandle, Point, Rect, Sizing, TransientWorkspaceId, Window, WindowHandle, Workspace};
+  use crate::files::FileType;
   use crate::utils::create_temp_directory;
   use std::fs;
   use std::path::PathBuf;
@@ -178,6 +179,7 @@ pub mod tests {
             .join(WORKSPACES_FILE_NAME)
             .to_string_lossy()
             .as_ref(),
+          FileType::Data,
         ),
         workspace_file: WorkspacesFile::new(),
       }
@@ -248,7 +250,7 @@ pub mod tests {
         windows_api: mock_api,
         window_margin,
         additional_workspace_count: 1,
-        file_manager: FileManager::new(path.to_string_lossy().as_ref()),
+        file_manager: FileManager::new(path.to_string_lossy().as_ref(), FileType::Data),
         workspace_file: WorkspacesFile::new(),
       }
     }
@@ -271,6 +273,7 @@ pub mod tests {
             .join(WORKSPACES_FILE_NAME)
             .to_string_lossy()
             .as_ref(),
+          FileType::Data,
         ),
         workspace_file: WorkspacesFile::new(),
       }

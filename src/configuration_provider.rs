@@ -1,4 +1,4 @@
-use crate::files::FileManager;
+use crate::files::{FileManager, FileType};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 
@@ -206,8 +206,8 @@ pub struct ConfigurationProvider {
 
 impl ConfigurationProvider {
   pub fn new() -> Self {
-    let mut file_manager = FileManager::new(CONFIGURATION_FILE_NAME);
-    file_manager.set_prefix(CONFIGURATION_FILE_PREFIX);
+    let mut file_manager = FileManager::new(CONFIGURATION_FILE_NAME, FileType::Config);
+    file_manager.set_content_prefix(CONFIGURATION_FILE_PREFIX);
 
     Self::new_with(file_manager)
   }

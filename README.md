@@ -29,8 +29,8 @@ issues) are welcome.
 - Reset the window to its previous size and position (i.e. undo the near-maximisation) by pressing `Win` + `\` on a
   near-maximised window will
 - Minimise the foreground window by pressing `Win` + `Shift` + `\`
-- Write application logs to a file in the directory of the executable
-- Store and load configuration from `randolf.toml` in the directory of the executable
+- Store and load configuration from `randolf.toml` in `%APPDATA%\kimgoetzke\randolf\`
+- Write application logs to `randolf.log` in `%LOCALAPPDATA%\kimgoetzke\randolf\logs\`
 - Display a tray icon that also functions as a workspace indicator and has a context menu that allows you to...
     - Print a visual representation of the perceived monitor layout to the log file
     - Customise the window margin
@@ -54,8 +54,11 @@ Switching between workspaces and moving windows between them using hotkeys only:
 
 ## How to configure
 
-The configuration file `randolf.toml` is located in the same directory as the executable after the first start. The
-configuration file is created with the following default values when the application is first started:
+> [!NOTE]
+> The application will automatically create a configuration file with sensible defaults on the first run. The location
+> of the configuration file is `%APPDATA%\kimgoetzke\randolf\config\randolf.toml`.
+
+The default configuration file looks like this:
 
 ```toml
 [general]
@@ -79,43 +82,31 @@ window_class_names = [
 ]
 ```
 
-##### window_margin
+### General settings
 
-Default: `20`
+The `[general]` section contains the general settings for the application.
 
-The margin in pixels that is used when near-maximising or near-snapping a window. The margin is subtracted from the size
-of the screen when calculating the size and position of the window. Can be configured via the tray icon context menu.
+| Key                                   | Default value | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+|---------------------------------------|---------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `window_margin`                       | `20`          | The margin in pixels that is used when near-maximising or near-snapping a window. The margin is subtracted from the size of the screen (the monitors work area) when calculating the size and position of the window. Can be configured via the tray icon context menu.                                                                                                                                                                                                                                      |
+| `allow_selecting_same_center_windows` | `true`        | Whether to allow selecting windows, the center of which is the same as the center of the active window. Enabling this effectively means that the cursor cannot be moved away from two windows of the same size (as their centers are the same) until at least one of them is moved/resized. Disabling this, however, means that you will no longer be able to select the non-foreground window of the windows with the same center using this application. Can be configured via the tray icon context menu. |
+| `force_using_admin_privileges`        | `false`       | Whether to force the application to run with admin privileges. This will restart the application with admin privileges if it is not already running with them. Without admin privileges, the application will not be able to interact at all with other applications that are running with admin privileges. If you (semi-)regularly use applications that require admin privileges, you should set this to `true` or, even better, simply start Randolf with admin privileges directly.                     |
+| `additional_workspace_count`          | `2`           | The number of virtual workspaces that are created on the primary monitor by Randolf. Workspaces are similar to Windows desktops but only apply to a single monitor and are much faster to switch.                                                                                                                                                                                                                                                                                                            |
 
-##### allow_selecting_same_center_windows
+### Exclusion settings
 
-Default: `true`
+The `[exclusion_settings]` section contains the settings for excluding certain windows from being interactable (e.g.
+selectable/movable) via the application. A small number of windows are excluded by default in order for the application
+to function properly.
 
-Whether to allow selecting windows, the center of which is the same as the center of the active window. Enabling this
-effectively means that the cursor cannot be moved away from two windows of the same size (as their centers are the
-same) until at least one of them is moved/resized. Disabling this, however, means that you will no longer be able to
-select the non-foreground window of the windows with the same center using this application. Can be configured via the
-tray icon context menu.
+You can add additional windows to the exclusion list by adding their title or class name to the `[exclusion_settings]`
+section. Randolf currently does not provide any features to identify the title or class name of a window other than
+logging the _title_ of a window when it is being interacted with via the application.
 
-##### force_using_admin_privileges
+### Application launcher hotkeys
 
-Default: `false`
-
-Whether to force the application to run with admin privileges. This will restart the application with admin privileges
-if it is not already running with them. Without admin privileges, the application will not be able to interact at all
-with other applications that are running with admin privileges. If you (semi-)regularly use applications that require
-admin privileges, you should set this to `true` or, even better, simply start Randolf with admin privileges directly.
-
-##### additional_workspace_count
-
-Default: `2`
-
-The number of virtual workspaces that are created on the primary monitor by Randolf. Workspaces are similar to Windows
-desktops but only apply to a single monitor and are much faster to switch.
-
-##### Launcher hotkeys
-
-In addition to the above, the application also supports setting custom application launcher hotkeys via the
-configuration file like so:
+Hotkeys are not present in the default configuration file and must be added manually with a `[[hotkey]]` section. With
+this, you can configure custom application launcher hotkeys via the configuration file like so:
 
 ```toml
 [[hotkey]]
@@ -132,25 +123,16 @@ execute_as_admin = false
 ```
 
 - `name`: The name of the hotkey. This is used to identify the hotkey in logs but has no other value.
-- `path`: The path to the executable of the application to be started. Must use double backslashes (`\\`) as path
-  separators. If the executable is in the system path, you can use just the name of the executable (e.g.
-  `wt.exe`).
+- `path`: The path to the executable of the application to be started. Use double backslashes (`\\`) as path
+  separators when declaring the path using `"`. If the executable is in the system path, you can use just the name of
+  the executable (e.g. `wt.exe`).
 - `hotkey`: The key name (
   see [list of options](https://github.com/iholston/win-hotkeys/blob/f5f903a725ce309f86608bba6d8a76fb6efb97b8/src/keys.rs#L506))
-  to be used to start the application. Modifier key is always `Win`. Must be a single key.
-- `execute_as_admin`: Whether to execute the application as administrator. If unsure, set this to `false`.
+  to be used to start the application. Modifier key is always `Win` (feel free to raise an GitHub issue to change this).
+  Must be a single key.
+- `execute_as_admin`: Whether to execute the application with administrator privileges. If unsure, set this to `false`.
 - You can define an arbitrary number of hotkeys.
 - Using the same key for multiple hotkeys is not supported.
-- Hotkeys cannot be configured via the tray icon context menu.
-
-#### Exclusion settings
-
-Randolf allows excluding certain windows from being interactable (e.g. selectable/movable) via the application. A small
-number of windows are excluded by default in order for the application to function properly.
-
-You can add additional windows to the exclusion list by adding their title or class name to the `[exclusion_settings]`
-section. Randolf currently does not provide any features to identify the title or class name of a window other than
-logging the _title_ of a window when it is being interacted with via the application.
 
 ## FAQ
 
@@ -189,4 +171,5 @@ You'll need the C++ tools from the Build Tools for Visual Studio installed.
 
 Useful links:
 
+- [Download Build Tools for Visual Studio](https://visualstudio.microsoft.com/downloads/#build-tools)
 - [Programming reference for the Win32 API](https://learn.microsoft.com/en-us/windows/win32/api/)
