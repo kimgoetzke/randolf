@@ -11,7 +11,9 @@ pub enum Command {
   SwitchWorkspace(PersistentWorkspaceId),
   MoveWindowToWorkspace(PersistentWorkspaceId),
   OpenApplication(String, bool),
-  OpenRandolfFolder,
+  OpenRandolfExecutableFolder,
+  OpenRandolfConfigFolder,
+  OpenRandolfDataFolder,
   RestartRandolf(bool),
   Exit,
 }
@@ -27,7 +29,9 @@ impl Display for Command {
       Command::SwitchWorkspace(id) => write!(f, "Switch to workspace [{id}]"),
       Command::MoveWindowToWorkspace(id) => write!(f, "Move window to workspace [{id}]"),
       Command::OpenApplication(path, as_admin) => write!(f, "Open [{path}] as admin [{as_admin}]"),
-      Command::OpenRandolfFolder => write!(f, "Open Randolf folder in Explorer"),
+      Command::OpenRandolfExecutableFolder => write!(f, "Open Randolf's executable folder in Explorer"),
+      Command::OpenRandolfConfigFolder => write!(f, "Open Randolf's config folder in Explorer"),
+      Command::OpenRandolfDataFolder => write!(f, "Open Randolf's data folder in Explorer"),
       Command::RestartRandolf(as_admin) => write!(f, "Restart Randolf as admin [{as_admin}]"),
       Command::Exit => write!(f, "Exit application"),
     }

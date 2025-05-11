@@ -20,6 +20,7 @@ extern crate simplelog;
 use crate::api::{RealWindowsApi, WindowsApi};
 use crate::application_launcher::ApplicationLauncher;
 use crate::configuration_provider::{ConfigurationProvider, FORCE_USING_ADMIN_PRIVILEGES};
+use crate::files::FileType;
 use crate::hotkey_manager::HotkeyManager;
 use crate::log_manager::LogManager;
 use crate::tray_menu_manager::TrayMenuManager;
@@ -101,8 +102,16 @@ fn main() {
         }
         Command::MoveWindowToWorkspace(id) => wm.borrow_mut().move_window_to_workspace(id),
         Command::OpenApplication(path, as_admin) => launcher.borrow_mut().launch(path, None, as_admin),
-        Command::OpenRandolfFolder => {
+        Command::OpenRandolfExecutableFolder => {
           let args = launcher.borrow_mut().get_executable_folder();
+          launcher.borrow_mut().launch("explorer.exe".to_string(), Some(&args), false);
+        }
+        Command::OpenRandolfConfigFolder => {
+          let args = launcher.borrow_mut().get_project_folder(FileType::Config);
+          launcher.borrow_mut().launch("explorer.exe".to_string(), Some(&args), false);
+        }
+        Command::OpenRandolfDataFolder => {
+          let args = launcher.borrow_mut().get_project_folder(FileType::Data);
           launcher.borrow_mut().launch("explorer.exe".to_string(), Some(&args), false);
         }
         Command::RestartRandolf(as_admin) => {

@@ -27,7 +27,9 @@ enum Event {
   ToggleForceUsingAdminPrivileges,
   LogMonitorLayout,
   RestartRandolf(bool),
-  OpenRandolfFolder,
+  OpenRandolfExecutableFolder,
+  OpenRandolfConfigFolder,
+  OpenRandolfDataFolder,
 }
 
 impl TrayMenuManager {
@@ -142,10 +144,20 @@ impl TrayMenuManager {
           config.set_bool(FORCE_USING_ADMIN_PRIVILEGES, !is_enabled);
           debug!("Set [{:?}] to [{}]", Event::ToggleForceUsingAdminPrivileges, !is_enabled);
         }
-        Event::OpenRandolfFolder => {
+        Event::OpenRandolfExecutableFolder => {
           command_sender
-            .send(Command::OpenRandolfFolder)
-            .expect("Failed to send open randolf folder command");
+            .send(Command::OpenRandolfExecutableFolder)
+            .expect("Failed to send open randolf executable folder command");
+        }
+        Event::OpenRandolfConfigFolder => {
+          command_sender
+            .send(Command::OpenRandolfConfigFolder)
+            .expect("Failed to send open randolf config folder command");
+        }
+        Event::OpenRandolfDataFolder => {
+          command_sender
+            .send(Command::OpenRandolfDataFolder)
+            .expect("Failed to send open randolf data folder command");
         }
         Event::RestartRandolf(as_admin) => {
           let mut config = unlocked_config_provider(&config_provider);
@@ -212,6 +224,7 @@ fn build_menu(config_provider: &Arc<Mutex<ConfigurationProvider>>) -> MenuBuilde
       "Explore debug settings",
       MenuBuilder::new().item("Print monitor layout to log file", Event::LogMonitorLayout),
     )
+    .separator()
     .submenu(
       "Set window margin to...",
       MenuBuilder::new()
@@ -237,7 +250,9 @@ fn build_menu(config_provider: &Arc<Mutex<ConfigurationProvider>>) -> MenuBuilde
       Event::ToggleForceUsingAdminPrivileges,
     )
     .separator()
-    .item("Open the folder containing executable", Event::OpenRandolfFolder)
+    .item("Open executable folder", Event::OpenRandolfExecutableFolder)
+    .item("Open config folder", Event::OpenRandolfConfigFolder)
+    .item("Open data folder", Event::OpenRandolfDataFolder)
     .item("Restart with admin privileges", Event::RestartRandolf(true))
     .item("Restart", Event::RestartRandolf(false))
     .item("Exit (restores any hidden windows)", Event::Exit)

@@ -1,4 +1,5 @@
 use crate::files::file_type::FileType;
+use crate::utils::{PROJECT_DIR_APPLICATION_NAME, PROJECT_DIR_ORGANISATION_NAME, PROJECT_DIR_QUALIFIER};
 use directories::ProjectDirs;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -31,10 +32,28 @@ impl<T: Default + Serialize + DeserializeOwned> FileManager<T> {
     self.file_prefix = prefix.to_string();
   }
 
+  pub fn get_path_to_directory(file_type: FileType) -> Result<PathBuf, Box<dyn Error>> {
+    if let Some(project_directories) = ProjectDirs::from(
+      PROJECT_DIR_QUALIFIER,
+      PROJECT_DIR_ORGANISATION_NAME,
+      PROJECT_DIR_APPLICATION_NAME,
+    ) {
+      let file_directory = Self::determine_file_directory(file_type, &project_directories);
+
+      Ok(file_directory.to_path_buf())
+    } else {
+      Err("Could not determine standard project directories".into())
+    }
+  }
+
   /// Get the path to the file, creating the directory (but not the file) if it doesn't exist. Storage location is
   /// determined by the `FileType` enum.
   pub fn get_path_to_file(file_name: &str, file_type: FileType) -> Result<PathBuf, Box<dyn Error>> {
-    if let Some(project_directories) = ProjectDirs::from("io", "kimgoetzke", "randolf") {
+    if let Some(project_directories) = ProjectDirs::from(
+      PROJECT_DIR_QUALIFIER,
+      PROJECT_DIR_ORGANISATION_NAME,
+      PROJECT_DIR_APPLICATION_NAME,
+    ) {
       let file_directory = Self::determine_file_directory(file_type, &project_directories);
       if let Err(err) = fs::create_dir_all(file_directory) {
         error!("Failed to create directory [{}] : {err}", file_directory.display());
@@ -129,6 +148,24 @@ mod tests {
         _marker: Default::default(),
       }
     }
+  }
+
+  #[test]
+  fn get_path_to_directory_returns_correct_path_for_data() {
+    let folder =
+      FileManager::<TestConfig>::get_path_to_directory(FileType::Data).expect("Failed to get path to data directory");
+
+    assert!(folder.starts_with("C:\\Users"));
+    assert!(folder.ends_with("AppData\\Local\\kimgoetzke\\randolf\\data"));
+  }
+
+  #[test]
+  fn get_path_to_directory_returns_correct_path_for_config() {
+    let folder =
+      FileManager::<TestConfig>::get_path_to_directory(FileType::Config).expect("Failed to get path to data directory");
+
+    assert!(folder.starts_with("C:\\Users"));
+    assert!(folder.ends_with("AppData\\Roaming\\kimgoetzke\\randolf\\config"));
   }
 
   #[test]
