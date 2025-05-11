@@ -1,6 +1,6 @@
 use crate::api::WindowsApi;
-use crate::common::{Monitors, PersistentWorkspaceId, TransientWorkspaceId, Window, Workspace, WorkspacesFile};
-use crate::files::{FileManager, FileType};
+use crate::common::{Monitors, PersistentWorkspaceId, TransientWorkspaceId, Window, Workspace};
+use crate::files::{FileManager, FileType, WorkspacesFile};
 use crate::workspace_guard::WorkspaceGuard;
 use std::collections::{HashMap, HashSet};
 
