@@ -214,19 +214,6 @@ pub(crate) mod test {
       })
     }
 
-    fn get_parent_window_handle_for_point(&self, point: &Point) -> Option<WindowHandle> {
-      trace!("Mock windows API gets parent window handle for point {point}");
-      MOCK_STATE.with(|state| {
-        state.borrow().windows.iter().find_map(|(handle, ws)| {
-          if ws.window.rect.contains(point) && !ws.is_hidden && !ws.is_closed {
-            Some(*handle)
-          } else {
-            None
-          }
-        })
-      })
-    }
-
     fn get_window_title(&self, handle: &WindowHandle) -> String {
       trace!("Mock windows API gets window title for {handle}");
       MOCK_STATE.with(|state| {

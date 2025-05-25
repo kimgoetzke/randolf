@@ -9,7 +9,6 @@ mod hotkey_manager;
 mod log_manager;
 mod tray_menu_manager;
 mod utils;
-mod window_drag_manager;
 mod window_manager;
 mod workspace_guard;
 mod workspace_manager;
@@ -26,8 +25,8 @@ use crate::hotkey_manager::HotkeyManager;
 use crate::log_manager::LogManager;
 use crate::tray_menu_manager::TrayMenuManager;
 use crate::utils::CONFIGURATION_PROVIDER_LOCK;
-use crate::window_drag_manager::WindowDragManager;
 use crate::window_manager::WindowManager;
+use api::window_drag_manager::WindowDragManager;
 use common::Command;
 use crossbeam_channel::unbounded;
 use std::cell::RefCell;
@@ -87,7 +86,7 @@ fn main() {
   let interrupt_handle = hkm.initialise(command_sender.clone());
 
   // Create window drag manager
-  let mut window_drag_manager = WindowDragManager::new(windows_api.clone(), command_sender.clone());
+  let mut window_drag_manager = WindowDragManager::new(command_sender.clone());
   if let Err(e) = window_drag_manager.initialise() {
     error!("Failed to initialise window drag manager: {}", e);
     panic!("Exiting now because application failed to initialise window drag manager");
@@ -110,6 +109,9 @@ fn main() {
           tray_menu_manager.borrow_mut().update_tray_icon(id);
         }
         Command::MoveWindowToWorkspace(id) => wm.borrow_mut().move_window_to_workspace(id),
+        Command::AllowWindowDragging(is_enabled) => {
+          tray_menu_manager.borrow_mut().set_window_drag_icon(is_enabled);
+        }
         Command::OpenApplication(path, as_admin) => launcher.borrow_mut().launch(path, None, as_admin),
         Command::OpenRandolfExecutableFolder => {
           let args = launcher.borrow_mut().get_executable_folder();

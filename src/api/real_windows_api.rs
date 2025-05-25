@@ -12,11 +12,11 @@ use windows::Win32::System::Com::{CLSCTX_ALL, COINIT_APARTMENTTHREADED, CoCreate
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, PROCESS_PER_MONITOR_DPI_AWARE, SetProcessDpiAwareness};
 use windows::Win32::UI::Shell::{IVirtualDesktopManager, IsUserAnAdmin};
 use windows::Win32::UI::WindowsAndMessaging::{
-  DispatchMessageA, EnumWindows, GetClassNameW, GetCursorPos, GetDesktopWindow, GetForegroundWindow, GetParent,
-  GetWindowInfo, GetWindowPlacement, GetWindowTextW, IsIconic, IsWindowVisible, MSG, PM_REMOVE, PeekMessageA, PostMessageW,
-  SW_HIDE, SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOZORDER, SWP_SHOWWINDOW,
-  SendMessageW, SetCursorPos, SetForegroundWindow, SetWindowPlacement, SetWindowPos, ShowWindow, TranslateMessage,
-  WINDOWINFO, WINDOWPLACEMENT, WM_CLOSE, WM_PAINT, WindowFromPoint,
+  DispatchMessageA, EnumWindows, GetClassNameW, GetCursorPos, GetDesktopWindow, GetForegroundWindow, GetWindowInfo,
+  GetWindowPlacement, GetWindowTextW, IsIconic, IsWindowVisible, MSG, PM_REMOVE, PeekMessageA, PostMessageW, SW_HIDE,
+  SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOZORDER, SWP_SHOWWINDOW, SendMessageW,
+  SetCursorPos, SetForegroundWindow, SetWindowPlacement, SetWindowPos, ShowWindow, TranslateMessage, WINDOWINFO,
+  WINDOWPLACEMENT, WM_CLOSE, WM_PAINT,
 };
 use windows::core::BOOL;
 
@@ -134,31 +134,6 @@ impl WindowsApi for RealWindowsApi {
     });
 
     windows
-  }
-
-  fn get_parent_window_handle_for_point(&self, point: &Point) -> Option<WindowHandle> {
-    unsafe {
-      let hwnd_under_cursor = WindowFromPoint(point.into());
-      if hwnd_under_cursor.0.is_null() {
-        debug!("No window under cursor at {}", point);
-        return None;
-      }
-      let target_hwnd = get_top_level_hwnd(hwnd_under_cursor);
-      if target_hwnd.0.is_null() {
-        debug!("No top-level HWND found under cursor at {}", point);
-        return None;
-      }
-      let window_handle = WindowHandle::from(target_hwnd);
-      if !self.is_not_a_managed_window(&window_handle)
-        || self.is_window_hidden(&window_handle)
-        || self.is_window_minimised(window_handle)
-      {
-        debug!("{window_handle} does not qualify as a managed window or is hidden/minimised");
-        return None;
-      }
-
-      Some(window_handle)
-    }
   }
 
   fn get_window_title(&self, handle: &WindowHandle) -> String {
@@ -622,24 +597,6 @@ fn get_persistent_device_name(_handle: &MonitorHandle, info: &MONITORINFOEXW) ->
   // );
 
   info.szDevice
-}
-
-fn get_top_level_hwnd(mut hwnd: HWND) -> HWND {
-  unsafe {
-    while !hwnd.0.is_null() {
-      let parent = GetParent(hwnd);
-      if parent.is_err() {
-        break;
-      }
-      let parent = parent.expect("Failed to get parent of window");
-      if parent.0.is_null() {
-        break;
-      }
-      hwnd = parent;
-    }
-
-    hwnd
-  }
 }
 
 pub fn do_process_windows_messages() {

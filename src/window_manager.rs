@@ -202,7 +202,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
   fn near_maximize_window(&self, handle: WindowHandle, monitor_info: MonitorInfo, margin: i32) {
     info!("Near-maximizing {}", handle);
 
-    // First maximize to get the animation effect
+    // First maximise to get the animation effect
     self.windows_api.do_maximise_window(handle);
 
     // Then resize the window to the expected size
