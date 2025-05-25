@@ -87,7 +87,7 @@ fn main() {
   let interrupt_handle = hkm.initialise(command_sender.clone());
 
   // Create window drag manager
-  let mut window_drag_manager = WindowDragManager::new(windows_api.clone());
+  let mut window_drag_manager = WindowDragManager::new(windows_api.clone(), command_sender.clone());
   if let Err(e) = window_drag_manager.initialise() {
     error!("Failed to initialise window drag manager: {}", e);
     panic!("Exiting now because application failed to initialise window drag manager");

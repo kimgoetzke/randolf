@@ -1,6 +1,7 @@
 use crate::api::WindowsApi;
-use crate::common::Point;
-use std::sync::atomic::{AtomicBool, Ordering};
+use crate::common::{Command, Point};
+use crossbeam_channel::Sender;
+use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use windows::Win32::Foundation::*;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
@@ -12,19 +13,20 @@ static IS_DRAGGING: AtomicBool = AtomicBool::new(false);
 static IS_RESIZING: AtomicBool = AtomicBool::new(false);
 static DRAG_STATE: OnceLock<Arc<Mutex<DragState>>> = OnceLock::new();
 static RESIZE_STATE: OnceLock<Arc<Mutex<ResizeState>>> = OnceLock::new();
+static MOUSE_HOOK_HANDLE: AtomicPtr<std::ffi::c_void> = AtomicPtr::new(std::ptr::null_mut());
 
 pub struct WindowDragManager<T: WindowsApi> {
   windows_api: T,
   keyboard_hook_handle: Option<HHOOK>,
-  mouse_hook_handle: Option<HHOOK>,
+  command_sender: Sender<Command>,
 }
 
-impl<T: WindowsApi + Clone> WindowDragManager<T> {
-  pub fn new(windows_api: T) -> Self {
+impl<T: WindowsApi> WindowDragManager<T> {
+  pub fn new(windows_api: T, sender: Sender<Command>) -> Self {
     Self {
       windows_api,
       keyboard_hook_handle: None,
-      mouse_hook_handle: None,
+      command_sender: sender,
     }
   }
 
@@ -33,10 +35,8 @@ impl<T: WindowsApi + Clone> WindowDragManager<T> {
       let h_module = GetModuleHandleW(None)?;
       let h_instance = HINSTANCE(h_module.0);
       let keyboard_hook = SetWindowsHookExW(WH_KEYBOARD_LL, Some(Self::keyboard_callback), Option::from(h_instance), 0)?;
-      let mouse_hook = SetWindowsHookExW(WH_MOUSE_LL, Some(Self::low_level_mouse_callback), Option::from(h_instance), 0)?;
 
       self.keyboard_hook_handle = Some(keyboard_hook);
-      self.mouse_hook_handle = Some(mouse_hook);
     }
     Ok(())
   }
@@ -53,15 +53,16 @@ impl<T: WindowsApi + Clone> WindowDragManager<T> {
           if is_pressed != IS_WIN_KEY_PRESSED.load(Ordering::Relaxed) {
             debug!("Win key [{}] {}", vk_code, if is_pressed { "pressed" } else { "released" });
             IS_WIN_KEY_PRESSED.store(is_pressed, Ordering::Relaxed);
-            if !is_pressed && IS_DRAGGING.load(Ordering::Relaxed) {
-              debug!("Win key released while dragging is active, ending drag now...");
-              Self::handle_drag_end();
-              return LRESULT(1);
-            }
-            if IS_RESIZING.load(Ordering::Relaxed) {
-              debug!("Win key released while resizing is active, ending resize now...");
-              Self::handle_resize_end();
-              return LRESULT(1);
+            if is_pressed {
+              Self::install_mouse_hook();
+            } else {
+              if IS_DRAGGING.load(Ordering::Relaxed) {
+                Self::handle_drag_end();
+              }
+              if IS_RESIZING.load(Ordering::Relaxed) {
+                Self::handle_resize_end();
+              }
+              Self::uninstall_mouse_hook();
             }
           }
         }
@@ -71,8 +72,39 @@ impl<T: WindowsApi + Clone> WindowDragManager<T> {
     }
   }
 
+  fn install_mouse_hook() {
+    unsafe {
+      if !MOUSE_HOOK_HANDLE.load(Ordering::Relaxed).is_null() {
+        return;
+      }
+      let h_module = GetModuleHandleW(None).expect("Failed to get module handle");
+      let h_instance = HINSTANCE(h_module.0);
+      if let Ok(mouse_hook) =
+        SetWindowsHookExW(WH_MOUSE_LL, Some(Self::low_level_mouse_callback), Option::from(h_instance), 0)
+      {
+        MOUSE_HOOK_HANDLE.store(mouse_hook.0, Ordering::Relaxed);
+        debug!("Mouse hook installed");
+      } else {
+        error!("Failed to install mouse hook");
+      }
+    }
+  }
+
+  fn uninstall_mouse_hook() {
+    unsafe {
+      let hook_pointer = MOUSE_HOOK_HANDLE.swap(std::ptr::null_mut(), Ordering::Relaxed);
+      if !hook_pointer.is_null() {
+        let hook = HHOOK(hook_pointer);
+        if let Err(err) = UnhookWindowsHookEx(hook) {
+          error!("Failed to unhook mouse hook: {}", err);
+        } else {
+          debug!("Mouse hook uninstalled");
+        }
+      }
+    }
+  }
+
   // TODO: Find a way to inject windows_api and AtomicBools into the callbacks, then refactor everything
-  // TODO: Fix bug that causes lags while scrolling the mouse wheel (even if Win key is not pressed)
   extern "system" fn low_level_mouse_callback(n_code: i32, w_param: WPARAM, l_param: LPARAM) -> LRESULT {
     unsafe {
       if n_code != HC_ACTION as i32 {
@@ -385,14 +417,7 @@ impl<T: WindowsApi + Clone> WindowDragManager<T> {
 
 impl<T: WindowsApi> Drop for WindowDragManager<T> {
   fn drop(&mut self) {
-    debug!("Unhooking keyboard and mouse hooks");
-    if let Some(mouse_hook) = self.mouse_hook_handle {
-      unsafe {
-        if let Err(err) = UnhookWindowsHookEx(mouse_hook) {
-          error!("Failed to unhook mouse hook: {}", err);
-        }
-      }
-    }
+    Self::uninstall_mouse_hook();
     if let Some(keyboard_hook) = self.keyboard_hook_handle {
       unsafe {
         if let Err(err) = UnhookWindowsHookEx(keyboard_hook) {
