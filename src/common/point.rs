@@ -46,6 +46,12 @@ impl Point {
   }
 }
 
+impl From<POINT> for Point {
+  fn from(point: POINT) -> Self {
+    Self { x: point.x, y: point.y }
+  }
+}
+
 #[allow(clippy::from_over_into)]
 impl Into<POINT> for &Point {
   fn into(self) -> POINT {

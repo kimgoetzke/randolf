@@ -9,6 +9,7 @@ mod hotkey_manager;
 mod log_manager;
 mod tray_menu_manager;
 mod utils;
+mod window_drag_manager;
 mod window_manager;
 mod workspace_guard;
 mod workspace_manager;
@@ -25,6 +26,7 @@ use crate::hotkey_manager::HotkeyManager;
 use crate::log_manager::LogManager;
 use crate::tray_menu_manager::TrayMenuManager;
 use crate::utils::CONFIGURATION_PROVIDER_LOCK;
+use crate::window_drag_manager::WindowDragManager;
 use crate::window_manager::WindowManager;
 use common::Command;
 use crossbeam_channel::unbounded;
@@ -82,7 +84,14 @@ fn main() {
   )));
   let workspace_ids = wm.borrow_mut().get_ordered_permanent_workspace_ids();
   let hkm = HotkeyManager::new_with_hotkeys(configuration_manager.clone(), workspace_ids);
-  let interrupt_handle = hkm.initialise(command_sender);
+  let interrupt_handle = hkm.initialise(command_sender.clone());
+
+  // Create window drag manager
+  let mut window_drag_manager = WindowDragManager::new(windows_api.clone());
+  if let Err(e) = window_drag_manager.initialise() {
+    error!("Failed to initialise window drag manager: {}", e);
+    panic!("Exiting now because application failed to initialise window drag manager");
+  }
 
   // Run event loop
   let mut last_heartbeat = Instant::now();

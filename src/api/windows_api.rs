@@ -8,6 +8,7 @@ pub trait WindowsApi {
   fn get_all_windows(&self) -> Vec<Window>;
   fn get_all_visible_windows(&self) -> Vec<Window>;
   fn get_all_visible_windows_within_area(&self, rect: Rect) -> Vec<Window>;
+  fn get_parent_window_handle_for_point(&self, point: &Point) -> Option<WindowHandle>;
   fn get_window_title(&self, handle: &WindowHandle) -> String;
   fn get_window_class_name(&self, handle: &WindowHandle) -> String;
   fn is_window_minimised(&self, handle: WindowHandle) -> bool;
