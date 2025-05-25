@@ -83,7 +83,7 @@ impl<T: WindowsApi> WindowDragManager<T> {
         SetWindowsHookExW(WH_MOUSE_LL, Some(Self::low_level_mouse_callback), Option::from(h_instance), 0)
       {
         MOUSE_HOOK_HANDLE.store(mouse_hook.0, Ordering::Relaxed);
-        debug!("Mouse hook installed");
+        trace!("Mouse hook installed");
       } else {
         error!("Failed to install mouse hook");
       }
@@ -98,7 +98,7 @@ impl<T: WindowsApi> WindowDragManager<T> {
         if let Err(err) = UnhookWindowsHookEx(hook) {
           error!("Failed to unhook mouse hook: {}", err);
         } else {
-          debug!("Mouse hook uninstalled");
+          trace!("Mouse hook uninstalled");
         }
       }
     }
@@ -185,6 +185,9 @@ impl<T: WindowsApi> WindowDragManager<T> {
       if GetWindowRect(target_hwnd, &mut window_rect).is_err() {
         error!("Failed to get window rect for HWND: {:?}", target_hwnd);
         return;
+      }
+      if !SetForegroundWindow(target_hwnd).as_bool() {
+        warn!("Failed to set foreground window to w#{:?}", target_hwnd.0);
       }
       if let Ok(mut drag_state) = get_drag_state().lock() {
         let window_position = Point::new(window_rect.left, window_rect.top);
@@ -298,6 +301,9 @@ impl<T: WindowsApi> WindowDragManager<T> {
       if GetWindowRect(target_hwnd, &mut window_rect).is_err() {
         error!("Failed to get window rect for HWND: {:?}", target_hwnd);
         return;
+      }
+      if !SetForegroundWindow(target_hwnd).as_bool() {
+        warn!("Failed to set foreground window to w#{:?}", target_hwnd.0);
       }
       let resize_mode = Self::determine_resize_mode(cursor_position, &window_rect);
       if let Ok(mut resize_state) = get_resize_state().lock() {
