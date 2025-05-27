@@ -5,12 +5,13 @@ use crate::configuration_provider::{
 };
 use crate::utils::{CONFIGURATION_PROVIDER_LOCK, TRAY_ICON_LOCK, TRAY_ICON_OPEN};
 use crossbeam_channel::{Receiver, Sender, unbounded};
-use std::sync::atomic::AtomicU8;
+use std::sync::atomic::{AtomicBool, AtomicU8};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use trayicon::*;
 
 static WORKSPACE: AtomicU8 = AtomicU8::new(1);
+static IS_DRAG_ICON_SHOWN: AtomicBool = AtomicBool::new(false);
 
 pub struct TrayMenuManager {
   configuration_provider: Arc<Mutex<ConfigurationProvider>>,
@@ -194,30 +195,37 @@ impl TrayMenuManager {
       );
       return;
     }
-    let icon = &self.workspace_tray_icons[workspace_id.workspace - 1];
     WORKSPACE.store(workspace_id.workspace as u8, std::sync::atomic::Ordering::Relaxed);
+    if IS_DRAG_ICON_SHOWN.load(std::sync::atomic::Ordering::Relaxed) {
+      debug!("Not updating tray icon because window drag icon is shown");
+      return;
+    }
+    let icon = &self.workspace_tray_icons[workspace_id.workspace - 1];
     let tray_icon = Arc::clone(self.menu.as_ref().unwrap());
-    tray_icon
-      .lock()
-      .expect(TRAY_ICON_LOCK)
-      .set_icon(icon)
-      .expect("Failed to set tray icon");
-    debug!(
-      "Set tray icon [{}/{}] to reflect active workspace on primary monitor",
-      workspace_id.workspace,
-      self.workspace_tray_icons.len()
-    );
+    if let Err(err) = tray_icon.lock().expect(TRAY_ICON_LOCK).set_icon(icon) {
+      error!("Failed to set workspace tray icon to [{}]: {err}", workspace_id.workspace);
+    } else {
+      debug!(
+        "Set tray icon [{}/{}] to reflect active workspace on primary monitor",
+        workspace_id.workspace,
+        self.workspace_tray_icons.len()
+      );
+    }
   }
 
   pub fn set_window_drag_icon(&self, is_enabled: bool) {
     let tray_icon = Arc::clone(self.menu.as_ref().unwrap());
     let icon = if is_enabled {
+      IS_DRAG_ICON_SHOWN.store(true, std::sync::atomic::Ordering::Relaxed);
+
       &self.drag_icon
     } else {
+      IS_DRAG_ICON_SHOWN.store(false, std::sync::atomic::Ordering::Relaxed);
+
       &self.workspace_tray_icons[WORKSPACE.load(std::sync::atomic::Ordering::Relaxed) as usize - 1]
     };
     if let Err(err) = tray_icon.lock().expect(TRAY_ICON_LOCK).set_icon(icon) {
-      error!("Failed to set window drag icon: {err}");
+      error!("Failed to set window drag tray icon to [{is_enabled}]: {err}");
     } else {
       debug!("Set window drag icon to [{}]", is_enabled);
     }
