@@ -6,7 +6,7 @@
 
 Randolf is a window management utility for Windows 11 that allows you to:
 
-- `Win` + `\` - near-maximise \the foreground window (maximise minus margin).
+- `Win` + `\` - near-maximise the foreground window (maximise minus margin).
 - `Win` + `Shift` + `Left`/`Top`/`Right`/`Down` or `h`/`j`/`k`/`l` - near-snap (snap minus margin) the foreground window
   to the left, top, right, or bottom of the screen.
 - `Win` + `Left`/`Top`/`Right`/`Down` - move the cursor to the closest window in the direction of the arrow key (and
@@ -14,9 +14,9 @@ Randolf is a window management utility for Windows 11 that allows you to:
 - `Win` + `q` - close the foreground window.
 - `Win` + `1`/`2`/... - switch between workspaces.
 - `Win` + `Shift` + `1`/`2`/... - move the foreground window to respective workspace.
-- Hold `Win` + `Left click` - select a window anywhere and move it i.e. without having to select the title bar.
-- Hold `Win` + `Right click` - select a window anywhere and resize it i.e. without having to select the edges or
-  corners.
+- Hold `Win` + `Left click` - select a window anywhere (i.e. without having to select the title bar) and move it.
+- Hold `Win` + `Right click` - select a window anywhere (i.e. without having to select the edges or corners) and resize
+  it.
 - Configure an arbitrary number of hotkeys for launching applications (e.g. `Win` + `f` to launch Firefox) via the
   configuration file.
 
@@ -24,8 +24,8 @@ My goal for this project was to implement some key window navigation concepts
 from [my Linux configuration](https://github.com/kimgoetzke/nixos-config) for Windows, offering an experience, somewhat
 closer to that of Linux window managers/compositors such as [Hyprland](https://hyprland.org/) without
 _enforcing_ window tiling. The application was created to meet my own needs and started as migration of
-[Randy](https://github.com/kimgoetzke/randy) from C#/.NET to Rust, however contributions and suggestions (via
-issues) are welcome.
+[Randy](https://github.com/kimgoetzke/randy) from C#/.NET to Rust, however contributions and suggestions (via issues)
+are welcome.
 
 #### Additional features
 
