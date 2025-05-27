@@ -535,16 +535,6 @@ fn get_window_info(hwnd: HWND) -> Result<WINDOWINFO, &'static str> {
   }
 }
 
-pub fn do_process_windows_messages() {
-  let mut msg = MaybeUninit::<MSG>::uninit();
-  unsafe {
-    if PeekMessageA(msg.as_mut_ptr(), Option::from(HWND(ptr::null_mut())), 0, 0, PM_REMOVE).into() {
-      let _ = TranslateMessage(msg.as_ptr());
-      DispatchMessageA(msg.as_ptr());
-    }
-  }
-}
-
 fn empty_monitor_info() -> MONITORINFO {
   MONITORINFO {
     cbSize: size_of::<MONITORINFO>() as u32,
@@ -607,4 +597,14 @@ fn get_persistent_device_name(_handle: &MonitorHandle, info: &MONITORINFOEXW) ->
   // );
 
   info.szDevice
+}
+
+pub fn do_process_windows_messages() {
+  let mut msg = MaybeUninit::<MSG>::uninit();
+  unsafe {
+    if PeekMessageA(msg.as_mut_ptr(), Option::from(HWND(ptr::null_mut())), 0, 0, PM_REMOVE).into() {
+      let _ = TranslateMessage(msg.as_ptr());
+      DispatchMessageA(msg.as_ptr());
+    }
+  }
 }

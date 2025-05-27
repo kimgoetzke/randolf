@@ -2,6 +2,8 @@ use crate::common::{Direction, MonitorHandle, Point, Rect};
 use std::fmt::Display;
 use windows::Win32::Graphics::Gdi::MONITORINFO;
 
+/// Represents a monitor, including its ID, handle, size, and areas. Aggregates the necessary information about a
+/// monitor for this application to do its thing. This struct is really just a wrapper around a few Windows types.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Monitor {
   pub id: [u16; 32],

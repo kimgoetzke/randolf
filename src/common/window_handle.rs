@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Formatter;
 use windows::Win32::Foundation::HWND;
 
-/// A simple wrapper around a window handle. Its purpose is simply to standardise the
-/// handle type across the codebase and provide a few utility methods.
+/// A simple wrapper around a Windows [`HWND`]. Its purpose is simply to abstract and standardise the window handle
+/// across the codebase, and to provide a few utility methods.
 #[derive(Eq, Hash, PartialEq, Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct WindowHandle {
   pub hwnd: isize,

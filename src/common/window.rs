@@ -4,6 +4,8 @@ use windows::Win32::Foundation::HWND;
 
 const CHAR_LIMIT: usize = 15;
 
+/// Represents a window with its handle, title, rectangle, and center point. Aggregates the necessary information about
+/// a window for this application to do its thing. This struct is really just a wrapper around a few Windows types.
 #[derive(Debug, Clone, Eq)]
 pub struct Window {
   pub handle: WindowHandle,

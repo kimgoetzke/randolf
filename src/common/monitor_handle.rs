@@ -1,8 +1,8 @@
 use std::fmt::Display;
 use windows::Win32::Graphics::Gdi::HMONITOR;
 
-/// A simple wrapper around a monitor handle. Its purpose is simply to standardise the
-/// handle type across the codebase and provide a few utility methods.
+/// A simple wrapper for the Windows [`HMONITOR`]. Its purpose is simply to abstract and standardise the
+/// monitor handle across the codebase, and to provide a few utility methods.
 #[derive(Eq, Hash, PartialEq, PartialOrd, Ord, Copy, Clone, Debug, Default)]
 pub struct MonitorHandle {
   pub handle: isize,

@@ -1,6 +1,13 @@
 use crate::common::{MonitorHandle, PersistentWorkspaceId};
 use std::fmt::Display;
 
+/// The ID of a Randolf workspace that is transient, meaning that it (the [`MonitorHandle`] to be precise) can change
+/// frequently at runtime. However, unlike [`PersistentWorkspaceId`], it includes the [`MonitorHandle`], which is
+/// used by many Windows APIs.
+///
+/// It is recommended to use [`PersistentWorkspaceId`] by default, and only use [`TransientWorkspaceId`] _within_ a
+/// single operation/[`Command`][crate::common::Command] execution. This can be done by resolving the
+/// [`PersistentWorkspaceId`] to a [`TransientWorkspaceId`] at the start of the operation.
 #[derive(Debug, Copy, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct TransientWorkspaceId {
   pub monitor_id: [u16; 32],

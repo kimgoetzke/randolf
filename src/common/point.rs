@@ -2,6 +2,7 @@ use crate::common::{Rect, Sizing};
 use std::fmt::Formatter;
 use windows::Win32::Foundation::POINT;
 
+/// Represents a point in 2D space with integer coordinates.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Hash)]
 pub struct Point {
   x: i32,
@@ -43,6 +44,12 @@ impl Point {
 
   pub fn as_point(&self) -> POINT {
     POINT { x: self.x, y: self.y }
+  }
+}
+
+impl From<POINT> for Point {
+  fn from(point: POINT) -> Self {
+    Self { x: point.x, y: point.y }
   }
 }
 

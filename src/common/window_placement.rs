@@ -2,6 +2,8 @@ use crate::common::{Point, Rect, Sizing};
 use windows::Win32::Foundation::POINT;
 use windows::Win32::UI::WindowsAndMessaging::{SW_SHOWNORMAL, WINDOWPLACEMENT, WINDOWPLACEMENT_FLAGS};
 
+/// A simple wrapper for the Windows [`WINDOWPLACEMENT`]. Its purpose is to abstract away from the Windows API and
+/// to provide a handful of utility methods for working with window placements.
 #[derive(Debug, Clone, PartialEq)]
 pub struct WindowPlacement {
   pub length: u32,

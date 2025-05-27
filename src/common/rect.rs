@@ -2,7 +2,9 @@ use crate::common::Point;
 use std::fmt::Display;
 use windows::Win32::Foundation::RECT;
 
-#[derive(Debug, Hash, PartialEq, Eq, Copy, Clone)]
+/// A simple wrapper around a Windows [`RECT`] i.e. a rectangle defined by its left, top, right, and bottom edges. Its
+/// purpose is simply to abstract away from the Windows API and to provide a handful of utility methods.
+#[derive(Debug, Hash, PartialEq, Eq, Copy, Clone, Default)]
 pub struct Rect {
   pub left: i32,
   pub top: i32,
@@ -96,17 +98,6 @@ impl Display for Rect {
 mod tests {
   use crate::common::Rect;
   use windows::Win32::Foundation::RECT;
-
-  impl Rect {
-    pub fn default() -> Self {
-      Self {
-        left: 0,
-        top: 0,
-        right: 0,
-        bottom: 0,
-      }
-    }
-  }
 
   #[test]
   fn new_creates_rect_with_correct_coordinates() {

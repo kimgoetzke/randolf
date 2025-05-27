@@ -1,6 +1,8 @@
 use crate::common::{Direction, PersistentWorkspaceId};
 use std::fmt::Display;
 
+/// Represents commands that can be executed in the main loop of this application. Basically, these are the actions
+/// that can be triggered by the user through the tray menu or hotkeys.
 #[derive(Debug)]
 pub enum Command {
   CloseWindow,
@@ -10,6 +12,7 @@ pub enum Command {
   MoveCursor(Direction),
   SwitchWorkspace(PersistentWorkspaceId),
   MoveWindowToWorkspace(PersistentWorkspaceId),
+  DragWindows(bool),
   OpenApplication(String, bool),
   OpenRandolfExecutableFolder,
   OpenRandolfConfigFolder,
@@ -28,6 +31,7 @@ impl Display for Command {
       Command::MoveCursor(direction) => write!(f, "Move cursor [{:?}]", direction),
       Command::SwitchWorkspace(id) => write!(f, "Switch to workspace [{id}]"),
       Command::MoveWindowToWorkspace(id) => write!(f, "Move window to workspace [{id}]"),
+      Command::DragWindows(is_allowed) => write!(f, "Allow window dragging [{}]", is_allowed),
       Command::OpenApplication(path, as_admin) => write!(f, "Open [{path}] as admin [{as_admin}]"),
       Command::OpenRandolfExecutableFolder => write!(f, "Open Randolf's executable folder in Explorer"),
       Command::OpenRandolfConfigFolder => write!(f, "Open Randolf's config folder in Explorer"),

@@ -5,14 +5,19 @@ use crate::configuration_provider::{
 };
 use crate::utils::{CONFIGURATION_PROVIDER_LOCK, TRAY_ICON_LOCK, TRAY_ICON_OPEN};
 use crossbeam_channel::{Receiver, Sender, unbounded};
+use std::sync::atomic::{AtomicBool, AtomicU8};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use trayicon::*;
 
+static WORKSPACE: AtomicU8 = AtomicU8::new(1);
+static IS_DRAG_ICON_SHOWN: AtomicBool = AtomicBool::new(false);
+
 pub struct TrayMenuManager {
   configuration_provider: Arc<Mutex<ConfigurationProvider>>,
   menu: Option<Arc<Mutex<TrayIcon<Event>>>>,
-  tray_icons: Vec<Icon>,
+  workspace_tray_icons: Vec<Icon>,
+  drag_icon: Icon,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -37,7 +42,9 @@ impl TrayMenuManager {
     Self {
       configuration_provider,
       menu: None,
-      tray_icons: vec![],
+      workspace_tray_icons: vec![],
+      drag_icon: Icon::from_buffer(include_bytes!("../assets/randolf-drag.ico"), Some(32), Some(32))
+        .expect("Failed to create drag icon from buffer"),
     }
   }
 
@@ -50,7 +57,7 @@ impl TrayMenuManager {
     let tray = manager.create_tray_icon(tray_event_sender);
     manager.menu = Some(Arc::from(Mutex::new(tray)));
     manager.initialise(tray_event_receiver, command_sender);
-    manager.tray_icons = (1..=9).map(Self::create_icon).collect();
+    manager.workspace_tray_icons = (1..=9).map(Self::create_icon).collect();
     debug!("Created tray icon & menu");
 
     manager
@@ -180,26 +187,48 @@ impl TrayMenuManager {
     if !workspace_id.is_on_primary_monitor() {
       return;
     }
-    if workspace_id.workspace > self.tray_icons.len() {
+    if workspace_id.workspace > self.workspace_tray_icons.len() {
       error!(
         "Workspace ID [{}] is out of bounds for tray icons (max: [{}]) - ignoring request",
         workspace_id.workspace,
-        self.tray_icons.len()
+        self.workspace_tray_icons.len()
       );
       return;
     }
-    let icon = &self.tray_icons[workspace_id.workspace - 1];
+    WORKSPACE.store(workspace_id.workspace as u8, std::sync::atomic::Ordering::Relaxed);
+    if IS_DRAG_ICON_SHOWN.load(std::sync::atomic::Ordering::Relaxed) {
+      debug!("Not updating tray icon because window drag icon is shown");
+      return;
+    }
+    let icon = &self.workspace_tray_icons[workspace_id.workspace - 1];
     let tray_icon = Arc::clone(self.menu.as_ref().unwrap());
-    tray_icon
-      .lock()
-      .expect(TRAY_ICON_LOCK)
-      .set_icon(icon)
-      .expect("Failed to set tray icon");
-    debug!(
-      "Set tray icon [{}/{}] to reflect active workspace on primary monitor",
-      workspace_id.workspace,
-      self.tray_icons.len()
-    );
+    if let Err(err) = tray_icon.lock().expect(TRAY_ICON_LOCK).set_icon(icon) {
+      error!("Failed to set workspace tray icon to [{}]: {err}", workspace_id.workspace);
+    } else {
+      debug!(
+        "Set tray icon [{}/{}] to reflect active workspace on primary monitor",
+        workspace_id.workspace,
+        self.workspace_tray_icons.len()
+      );
+    }
+  }
+
+  pub fn set_window_drag_icon(&self, is_enabled: bool) {
+    let tray_icon = Arc::clone(self.menu.as_ref().unwrap());
+    let icon = if is_enabled {
+      IS_DRAG_ICON_SHOWN.store(true, std::sync::atomic::Ordering::Relaxed);
+
+      &self.drag_icon
+    } else {
+      IS_DRAG_ICON_SHOWN.store(false, std::sync::atomic::Ordering::Relaxed);
+
+      &self.workspace_tray_icons[WORKSPACE.load(std::sync::atomic::Ordering::Relaxed) as usize - 1]
+    };
+    if let Err(err) = tray_icon.lock().expect(TRAY_ICON_LOCK).set_icon(icon) {
+      error!("Failed to set window drag tray icon to [{is_enabled}]: {err}");
+    } else {
+      debug!("Set window drag icon to [{}]", is_enabled);
+    }
   }
 }
 
@@ -262,7 +291,13 @@ fn build_menu(config_provider: &Arc<Mutex<ConfigurationProvider>>) -> MenuBuilde
 mod test {
   use super::*;
   use crate::configuration_provider::ConfigurationProvider;
+  use serial_test::serial;
   use std::sync::{Arc, Mutex};
+
+  fn reset() {
+    WORKSPACE.store(1, std::sync::atomic::Ordering::Relaxed);
+    IS_DRAG_ICON_SHOWN.store(false, std::sync::atomic::Ordering::Relaxed);
+  }
 
   #[test]
   fn new_initialised_returns_initialised_tray_menu_manager() {
@@ -271,16 +306,18 @@ mod test {
     let tray_menu_manager = TrayMenuManager::new_initialised(configuration_provider.clone(), command_sender);
 
     assert!(tray_menu_manager.menu.is_some());
-    assert_eq!(tray_menu_manager.tray_icons.len(), 9);
+    assert_eq!(tray_menu_manager.workspace_tray_icons.len(), 9);
   }
 
   #[test]
+  #[serial]
   fn update_tray_icon_sets_icon_for_primary_monitor_workspace() {
+    reset();
     testing_logger::setup();
     let configuration_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
     let manager = TrayMenuManager::new_initialised(configuration_provider, unbounded().0);
 
-    let workspace_id = PersistentWorkspaceId::new_test(1);
+    let workspace_id = PersistentWorkspaceId::new_test(2);
     manager.update_tray_icon(workspace_id);
 
     testing_logger::validate(|captured_logs| {
@@ -290,14 +327,17 @@ mod test {
         format!(
           "Set tray icon [{}/{}] to reflect active workspace on primary monitor",
           workspace_id.workspace,
-          manager.tray_icons.len()
+          manager.workspace_tray_icons.len()
         )
       );
     });
+    assert_eq!(WORKSPACE.load(std::sync::atomic::Ordering::Relaxed), 2);
   }
 
   #[test]
+  #[serial]
   fn update_tray_icon_does_not_set_icon_for_non_primary_monitor_workspaces() {
+    reset();
     testing_logger::setup();
     let configuration_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
     let manager = TrayMenuManager::new_initialised(configuration_provider, unbounded().0);
@@ -310,10 +350,13 @@ mod test {
       assert_eq!(captured_logs.len(), 1);
       assert!(!captured_logs[0].body.contains("Set tray icon"));
     });
+    assert_eq!(WORKSPACE.load(std::sync::atomic::Ordering::Relaxed), 1);
   }
 
   #[test]
+  #[serial]
   fn update_tray_icon_ignores_request_when_index_out_of_bounds() {
+    reset();
     testing_logger::setup();
     let configuration_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
     let manager = TrayMenuManager::new_initialised(configuration_provider, unbounded().0);
@@ -327,6 +370,83 @@ mod test {
         "Workspace ID [123] is out of bounds for tray icons (max: [9]) - ignoring request"
       );
     });
+    assert_eq!(WORKSPACE.load(std::sync::atomic::Ordering::Relaxed), 1);
+  }
+
+  #[test]
+  #[serial]
+  fn update_tray_icon_does_not_change_if_drag_icon_shown() {
+    reset();
+    testing_logger::setup();
+    let configuration_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
+    let manager = TrayMenuManager::new_initialised(configuration_provider, unbounded().0);
+
+    IS_DRAG_ICON_SHOWN.store(true, std::sync::atomic::Ordering::Relaxed);
+    manager.update_tray_icon(PersistentWorkspaceId::new_test(3));
+
+    testing_logger::validate(|captured_logs| {
+      assert_eq!(captured_logs.len(), 2);
+      assert_eq!(
+        captured_logs[1].body,
+        "Not updating tray icon because window drag icon is shown"
+      );
+    });
+    assert_eq!(WORKSPACE.load(std::sync::atomic::Ordering::Relaxed), 3); // Change "queued"
+    assert!(IS_DRAG_ICON_SHOWN.load(std::sync::atomic::Ordering::Relaxed));
+  }
+
+  #[test]
+  #[serial]
+  fn set_window_drag_icon_updates_icon_to_drag_icon() {
+    reset();
+    testing_logger::setup();
+    let configuration_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
+    let manager = TrayMenuManager::new_initialised(configuration_provider, unbounded().0);
+
+    manager.set_window_drag_icon(true);
+
+    testing_logger::validate(|captured_logs| {
+      assert_eq!(captured_logs.len(), 2);
+      assert_eq!(captured_logs[1].body, "Set window drag icon to [true]");
+    });
+    assert!(IS_DRAG_ICON_SHOWN.load(std::sync::atomic::Ordering::Relaxed));
+  }
+
+  #[test]
+  #[serial]
+  fn set_window_drag_icon_can_set_icon_back_to_workspace_1() {
+    reset();
+    testing_logger::setup();
+    let configuration_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
+    let manager = TrayMenuManager::new_initialised(configuration_provider, unbounded().0);
+
+    manager.set_window_drag_icon(false);
+
+    testing_logger::validate(|captured_logs| {
+      assert_eq!(captured_logs.len(), 2);
+      assert_eq!(captured_logs[1].body, "Set window drag icon to [false]");
+    });
+    assert!(!IS_DRAG_ICON_SHOWN.load(std::sync::atomic::Ordering::Relaxed));
+    assert_eq!(WORKSPACE.load(std::sync::atomic::Ordering::Relaxed), 1);
+  }
+
+  #[test]
+  #[serial]
+  fn set_window_drag_icon_can_set_icon_back_to_workspace_2() {
+    reset();
+    testing_logger::setup();
+    let configuration_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
+    let manager = TrayMenuManager::new_initialised(configuration_provider, unbounded().0);
+
+    WORKSPACE.store(2, std::sync::atomic::Ordering::Relaxed);
+    manager.set_window_drag_icon(false);
+
+    testing_logger::validate(|captured_logs| {
+      assert_eq!(captured_logs.len(), 2);
+      assert_eq!(captured_logs[1].body, "Set window drag icon to [false]");
+    });
+    assert!(!IS_DRAG_ICON_SHOWN.load(std::sync::atomic::Ordering::Relaxed));
+    assert_eq!(WORKSPACE.load(std::sync::atomic::Ordering::Relaxed), 2);
   }
 
   #[test]
