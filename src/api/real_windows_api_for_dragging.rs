@@ -15,21 +15,20 @@ static RESIZE_STATE: OnceLock<Arc<Mutex<ResizeState>>> = OnceLock::new();
 static MOUSE_HOOK_HANDLE: AtomicPtr<std::ffi::c_void> = AtomicPtr::new(std::ptr::null_mut());
 static HOOK_TIMER_ID: AtomicUsize = AtomicUsize::new(0);
 static SENDER: OnceLock<Arc<Mutex<Sender<Command>>>> = OnceLock::new();
+static KEY_PRESS_DELAY_IN_MS: OnceLock<u32> = OnceLock::new();
 
-// TODO: Make delay configurable
-// TODO: Allow turning off dragging and resizing entirely
-const KEY_PRESS_DELAY_IN_MS: u32 = 700;
-const TIMER_ID_BASE: usize = 1000;
-
-pub struct WindowDragManager {
+pub struct WindowsApiForDragging {
   keyboard_hook_handle: Option<HHOOK>,
 }
 
-impl WindowDragManager {
-  pub fn new(sender: Sender<Command>) -> Self {
+impl WindowsApiForDragging {
+  pub fn new(sender: Sender<Command>, key_press_delay_in_ms: u32) -> Self {
     SENDER
       .set(Arc::new(Mutex::new(sender)))
       .expect("Failed to set command sender");
+    KEY_PRESS_DELAY_IN_MS
+      .set(key_press_delay_in_ms)
+      .expect("Failed to set key press delay in");
     Self {
       keyboard_hook_handle: None,
     }
@@ -47,6 +46,7 @@ impl WindowDragManager {
     Ok(())
   }
 
+  // TODO: Fix bug where start menu opens after operation
   extern "system" fn keyboard_callback(n_code: i32, w_param: WPARAM, l_param: LPARAM) -> LRESULT {
     unsafe {
       if n_code == HC_ACTION as i32 {
@@ -66,10 +66,10 @@ impl WindowDragManager {
           } else if HOOK_TIMER_ID.load(Ordering::Relaxed) == 0 {
             Self::cancel_mouse_hook_install_timer();
             if IS_DRAGGING.load(Ordering::Relaxed) {
-              Self::handle_drag_end();
+              Self::finish_dragging();
             }
             if IS_RESIZING.load(Ordering::Relaxed) {
-              Self::handle_resize_end();
+              Self::finish_resizing();
             }
             SENDER
               .get()
@@ -90,7 +90,8 @@ impl WindowDragManager {
   fn start_mouse_hook_install_timer() {
     unsafe {
       Self::cancel_mouse_hook_install_timer();
-      let timer_id = SetTimer(None, TIMER_ID_BASE, KEY_PRESS_DELAY_IN_MS, Some(Self::timer_callback));
+      let key_press_delay_in_ms = KEY_PRESS_DELAY_IN_MS.get().expect("Key press delay not initialised");
+      let timer_id = SetTimer(None, 1000, *key_press_delay_in_ms, Some(Self::timer_callback));
       if timer_id != 0 {
         HOOK_TIMER_ID.store(timer_id, Ordering::Relaxed);
         trace!("Started hook installation timer with ID {}", timer_id);
@@ -112,7 +113,8 @@ impl WindowDragManager {
           .expect("Failed to acquire command sender lock")
           .send(Command::DragWindows(true))
           .expect("Failed to send drag window command");
-        debug!("Installed mouse hook after {}ms delay", KEY_PRESS_DELAY_IN_MS);
+        let key_press_delay_in_ms = KEY_PRESS_DELAY_IN_MS.get().expect("Key press delay not initialised");
+        debug!("Installed mouse hook after {}ms delay", key_press_delay_in_ms);
       } else {
         trace!("Win key no longer pressed when timer expired");
       }
@@ -180,13 +182,13 @@ impl WindowDragManager {
           let mouse_low_level_hook_struct = *(l_param.0 as *const MSLLHOOKSTRUCT);
           let cursor_position = Point::from(mouse_low_level_hook_struct.pt);
           debug!("Win key + left mouse button pressed at {}, starting drag...", cursor_position);
-          Self::handle_drag_start(cursor_position);
+          Self::start_dragging(cursor_position);
           return LRESULT(1);
         }
         WM_LBUTTONUP => {
           if IS_DRAGGING.load(Ordering::Relaxed) {
             debug!("Win key + left mouse button released, ending drag...",);
-            Self::handle_drag_end();
+            Self::finish_dragging();
             return LRESULT(1);
           }
         }
@@ -197,24 +199,24 @@ impl WindowDragManager {
             "Win key + right mouse button pressed at {}, starting resize...",
             cursor_position
           );
-          Self::handle_resize_start(cursor_position);
+          Self::start_resizing(cursor_position);
           return LRESULT(1);
         }
         WM_RBUTTONUP => {
           if IS_RESIZING.load(Ordering::Relaxed) {
             debug!("Win key + right mouse button released, ending window resizing...");
-            Self::handle_resize_end();
+            Self::finish_resizing();
             return LRESULT(1);
           }
         }
         WM_MOUSEMOVE => {
           if IS_DRAGGING.load(Ordering::Relaxed) {
             let mouse_low_level_hook_struct = *(l_param.0 as *const MSLLHOOKSTRUCT);
-            Self::handle_drag_move(mouse_low_level_hook_struct.pt);
+            Self::do_drag(mouse_low_level_hook_struct.pt);
             return CallNextHookEx(None, n_code, w_param, l_param);
           } else if IS_RESIZING.load(Ordering::Relaxed) {
             let mouse_low_level_hook_struct = *(l_param.0 as *const MSLLHOOKSTRUCT);
-            Self::handle_resize_move(mouse_low_level_hook_struct.pt);
+            Self::do_resize(mouse_low_level_hook_struct.pt);
             return CallNextHookEx(None, n_code, w_param, l_param);
           }
         }
@@ -225,7 +227,7 @@ impl WindowDragManager {
     }
   }
 
-  fn handle_drag_start(cursor_position: Point) {
+  fn start_dragging(cursor_position: Point) {
     unsafe {
       let hwnd_under_cursor = WindowFromPoint(cursor_position.as_point());
       if hwnd_under_cursor.0.is_null() {
@@ -258,7 +260,7 @@ impl WindowDragManager {
     }
   }
 
-  fn handle_drag_move(cursor_point: POINT) {
+  fn do_drag(cursor_point: POINT) {
     let drag_state = get_drag_state();
     let drag_guard = match drag_state.lock() {
       Ok(guard) => guard,
@@ -302,29 +304,10 @@ impl WindowDragManager {
     }
   }
 
-  fn handle_drag_end() {
+  fn finish_dragging() {
     if let Ok(mut drag_state) = get_drag_state().lock() {
       drag_state.reset();
       IS_DRAGGING.store(false, Ordering::Relaxed);
-    }
-  }
-
-  /// Retrieves the top-level `HWND` for a given `HWND`.
-  fn get_top_level_hwnd(mut window: HWND) -> HWND {
-    unsafe {
-      while !window.0.is_null() {
-        let parent = GetParent(window);
-        if parent.is_err() {
-          break;
-        }
-        let parent = parent.expect("Failed to get parent of window");
-        if parent.0.is_null() {
-          break;
-        }
-        window = parent;
-      }
-
-      window
     }
   }
 
@@ -343,7 +326,7 @@ impl WindowDragManager {
     }
   }
 
-  fn handle_resize_start(cursor_position: Point) {
+  fn start_resizing(cursor_position: Point) {
     unsafe {
       let hwnd_under_cursor = WindowFromPoint(cursor_position.as_point());
       if hwnd_under_cursor.0.is_null() {
@@ -378,7 +361,7 @@ impl WindowDragManager {
     }
   }
 
-  fn handle_resize_move(cursor_point: POINT) {
+  fn do_resize(cursor_point: POINT) {
     let resize_state = get_resize_state();
     let resize_guard = match resize_state.lock() {
       Ok(guard) => guard,
@@ -455,7 +438,7 @@ impl WindowDragManager {
     }
   }
 
-  fn handle_resize_end() {
+  fn finish_resizing() {
     if let Ok(mut resize_state) = get_resize_state().lock() {
       resize_state.reset();
       IS_RESIZING.store(false, Ordering::Relaxed);
@@ -489,9 +472,28 @@ impl WindowDragManager {
 
     Self::can_move_window(window)
   }
+
+  /// Retrieves the top-level `HWND` for a given `HWND`.
+  fn get_top_level_hwnd(mut window: HWND) -> HWND {
+    unsafe {
+      while !window.0.is_null() {
+        let parent = GetParent(window);
+        if parent.is_err() {
+          break;
+        }
+        let parent = parent.expect("Failed to get parent of window");
+        if parent.0.is_null() {
+          break;
+        }
+        window = parent;
+      }
+
+      window
+    }
+  }
 }
 
-impl Drop for WindowDragManager {
+impl Drop for WindowsApiForDragging {
   fn drop(&mut self) {
     Self::uninstall_mouse_hook();
     if let Some(keyboard_hook) = self.keyboard_hook_handle {

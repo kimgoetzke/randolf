@@ -3,11 +3,11 @@ use crate::common::{MonitorHandle, PersistentWorkspaceId, TransientWorkspaceId, 
 use crate::workspace_manager::WorkspaceManager;
 use std::collections::HashMap;
 
-/// This struct is used by `WorkspaceManager`, implementing the RAII pattern to ensure that the workspace manager
-/// has the correct `MonitorHandle`s for each `Workspace`. The handle of a monitor changes in the Windows API in many
-/// situations, but it is required by most of the API calls, which is why we need to update the handles prior to using
-/// them. This is why this application uses a persistent ID for the monitor but creates and maps transient IDs upon
-/// every use of workspaces.
+/// This struct is used by [`WorkspaceManager`], implementing the RAII pattern to ensure that the workspace manager
+/// has the correct [`MonitorHandle`]s for each [`Workspace`]. The handle of a monitor changes in the Windows API in
+/// many situations, but it is required by most of the API calls, which is why we need to update the handles prior to
+/// using them. This is why this application uses a persistent ID for the monitor but creates and maps transient IDs
+/// upon every use of workspaces.
 pub struct WorkspaceGuard<'a, T: WindowsApi + Clone> {
   pub(crate) manager: &'a mut WorkspaceManager<T>,
   id_map: HashMap<PersistentWorkspaceId, TransientWorkspaceId>,
