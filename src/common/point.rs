@@ -2,6 +2,7 @@ use crate::common::{Rect, Sizing};
 use std::fmt::Formatter;
 use windows::Win32::Foundation::POINT;
 
+/// Represents a point in 2D space with integer coordinates.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Hash)]
 pub struct Point {
   x: i32,

@@ -2,6 +2,8 @@ use crate::common::Point;
 use std::fmt::Display;
 use windows::Win32::Foundation::RECT;
 
+/// A simple wrapper around a Windows [`RECT`] i.e. a rectangle defined by its left, top, right, and bottom edges. Its
+/// purpose is simply to abstract away from the Windows API and to provide a handful of utility methods.
 #[derive(Debug, Hash, PartialEq, Eq, Copy, Clone, Default)]
 pub struct Rect {
   pub left: i32,

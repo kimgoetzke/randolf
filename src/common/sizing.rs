@@ -1,5 +1,8 @@
 use crate::common::Rect;
 
+/// Represents the size and position of a window, as does [`Rect`], but expresses it in terms of its top-left corner,
+/// and width and height. (Could be merged with [`Rect`] but I have kept it separate for now because [`Sizing`] is
+/// easier to understand and use in Randolf while [`Rect`] is more in line with the Windows API.)
 #[derive(Clone, Default, PartialEq, Eq, Debug)]
 pub struct Sizing {
   pub x: i32,

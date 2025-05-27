@@ -1,6 +1,6 @@
 use crate::common::{Point, WindowHandle};
 
-/// Represents the state of a mouse-based window move operation. Used by the `WindowDragManager`.
+/// Represents the state of a mouse-based window move operation. Not used for any keyboard operations.
 #[derive(Default)]
 pub struct DragState {
   drag_start_position: Point,

@@ -1,6 +1,8 @@
 use crate::common::{Monitor, Rect};
 use windows::Win32::Graphics::Gdi::MONITORINFO;
 
+/// A simple wrapper for [`MONITORINFO`]. Its purpose is simply to abstract way from the Windows API and standardise
+/// the struct used across the codebase.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
 pub struct MonitorInfo {

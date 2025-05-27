@@ -2,6 +2,9 @@ use crate::api::WindowsApi;
 use crate::common::{Monitor, MonitorHandle, PersistentWorkspaceId, Rect, Sizing, Window, WindowHandle, WorkspaceAction};
 use std::fmt::Display;
 
+/// Represents a Randolf workspace, which is a collection of zero or more windows that are managed together on a
+/// specific monitor's desktop. Will only ever store windows if the workspace is inactive but is also used to position
+/// a window on the monitor's desktop which it represents while in an active state.
 #[derive(Debug, Clone)]
 pub struct Workspace {
   pub id: PersistentWorkspaceId,

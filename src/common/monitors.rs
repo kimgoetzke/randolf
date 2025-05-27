@@ -1,6 +1,9 @@
 use crate::common::{Direction, Monitor, MonitorHandle};
 use crate::utils::print_monitor_layout_to_canvas;
 
+/// Represents a collection of monitors, more specifically all monitors that are currently detected. The purpose of this
+/// struct is to provide a convenient way to access and work with monitors e.g. find a monitor in any cardinal
+/// [`Direction`] from a reference monitor.
 pub struct Monitors {
   monitors: Vec<Monitor>,
 }

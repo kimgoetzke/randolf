@@ -1,6 +1,8 @@
 use crate::common::{Direction, PersistentWorkspaceId};
 use std::fmt::Display;
 
+/// Represents commands that can be executed in the main loop of this application. Basically, these are the actions
+/// that can be triggered by the user through the tray menu or hotkeys.
 #[derive(Debug)]
 pub enum Command {
   CloseWindow,

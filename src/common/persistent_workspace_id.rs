@@ -1,6 +1,15 @@
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
+/// The persistent ID of a Randolf workspace. This ID is unlikely to change at runtime, or even after a restart.
+/// However, unlike [`TransientWorkspaceId`][wst], it lacks the [`MonitorHandle`][crate::common::MonitorHandle],
+/// which is used by many Windows APIs.
+///
+/// It is recommended to use [`PersistentWorkspaceId`] by default, and only use [`TransientWorkspaceId`][wst]
+/// _within_ a single operation/[`Command`][crate::common::Command] execution. This can be done by resolving the
+/// [`PersistentWorkspaceId`] to a [`TransientWorkspaceId`][wst] at the start of the operation.
+///
+/// [wst]: crate::common::TransientWorkspaceId
 #[derive(Debug, Copy, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct PersistentWorkspaceId {
   pub monitor_id: [u16; 32],

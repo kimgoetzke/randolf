@@ -1,6 +1,6 @@
 use crate::common::{Point, Rect, ResizeMode, WindowHandle};
 
-/// Represents the state of a mouse-based window resize operation. Used by the `WindowDragManager`.
+/// Represents the state of a mouse-based window resize operation. Not used for any keyboard operations.
 #[derive(Default)]
 pub struct ResizeState {
   cursor_start_position: Point,
