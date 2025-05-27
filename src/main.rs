@@ -109,9 +109,7 @@ fn main() {
           tray_menu_manager.borrow_mut().update_tray_icon(id);
         }
         Command::MoveWindowToWorkspace(id) => wm.borrow_mut().move_window_to_workspace(id),
-        Command::AllowWindowDragging(is_enabled) => {
-          tray_menu_manager.borrow_mut().set_window_drag_icon(is_enabled);
-        }
+        Command::DragWindows(is_enabled) => tray_menu_manager.borrow_mut().set_window_drag_icon(is_enabled),
         Command::OpenApplication(path, as_admin) => launcher.borrow_mut().launch(path, None, as_admin),
         Command::OpenRandolfExecutableFolder => {
           let args = launcher.borrow_mut().get_executable_folder();

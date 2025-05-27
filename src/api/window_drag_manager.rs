@@ -1,4 +1,4 @@
-use crate::common::{Command, Point, Rect};
+use crate::common::{Command, DragState, Point, Rect, ResizeMode, ResizeState, WindowHandle};
 use crossbeam_channel::Sender;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -17,8 +17,9 @@ static HOOK_TIMER_ID: AtomicUsize = AtomicUsize::new(0);
 static SENDER: OnceLock<Arc<Mutex<Sender<Command>>>> = OnceLock::new();
 
 // TODO: Make delay configurable
-const KEY_PRESS_DELAY_IN_MS: u32 = 1000;
-const TIMER_ID_BASE: usize = 700;
+// TODO: Allow turning off dragging and resizing entirely
+const KEY_PRESS_DELAY_IN_MS: u32 = 700;
+const TIMER_ID_BASE: usize = 1000;
 
 pub struct WindowDragManager {
   keyboard_hook_handle: Option<HHOOK>,
@@ -75,7 +76,7 @@ impl WindowDragManager {
               .expect("Command sender not initialised")
               .lock()
               .expect("Failed to acquire command sender lock")
-              .send(Command::AllowWindowDragging(false))
+              .send(Command::DragWindows(false))
               .expect("Failed to send drag window command");
             Self::uninstall_mouse_hook();
           }
@@ -109,7 +110,7 @@ impl WindowDragManager {
           .expect("Command sender not initialised")
           .lock()
           .expect("Failed to acquire command sender lock")
-          .send(Command::AllowWindowDragging(true))
+          .send(Command::DragWindows(true))
           .expect("Failed to send drag window command");
         debug!("Installed mouse hook after {}ms delay", KEY_PRESS_DELAY_IN_MS);
       } else {
@@ -149,6 +150,7 @@ impl WindowDragManager {
     }
   }
 
+  /// Uninstalls the mouse hook if it is currently installed. Does nothing if the hook is not installed.
   fn uninstall_mouse_hook() {
     unsafe {
       let hook_pointer = MOUSE_HOOK_HANDLE.swap(std::ptr::null_mut(), Ordering::Relaxed);
@@ -249,7 +251,8 @@ impl WindowDragManager {
       }
       if let Ok(mut drag_state) = get_drag_state().lock() {
         let window_position = Point::new(window_rect.left, window_rect.top);
-        drag_state.start_drag(cursor_position, target_hwnd, window_position);
+        let window_handle = WindowHandle::from(target_hwnd);
+        drag_state.set(cursor_position, window_handle, window_position);
         IS_DRAGGING.store(true, Ordering::Relaxed);
       }
     }
@@ -268,17 +271,25 @@ impl WindowDragManager {
       );
       return;
     }
-    let delta_x = cursor_point.x - drag_guard.drag_start_position.x();
-    let delta_y = cursor_point.y - drag_guard.drag_start_position.y();
-    let new_x = drag_guard.window_start_position.x() + delta_x;
-    let new_y = drag_guard.window_start_position.y() + delta_y;
-    let target_window = drag_guard.get_target_window();
+    let drag_start_position = drag_guard.get_drag_start_position();
+    let window_start_position = drag_guard.get_window_start_position();
+    let delta_x = cursor_point.x - drag_start_position.x();
+    let delta_y = cursor_point.y - drag_start_position.y();
+    let new_x = window_start_position.x() + delta_x;
+    let new_y = window_start_position.y() + delta_y;
+    let window_hwnd = match drag_guard.get_window_handle() {
+      Some(handle) => handle.as_hwnd(),
+      None => {
+        error!("Failed to retrieve the window handle for dragging, ignoring operation...");
+        return;
+      }
+    };
     drop(drag_guard);
 
     trace!("Dragging window to ({}, {})", new_x, new_y);
     unsafe {
       if let Err(err) = SetWindowPos(
-        target_window,
+        window_hwnd,
         None,
         new_x,
         new_y,
@@ -293,7 +304,7 @@ impl WindowDragManager {
 
   fn handle_drag_end() {
     if let Ok(mut drag_state) = get_drag_state().lock() {
-      drag_state.end_drag();
+      drag_state.reset();
       IS_DRAGGING.store(false, Ordering::Relaxed);
     }
   }
@@ -353,14 +364,16 @@ impl WindowDragManager {
         error!("Failed to get window rect for HWND: {:?}", target_hwnd);
         return;
       }
+      let window_rect = Rect::from(window_rect);
       if !SetForegroundWindow(target_hwnd).as_bool() {
         warn!("Failed to set foreground window to w#{:?}", target_hwnd.0);
       }
       let resize_mode = Self::determine_resize_mode(cursor_position, &window_rect);
+      let window_handle = WindowHandle::from(target_hwnd);
       if let Ok(mut resize_state) = get_resize_state().lock() {
-        resize_state.start_resize(cursor_position, target_hwnd, window_rect, resize_mode);
+        resize_state.set(cursor_position, window_handle, window_rect, resize_mode);
         IS_RESIZING.store(true, Ordering::Relaxed);
-        debug!("Started resizing with mode: {:?}", resize_mode);
+        debug!("Started resizing in [{:?}] mode", resize_mode);
       }
     }
   }
@@ -379,12 +392,18 @@ impl WindowDragManager {
       return;
     }
     let current_cursor = Point::from(cursor_point);
-    let delta_x = current_cursor.x() - resize_guard.resize_start_position.x();
-    let delta_y = current_cursor.y() - resize_guard.resize_start_position.y();
-    let target_window = resize_guard.get_target_window();
-    let resize_mode = resize_guard.resize_mode;
-    let rect = resize_guard.window_start_rect;
-
+    let cursor_start_position = resize_guard.get_cursor_start_position();
+    let delta_x = current_cursor.x() - cursor_start_position.x();
+    let delta_y = current_cursor.y() - cursor_start_position.y();
+    let window_hwnd = match resize_guard.get_window_handle() {
+      Some(handle) => handle.as_hwnd(),
+      None => {
+        error!("Failed to retrieve the window handle for resizing, ignoring operation...");
+        return;
+      }
+    };
+    let resize_mode = resize_guard.get_resize_mode();
+    let rect = resize_guard.get_window_start_rect();
     let (new_left, new_top, new_width, new_height) = match resize_mode {
       ResizeMode::BottomRight => {
         let new_width = (rect.right - rect.left) + delta_x;
@@ -412,7 +431,7 @@ impl WindowDragManager {
       }
     };
     drop(resize_guard);
-    let min_width = 100;
+    let min_width = 200;
     let min_height = 50;
     let final_width = new_width.max(min_width);
     let final_height = new_height.max(min_height);
@@ -423,7 +442,7 @@ impl WindowDragManager {
 
     unsafe {
       if let Err(err) = SetWindowPos(
-        target_window,
+        window_hwnd,
         None,
         new_left,
         new_top,
@@ -438,12 +457,12 @@ impl WindowDragManager {
 
   fn handle_resize_end() {
     if let Ok(mut resize_state) = get_resize_state().lock() {
-      resize_state.end_resize();
+      resize_state.reset();
       IS_RESIZING.store(false, Ordering::Relaxed);
     }
   }
 
-  fn determine_resize_mode(cursor_position: Point, window_rect: &RECT) -> ResizeMode {
+  fn determine_resize_mode(cursor_position: Point, window_rect: &Rect) -> ResizeMode {
     let distance_to_left = (cursor_position.x() - window_rect.left).abs();
     let distance_to_right = (cursor_position.x() - window_rect.right).abs();
     let distance_to_top = (cursor_position.y() - window_rect.top).abs();
@@ -486,80 +505,9 @@ impl Drop for WindowDragManager {
 }
 
 fn get_drag_state() -> &'static Arc<Mutex<DragState>> {
-  DRAG_STATE.get_or_init(|| {
-    Arc::new(Mutex::new(DragState {
-      drag_start_position: Point::default(),
-      window_start_position: Point::default(),
-      target_window_id: 0,
-    }))
-  })
+  DRAG_STATE.get_or_init(|| Arc::new(Mutex::new(DragState::default())))
 }
 
 fn get_resize_state() -> &'static Arc<Mutex<ResizeState>> {
-  RESIZE_STATE.get_or_init(|| {
-    Arc::new(Mutex::new(ResizeState {
-      resize_start_position: Point::default(),
-      window_start_rect: Rect::default(),
-      target_window_id: 0,
-      resize_mode: ResizeMode::BottomRight,
-    }))
-  })
-}
-
-struct DragState {
-  drag_start_position: Point,
-  window_start_position: Point,
-  target_window_id: isize,
-}
-
-impl DragState {
-  fn start_drag(&mut self, cursor_position: Point, hwnd: HWND, window_position: Point) {
-    self.drag_start_position = cursor_position;
-    self.window_start_position = window_position;
-    self.target_window_id = hwnd.0 as isize;
-  }
-
-  fn end_drag(&mut self) {
-    self.drag_start_position = Point::default();
-    self.window_start_position = Point::default();
-    self.target_window_id = 0;
-  }
-
-  fn get_target_window(&self) -> HWND {
-    HWND(self.target_window_id as *mut std::ffi::c_void)
-  }
-}
-
-struct ResizeState {
-  resize_start_position: Point,
-  window_start_rect: Rect,
-  target_window_id: isize,
-  resize_mode: ResizeMode,
-}
-
-#[derive(Clone, Copy, Debug)]
-enum ResizeMode {
-  BottomRight,
-  TopLeft,
-  TopRight,
-  BottomLeft,
-}
-
-impl ResizeState {
-  fn start_resize(&mut self, cursor_position: Point, hwnd: HWND, window_rect: RECT, resize_mode: ResizeMode) {
-    self.resize_start_position = cursor_position;
-    self.window_start_rect = Rect::from(window_rect);
-    self.target_window_id = hwnd.0 as isize;
-    self.resize_mode = resize_mode;
-  }
-
-  fn end_resize(&mut self) {
-    self.resize_start_position = Point::default();
-    self.window_start_rect = Rect::default();
-    self.target_window_id = 0;
-  }
-
-  fn get_target_window(&self) -> HWND {
-    HWND(self.target_window_id as *mut std::ffi::c_void)
-  }
+  RESIZE_STATE.get_or_init(|| Arc::new(Mutex::new(ResizeState::default())))
 }
