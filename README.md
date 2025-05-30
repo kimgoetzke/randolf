@@ -11,7 +11,7 @@ Randolf is a window management utility for Windows 11 that allows you to:
   to the left, top, right, or bottom of the screen.
 - `Win` + `Left`/`Top`/`Right`/`Down` - move the cursor to the closest window in the direction of the arrow key (and
   activate the window) or to the center of the window-free monitor, if it exists.
-- `Win` + `q` - close the foreground window.
+- `Win` + `Shift` + `q` - close the foreground window.
 - `Win` + `1`/`2`/... - switch between workspaces.
 - `Win` + `Shift` + `1`/`2`/... - move the foreground window to respective workspace.
 - Hold `Win` + `Left click` - select a window anywhere (i.e. without having to select the title bar) and move it.
