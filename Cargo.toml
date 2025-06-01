@@ -2,7 +2,7 @@
 name = "randolf"
 description = "A window management utility for Windows 11"
 repository = "https://github.com/kimgoetzke/randolf"
-version = "0.16.0"
+version = "0.17.0"
 edition = "2024"
 
 [dependencies]
