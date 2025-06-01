@@ -309,6 +309,7 @@ impl ConfigurationProvider {
       ALLOW_SELECTING_SAME_CENTER_WINDOWS => self.config.general.allow_selecting_same_center_windows,
       FORCE_USING_ADMIN_PRIVILEGES => self.config.general.force_using_admin_privileges,
       ENABLE_FEATURES_USING_MOUSE => self.config.general.enable_features_using_mouse,
+      ALLOW_MOVING_CURSOR_AFTER_CLOSE_OR_MINIMISE => self.config.general.allow_moving_cursor_after_close_or_minimise,
       &_ => {
         warn!("Failed to get configuration because [{name}] is unknown");
 
