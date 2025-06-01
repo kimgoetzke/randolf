@@ -1,7 +1,8 @@
 use crate::api::WindowsApi;
 use crate::common::*;
 use crate::configuration_provider::{
-  ADDITIONAL_WORKSPACE_COUNT, ALLOW_SELECTING_SAME_CENTER_WINDOWS, ConfigurationProvider, WINDOW_MARGIN,
+  ADDITIONAL_WORKSPACE_COUNT, ALLOW_MOVING_CURSOR_AFTER_CLOSE_OR_MINIMISE, ALLOW_SELECTING_SAME_CENTER_WINDOWS,
+  ConfigurationProvider, WINDOW_MARGIN,
 };
 use crate::utils::CONFIGURATION_PROVIDER_LOCK;
 use crate::workspace_manager::WorkspaceManager;
@@ -14,6 +15,7 @@ const TOLERANCE_IN_PX: i32 = 2;
 pub struct WindowManager<T: WindowsApi> {
   configuration_provider: Arc<Mutex<ConfigurationProvider>>,
   known_windows: HashMap<String, WindowPlacement>,
+  allow_moving_cursor_after_close_or_minimise: bool,
   workspace_manager: WorkspaceManager<T>,
   virtual_desktop_manager: Option<IVirtualDesktopManager>,
   windows_api: T,
@@ -21,18 +23,24 @@ pub struct WindowManager<T: WindowsApi> {
 
 impl<T: WindowsApi + Clone> WindowManager<T> {
   pub fn new(configuration_provider: Arc<Mutex<ConfigurationProvider>>, api: T) -> Self {
-    let additional_workspace_count = configuration_provider
-      .lock()
-      .expect(CONFIGURATION_PROVIDER_LOCK)
-      .get_i32(ADDITIONAL_WORKSPACE_COUNT);
-    let window_margin = configuration_provider
-      .lock()
-      .expect(CONFIGURATION_PROVIDER_LOCK)
-      .get_i32(WINDOW_MARGIN);
+    let guard = match configuration_provider.try_lock() {
+      Ok(guard) => guard,
+      Err(err) => {
+        panic!(
+          "{} when trying to create window manager: {}",
+          CONFIGURATION_PROVIDER_LOCK, err
+        );
+      }
+    };
+    let additional_workspace_count = guard.get_i32(ADDITIONAL_WORKSPACE_COUNT);
+    let window_margin = guard.get_i32(WINDOW_MARGIN);
+    let allow_moving_cursor_after_close_or_minimise = guard.get_bool(ALLOW_MOVING_CURSOR_AFTER_CLOSE_OR_MINIMISE);
+    drop(guard);
     let workspace_manager = WorkspaceManager::new(additional_workspace_count, window_margin, api.clone());
 
     Self {
       known_windows: HashMap::new(),
+      allow_moving_cursor_after_close_or_minimise,
       virtual_desktop_manager: Some(
         api
           .get_virtual_desktop_manager()
@@ -55,7 +63,9 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     };
 
     self.windows_api.do_close_window(window);
-    self.find_and_select_closest_window(window);
+    if self.allow_moving_cursor_after_close_or_minimise {
+      self.find_and_select_closest_window(window);
+    }
   }
 
   pub fn switch_workspace(&mut self, id: PersistentWorkspaceId) {
@@ -152,7 +162,9 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     };
 
     self.windows_api.do_minimise_window(window);
-    self.find_and_select_closest_window(window);
+    if self.allow_moving_cursor_after_close_or_minimise {
+      self.find_and_select_closest_window(window);
+    }
   }
 
   pub fn restore_all_managed_windows(&mut self) {
@@ -224,10 +236,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
 
     for window in windows {
       // Skip windows that are not on the current desktop
-      if !self
-        .windows_api
-        .is_window_on_current_desktop(virtual_desktop_manager, window)?
-      {
+      if !self.windows_api.is_window_on_current_desktop(virtual_desktop_manager, window) {
         continue;
       }
 
@@ -238,12 +247,15 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
 
       // Skip windows that are not in the right direction, unless it has the same center as the reference window, if
       // the relevant configuration is enabled (see README for more information)
-      let is_config_enabled = self
+      let is_selecting_same_center_windows_disabled = !self
         .configuration_provider
         .lock()
         .expect(CONFIGURATION_PROVIDER_LOCK)
         .get_bool(ALLOW_SELECTING_SAME_CENTER_WINDOWS);
-      if !is_config_enabled || reference_window?.center != window.center || reference_window?.handle == window.handle {
+      if is_selecting_same_center_windows_disabled
+        || (reference_window.is_some() && reference_window?.center != window.center)
+        || (reference_window.is_some() && reference_window?.handle == window.handle)
+      {
         match direction {
           Direction::Left if dx >= 0 => continue,
           Direction::Right if dx <= 0 => continue,
@@ -252,7 +264,6 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
           _ => {}
         }
       }
-
       let distance = ((dx.pow(2) + dy.pow(2)) as f64).sqrt().trunc();
 
       // Calculate angle between the vector and the direction vector
@@ -287,7 +298,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
   }
 
   /// Returns the window under the cursor, if any. If there are multiple windows under the cursor, the foreground window
-  /// is returned if it's in the list. Otherwise, the closest window is returned.
+  /// is returned if it's in the list. Otherwise, the window with the closest center point to the cursor is returned.
   fn find_window_at_cursor<'a>(&self, point: &Point, windows: &'a [Window]) -> Option<&'a Window> {
     let windows_under_cursor = windows
       .iter()
@@ -498,6 +509,7 @@ mod tests {
       WindowManager {
         configuration_provider: Arc::new(Mutex::new(ConfigurationProvider::default())),
         known_windows: Default::default(),
+        allow_moving_cursor_after_close_or_minimise: true,
         workspace_manager: WorkspaceManager::default(),
         virtual_desktop_manager: None,
         windows_api: api,
@@ -626,13 +638,33 @@ mod tests {
   }
 
   #[test]
+  fn move_cursor_moves_cursor_to_center_of_closest_window_on_other_monitor() {
+    let current_monitor_handle = MonitorHandle::from(1);
+    let target_monitor_handle = MonitorHandle::from(2);
+    let target_work_area = Rect::new(200, 0, 400, 200);
+    let window_handle = WindowHandle::new(1);
+    let sizing = Sizing::right_half_of_screen(target_work_area, 20);
+    MockWindowsApi::set_cursor_position(Point::new(0, 0));
+    MockWindowsApi::add_or_update_window(window_handle, "Test".to_string(), sizing, false, false, true);
+    MockWindowsApi::add_monitor(current_monitor_handle, Rect::new(0, 0, 200, 200), true);
+    MockWindowsApi::add_monitor(target_monitor_handle, target_work_area, true);
+    MockWindowsApi::place_window(window_handle, target_monitor_handle);
+    let mut manager = WindowManager::default(MockWindowsApi);
+
+    manager.move_cursor(Direction::Right);
+
+    assert_eq!(manager.windows_api.get_foreground_window(), Some(window_handle));
+    assert_eq!(manager.windows_api.get_cursor_position(), target_work_area.center());
+  }
+
+  #[test]
   fn move_cursor_does_nothing_when_there_is_no_window_or_monitor_to_move_to() {
     let monitor_handle = MonitorHandle::from(1);
     let window_handle_1 = WindowHandle::new(1);
     let left_sizing = Sizing::left_half_of_screen(Rect::new(0, 0, 200, 180), 20);
     let initial_cursor_position = Point::new(0, 0);
     MockWindowsApi::set_cursor_position(initial_cursor_position);
-    MockWindowsApi::add_or_update_window(window_handle_1, "Test".to_string(), left_sizing.clone(), false, false, true);
+    MockWindowsApi::add_or_update_window(window_handle_1, "Test".to_string(), left_sizing, false, false, true);
     MockWindowsApi::add_monitor(monitor_handle, Rect::new(0, 0, 200, 200), true);
     MockWindowsApi::place_window(window_handle_1, monitor_handle);
     let mut manager = WindowManager::default(MockWindowsApi);
@@ -643,7 +675,7 @@ mod tests {
   }
 
   #[test]
-  fn close_window() {
+  fn close_window_does_close_window() {
     let window_handle = WindowHandle::new(1);
     let monitor_handle = MonitorHandle::from(1);
     MockWindowsApi::add_or_update_window(window_handle, "Test".to_string(), Sizing::default(), false, false, true);
@@ -660,6 +692,57 @@ mod tests {
         .iter()
         .any(|w| w.handle == window_handle)
     );
+  }
+
+  #[test]
+  fn close_window_moves_cursor_to_closest_window_when_enabled() {
+    let window_handle_1 = WindowHandle::new(1);
+    let window_handle_2 = WindowHandle::new(2);
+    let monitor_handle = MonitorHandle::from(1);
+    MockWindowsApi::add_or_update_window(window_handle_1, "Test 1".to_string(), Sizing::default(), false, false, true);
+    let sizing = Sizing::new(0, 0, 100, 100);
+    MockWindowsApi::add_or_update_window(window_handle_2, "Test 2".to_string(), sizing, false, false, false);
+    MockWindowsApi::add_monitor(monitor_handle, Rect::new(0, 0, 200, 200), true);
+    MockWindowsApi::place_window(window_handle_1, monitor_handle);
+    MockWindowsApi::place_window(window_handle_2, monitor_handle);
+    let mut manager = WindowManager::default(MockWindowsApi);
+
+    manager.close_window();
+
+    assert!(
+      !manager
+        .windows_api
+        .get_all_visible_windows()
+        .iter()
+        .any(|w| w.handle == window_handle_1)
+    );
+    assert_eq!(manager.windows_api.get_cursor_position(), Point::new(50, 50));
+  }
+
+  #[test]
+  fn close_window_does_not_move_cursor_to_closest_window_when_disabled() {
+    let window_handle_1 = WindowHandle::new(1);
+    let window_handle_2 = WindowHandle::new(2);
+    let monitor_handle = MonitorHandle::from(1);
+    MockWindowsApi::add_or_update_window(window_handle_1, "Test 1".to_string(), Sizing::default(), false, false, true);
+    let sizing = Sizing::new(0, 0, 100, 100);
+    MockWindowsApi::add_or_update_window(window_handle_2, "Test 2".to_string(), sizing, false, false, false);
+    MockWindowsApi::add_monitor(monitor_handle, Rect::new(0, 0, 200, 200), true);
+    MockWindowsApi::place_window(window_handle_1, monitor_handle);
+    MockWindowsApi::place_window(window_handle_2, monitor_handle);
+    let mut manager = WindowManager::default(MockWindowsApi);
+    manager.allow_moving_cursor_after_close_or_minimise = false;
+
+    manager.close_window();
+
+    assert!(
+      !manager
+        .windows_api
+        .get_all_visible_windows()
+        .iter()
+        .any(|w| w.handle == window_handle_1)
+    );
+    assert_eq!(manager.windows_api.get_cursor_position(), Point::default());
   }
 
   #[test]

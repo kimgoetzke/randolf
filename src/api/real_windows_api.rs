@@ -475,22 +475,24 @@ impl WindowsApi for RealWindowsApi {
     }
   }
 
-  fn is_window_on_current_desktop(&self, vdm: &IVirtualDesktopManager, window: &Window) -> Option<bool> {
+  fn is_window_on_current_desktop(&self, vdm: &IVirtualDesktopManager, window: &Window) -> bool {
     unsafe {
       match vdm.IsWindowOnCurrentVirtualDesktop(window.handle.into()) {
         Ok(is_on_current_desktop) => {
           let is_on_current_desktop = is_on_current_desktop.as_bool();
           trace!(
-            "Skipping window {:?} \"{}\" - it is not on current desktop",
+            "Window {} \"{}\" {} on the current desktop",
             window.handle,
-            window.title_trunc()
+            window.title_trunc(),
+            if is_on_current_desktop { "is" } else { "is NOT" }
           );
-          Some(is_on_current_desktop)
+
+          is_on_current_desktop
         }
         Err(err) => {
           warn!("Failed to check if window is on current desktop because: {}", err.message());
 
-          None
+          false
         }
       }
     }
