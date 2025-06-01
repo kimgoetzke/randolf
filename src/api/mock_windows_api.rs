@@ -483,7 +483,7 @@ pub(crate) mod test {
       unimplemented!()
     }
 
-    fn is_window_on_current_desktop(&self, vdm: &IVirtualDesktopManager, window: &Window) -> Option<bool> {
+    fn is_window_on_current_desktop(&self, vdm: &IVirtualDesktopManager, window: &Window) -> bool {
       trace!("Mock windows API checks if window {} is on current desktop", window.handle);
       unimplemented!()
     }

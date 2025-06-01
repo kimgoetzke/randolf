@@ -41,5 +41,5 @@ pub trait WindowsApi {
   fn get_monitor_handle_for_window_handle(&self, handle: WindowHandle) -> MonitorHandle;
   fn get_monitor_handle_for_point(&self, point: &Point) -> MonitorHandle;
   fn get_virtual_desktop_manager(&self) -> Option<IVirtualDesktopManager>;
-  fn is_window_on_current_desktop(&self, vdm: &IVirtualDesktopManager, window: &Window) -> Option<bool>;
+  fn is_window_on_current_desktop(&self, vdm: &IVirtualDesktopManager, window: &Window) -> bool;
 }
