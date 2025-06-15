@@ -1,20 +1,33 @@
 use crate::api::WindowsApi;
-use crate::configuration_provider::ConfigurationProvider;
+use crate::configuration_provider::{ALLOW_MOVING_CURSOR_AFTER_OPEN_CLOSE_OR_MINIMISE, ConfigurationProvider};
 use crate::files::{FileManager, FileType};
+use crate::utils::CONFIGURATION_PROVIDER_LOCK;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
+// TODO: Instead of a fixed delay, consider listening for the relevant application to be ready before moving the cursor
 const FIXED_DELAY: u64 = 750;
 
 pub struct ApplicationLauncher<T: WindowsApi> {
   _configuration_provider: Arc<Mutex<ConfigurationProvider>>,
+  allow_moving_cursor_after_open: bool,
   windows_api: T,
 }
 
 impl<T: WindowsApi> ApplicationLauncher<T> {
   pub fn new_initialised(configuration_provider: Arc<Mutex<ConfigurationProvider>>, windows_api: T) -> Self {
+    let allow_moving_cursor_after_open = match configuration_provider.try_lock() {
+      Ok(guard) => guard.get_bool(ALLOW_MOVING_CURSOR_AFTER_OPEN_CLOSE_OR_MINIMISE),
+      Err(err) => {
+        panic!(
+          "{} when trying to create window manager: {}",
+          CONFIGURATION_PROVIDER_LOCK, err
+        );
+      }
+    };
     Self {
       _configuration_provider: configuration_provider.clone(),
+      allow_moving_cursor_after_open,
       windows_api,
     }
   }
@@ -28,7 +41,7 @@ impl<T: WindowsApi> ApplicationLauncher<T> {
       warn!("Path to executable is not a valid executable");
       return;
     }
-    if self.execute_command(&path_to_executable, args, as_admin) {
+    if self.execute_command(&path_to_executable, args, as_admin) && self.allow_moving_cursor_after_open {
       std::thread::sleep(std::time::Duration::from_millis(FIXED_DELAY));
       self.set_cursor_position();
     }

@@ -1,7 +1,7 @@
 use crate::api::WindowsApi;
 use crate::common::*;
 use crate::configuration_provider::{
-  ADDITIONAL_WORKSPACE_COUNT, ALLOW_MOVING_CURSOR_AFTER_CLOSE_OR_MINIMISE, ALLOW_SELECTING_SAME_CENTER_WINDOWS,
+  ADDITIONAL_WORKSPACE_COUNT, ALLOW_MOVING_CURSOR_AFTER_OPEN_CLOSE_OR_MINIMISE, ALLOW_SELECTING_SAME_CENTER_WINDOWS,
   ConfigurationProvider, WINDOW_MARGIN,
 };
 use crate::utils::CONFIGURATION_PROVIDER_LOCK;
@@ -34,7 +34,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     };
     let additional_workspace_count = guard.get_i32(ADDITIONAL_WORKSPACE_COUNT);
     let window_margin = guard.get_i32(WINDOW_MARGIN);
-    let allow_moving_cursor_after_close_or_minimise = guard.get_bool(ALLOW_MOVING_CURSOR_AFTER_CLOSE_OR_MINIMISE);
+    let allow_moving_cursor_after_close_or_minimise = guard.get_bool(ALLOW_MOVING_CURSOR_AFTER_OPEN_CLOSE_OR_MINIMISE);
     drop(guard);
     let workspace_manager = WorkspaceManager::new(additional_workspace_count, window_margin, api.clone());
 
