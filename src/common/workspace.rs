@@ -195,9 +195,10 @@ impl Workspace {
       );
     } else {
       warn!(
-        "{} already exists in workspace [{}], ignoring request",
+        "{} already exists in workspace [{}], only hiding it on current workspace",
         window.handle, self.id
       );
+      windows_api.do_hide_window(window.handle);
     }
   }
 
