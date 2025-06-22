@@ -535,6 +535,38 @@ pub mod tests {
   }
 
   #[test]
+  fn move_window_to_same_workspace_does_not_do_anything() {
+    // Given the primary monitor has an active workspace with one, visible foreground window
+    testing_logger::setup();
+    MockWindowsApi::place_window(WindowHandle::new(1), primary_monitor().handle);
+    let workspace_id = primary_active_ws_id();
+    let directory = create_temp_directory();
+    let path = directory.path().join(WORKSPACES_FILE_NAME);
+    let mut workspace_manager = WorkspaceManager::new_test(true, path.clone());
+
+    // When the user moves a window to the same workspace
+    workspace_manager.move_window_to_workspace(PersistentWorkspaceId::from(*workspace_id));
+
+    // Then the window appears in the target workspace
+    let target_workspace = workspace_manager
+      .workspaces
+      .get(&(*workspace_id).into())
+      .expect("Target workspace not found");
+    assert_eq!(
+      target_workspace.get_windows().len(),
+      0,
+      "Window should not be stored in the workspace that it is already in and which is active"
+    );
+    testing_logger::validate(|captured_logs| {
+      let last_log = captured_logs.last().expect("No logs captured");
+      assert_eq!(
+        last_log.body,
+        "Ignored request because current and target workspaces are the same: wsp#DISPLAY1-1"
+      );
+    });
+  }
+
+  #[test]
   fn move_window_to_active_workspace_on_different_monitor() {
     // Given the primary monitor has an active workspace with one, visible foreground window
     MockWindowsApi::place_window(WindowHandle::new(1), primary_monitor().handle);
