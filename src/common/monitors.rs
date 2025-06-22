@@ -49,13 +49,13 @@ impl Monitors {
   }
 
   pub fn log_detected_monitors(&self) {
-    debug!("┌| Detected monitors:");
+    trace!("┌| Detected monitors:");
     let last_monitor = self.monitors.len().saturating_sub(1);
     for (i, monitor) in self.monitors.iter().enumerate() {
       if i != last_monitor {
-        debug!("├> {}", monitor);
+        trace!("├> {}", monitor);
       } else {
-        debug!("└> {}", monitor);
+        trace!("└> {}", monitor);
       }
     }
   }
