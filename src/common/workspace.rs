@@ -195,9 +195,10 @@ impl Workspace {
       );
     } else {
       warn!(
-        "{} already exists in workspace [{}], ignoring request",
+        "{} already exists in workspace [{}], only hiding it now",
         window.handle, self.id
       );
+      windows_api.do_hide_window(window.handle);
     }
   }
 
@@ -442,7 +443,7 @@ mod tests {
   }
 
   #[test]
-  fn store_and_hide_window_does_not_add_duplicate_window() {
+  fn store_and_hide_window_does_not_add_duplicate_window_but_hides_it() {
     let mut workspace = Workspace::new_test(PersistentWorkspaceId::new_test(1), &Monitor::mock_1());
     let window = Window::new_test(1, Rect::new(0, 0, 100, 100));
     MockWindowsApi::add_or_update_window(window.handle, window.title.clone(), window.rect.into(), false, false, true);
@@ -452,6 +453,7 @@ mod tests {
     workspace.store_and_hide_window(window.clone(), 1.into(), &mock_api);
 
     assert_eq!(workspace.get_windows().len(), 1);
+    assert!(mock_api.is_window_hidden(&window.handle));
   }
 
   #[test]

@@ -114,7 +114,7 @@ impl WindowsApiForDragging {
           .send(Command::DragWindows(true))
           .expect("Failed to send drag window command");
         let key_press_delay_in_ms = KEY_PRESS_DELAY_IN_MS.get().expect("Key press delay not initialised");
-        debug!("Installed mouse hook after {}ms delay", key_press_delay_in_ms);
+        trace!("Installed mouse hook after {}ms delay", key_press_delay_in_ms);
       } else {
         trace!("Win key no longer pressed when timer expired");
       }
