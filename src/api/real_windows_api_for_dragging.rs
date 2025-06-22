@@ -17,6 +17,11 @@ static HOOK_TIMER_ID: AtomicUsize = AtomicUsize::new(0);
 static SENDER: OnceLock<Arc<Mutex<Sender<Command>>>> = OnceLock::new();
 static KEY_PRESS_DELAY_IN_MS: OnceLock<u32> = OnceLock::new();
 
+/// This struct provides registers a keyboard hook that, if active for [`KEY_PRESS_DELAY_IN_MS`], will install a mouse
+/// hook that allows the user to drag and resize windows by holding down the Windows key and clicking the left or right
+/// mouse button. Since this functionality is very specific and isolated from other interactions with the Windows API,
+/// it is implemented in a separate struct to avoid cluttering the main API interface which is
+/// [`crate::RealWindowsApi`].
 pub struct WindowsApiForDragging {
   keyboard_hook_handle: Option<HHOOK>,
 }
@@ -234,26 +239,25 @@ impl WindowsApiForDragging {
         debug!("No window under cursor at {}", cursor_position);
         return;
       }
-      let target_hwnd = Self::get_top_level_hwnd(hwnd_under_cursor);
-      if target_hwnd.0.is_null() {
+      if hwnd_under_cursor.0.is_null() {
         debug!("No top-level HWND found under cursor at {}", cursor_position);
         return;
       }
-      if !Self::can_move_window(target_hwnd) {
-        debug!("Cannot move window with HWND: {:?}", target_hwnd);
+      if !Self::can_move_window(hwnd_under_cursor) {
+        debug!("Cannot move window with HWND: {:?}", hwnd_under_cursor);
         return;
       }
       let mut window_rect = RECT::default();
-      if GetWindowRect(target_hwnd, &mut window_rect).is_err() {
-        error!("Failed to get window rect for HWND: {:?}", target_hwnd);
+      if GetWindowRect(hwnd_under_cursor, &mut window_rect).is_err() {
+        error!("Failed to get window rect for HWND: {:?}", hwnd_under_cursor);
         return;
       }
-      if !SetForegroundWindow(target_hwnd).as_bool() {
-        warn!("Failed to set foreground window to w#{:?}", target_hwnd.0);
+      if !SetForegroundWindow(hwnd_under_cursor).as_bool() {
+        warn!("Failed to set foreground window to w#{:?}", hwnd_under_cursor.0);
       }
       if let Ok(mut drag_state) = get_drag_state().lock() {
         let window_position = Point::new(window_rect.left, window_rect.top);
-        let window_handle = WindowHandle::from(target_hwnd);
+        let window_handle = WindowHandle::from(hwnd_under_cursor);
         drag_state.set(cursor_position, window_handle, window_position);
         IS_DRAGGING.store(true, Ordering::Relaxed);
       }
@@ -333,26 +337,25 @@ impl WindowsApiForDragging {
         debug!("No window under cursor at {}", cursor_position);
         return;
       }
-      let target_hwnd = Self::get_top_level_hwnd(hwnd_under_cursor);
-      if target_hwnd.0.is_null() {
+      if hwnd_under_cursor.0.is_null() {
         debug!("No top-level HWND found under cursor at {}", cursor_position);
         return;
       }
-      if !Self::can_resize_window(target_hwnd) {
-        debug!("Cannot resize window with HWND: {:?}", target_hwnd);
+      if !Self::can_resize_window(hwnd_under_cursor) {
+        debug!("Cannot resize window with HWND: {:?}", hwnd_under_cursor);
         return;
       }
       let mut window_rect = RECT::default();
-      if GetWindowRect(target_hwnd, &mut window_rect).is_err() {
-        error!("Failed to get window rect for HWND: {:?}", target_hwnd);
+      if GetWindowRect(hwnd_under_cursor, &mut window_rect).is_err() {
+        error!("Failed to get window rect for HWND: {:?}", hwnd_under_cursor);
         return;
       }
       let window_rect = Rect::from(window_rect);
-      if !SetForegroundWindow(target_hwnd).as_bool() {
-        warn!("Failed to set foreground window to w#{:?}", target_hwnd.0);
+      if !SetForegroundWindow(hwnd_under_cursor).as_bool() {
+        warn!("Failed to set foreground window to w#{:?}", hwnd_under_cursor.0);
       }
       let resize_mode = Self::determine_resize_mode(cursor_position, &window_rect);
-      let window_handle = WindowHandle::from(target_hwnd);
+      let window_handle = WindowHandle::from(hwnd_under_cursor);
       if let Ok(mut resize_state) = get_resize_state().lock() {
         resize_state.set(cursor_position, window_handle, window_rect, resize_mode);
         IS_RESIZING.store(true, Ordering::Relaxed);
@@ -471,25 +474,6 @@ impl WindowsApiForDragging {
     }
 
     Self::can_move_window(window)
-  }
-
-  /// Retrieves the top-level `HWND` for a given `HWND`.
-  fn get_top_level_hwnd(mut window: HWND) -> HWND {
-    unsafe {
-      while !window.0.is_null() {
-        let parent = GetParent(window);
-        if parent.is_err() {
-          break;
-        }
-        let parent = parent.expect("Failed to get parent of window");
-        if parent.0.is_null() {
-          break;
-        }
-        window = parent;
-      }
-
-      window
-    }
   }
 }
 
