@@ -17,11 +17,11 @@ static HOOK_TIMER_ID: AtomicUsize = AtomicUsize::new(0);
 static SENDER: OnceLock<Arc<Mutex<Sender<Command>>>> = OnceLock::new();
 static KEY_PRESS_DELAY_IN_MS: OnceLock<u32> = OnceLock::new();
 
-/// This struct provides registers a keyboard hook that, if active for [`KEY_PRESS_DELAY_IN_MS`], will install a mouse
+/// This struct registers a keyboard hook that, if active for [`KEY_PRESS_DELAY_IN_MS`], will install a mouse
 /// hook that allows the user to drag and resize windows by holding down the Windows key and clicking the left or right
-/// mouse button. Since this functionality is very specific and isolated from other interactions with the Windows API,
-/// it is implemented in a separate struct to avoid cluttering the main API interface which is
-/// [`crate::RealWindowsApi`].
+/// mouse button. Since this functionality is very specific and isolated from other interactions with the Windows API
+/// and the code is incredibly verbose, it is implemented in a separate struct to avoid cluttering the main API
+/// interface which is [`crate::RealWindowsApi`]. Also, I'm not sure if this feature should remain part of Randolf.
 pub struct WindowsApiForDragging {
   keyboard_hook_handle: Option<HHOOK>,
 }
@@ -60,35 +60,82 @@ impl WindowsApiForDragging {
         let is_window_key = vk_code == VK_LWIN.0 as u32 || vk_code == VK_RWIN.0 as u32;
         if is_window_key {
           let is_pressed = (w_param.0 as u32) == WM_KEYDOWN || (w_param.0 as u32) == WM_SYSKEYDOWN;
+          if Self::is_state_inconsistent() {
+            warn!("Detected inconsistent state, resetting...");
+            Self::reset_all_state();
+          }
           if is_pressed == IS_WIN_KEY_PRESSED.load(Ordering::Relaxed) {
             return CallNextHookEx(None, n_code, w_param, l_param);
           }
-
           trace!("Win key [{}] {}", vk_code, if is_pressed { "pressed" } else { "released" });
           IS_WIN_KEY_PRESSED.store(is_pressed, Ordering::Relaxed);
           if is_pressed {
             Self::start_mouse_hook_install_timer();
-          } else if HOOK_TIMER_ID.load(Ordering::Relaxed) == 0 {
-            Self::cancel_mouse_hook_install_timer();
-            if IS_DRAGGING.load(Ordering::Relaxed) {
-              Self::finish_dragging();
-            }
-            if IS_RESIZING.load(Ordering::Relaxed) {
-              Self::finish_resizing();
-            }
-            SENDER
-              .get()
-              .expect("Command sender not initialised")
-              .lock()
-              .expect("Failed to acquire command sender lock")
-              .send(Command::DragWindows(false))
-              .expect("Failed to send drag window command");
-            Self::uninstall_mouse_hook();
+          } else {
+            Self::handle_win_key_release();
+          }
+        } else if IS_WIN_KEY_PRESSED.load(Ordering::Relaxed) {
+          // If VK_L i.e. the 'L' key is pressed while the Win key is down, reset all state because
+          // once the screen is locked, the Win key state will be inconsistent
+          if vk_code == 0x4C && ((w_param.0 as u32) == WM_KEYDOWN || (w_param.0 as u32) == WM_SYSKEYDOWN) {
+            warn!("Win + L detected, preemptively resetting state");
+            Self::reset_all_state();
           }
         }
       }
 
       CallNextHookEx(None, n_code, w_param, l_param)
+    }
+  }
+
+  fn is_state_inconsistent() -> bool {
+    unsafe {
+      let left_win_state = GetAsyncKeyState(VK_LWIN.0 as i32);
+      let right_win_state = GetAsyncKeyState(VK_RWIN.0 as i32);
+      let is_actually_pressed = (left_win_state & 0x8000u16 as i16) != 0 || (right_win_state & 0x8000u16 as i16) != 0;
+      let is_expected_to_be_pressed = IS_WIN_KEY_PRESSED.load(Ordering::Relaxed);
+
+      is_expected_to_be_pressed != is_actually_pressed
+    }
+  }
+
+  fn reset_all_state() {
+    IS_WIN_KEY_PRESSED.store(false, Ordering::Relaxed);
+    Self::cancel_mouse_hook_install_timer();
+    if IS_DRAGGING.load(Ordering::Relaxed) {
+      Self::finish_dragging();
+    }
+    if IS_RESIZING.load(Ordering::Relaxed) {
+      Self::finish_resizing();
+    }
+    SENDER
+      .get()
+      .expect("Command sender not initialised")
+      .lock()
+      .expect("Failed to acquire command sender lock")
+      .send(Command::DragWindows(false))
+      .expect("Failed to send drag window command");
+    Self::uninstall_mouse_hook();
+  }
+
+  fn handle_win_key_release() {
+    if HOOK_TIMER_ID.load(Ordering::Relaxed) != 0 {
+      Self::cancel_mouse_hook_install_timer();
+    } else {
+      if IS_DRAGGING.load(Ordering::Relaxed) {
+        Self::finish_dragging();
+      }
+      if IS_RESIZING.load(Ordering::Relaxed) {
+        Self::finish_resizing();
+      }
+      SENDER
+        .get()
+        .expect("Command sender not initialised")
+        .lock()
+        .expect("Failed to acquire command sender lock")
+        .send(Command::DragWindows(false))
+        .expect("Failed to send drag window command");
+      Self::uninstall_mouse_hook();
     }
   }
 
@@ -109,7 +156,7 @@ impl WindowsApiForDragging {
   extern "system" fn timer_callback(_hwnd: HWND, _msg: u32, timer_id: usize, _time: u32) {
     if HOOK_TIMER_ID.load(Ordering::Relaxed) == timer_id {
       Self::cancel_mouse_hook_install_timer();
-      if IS_WIN_KEY_PRESSED.load(Ordering::Relaxed) {
+      if IS_WIN_KEY_PRESSED.load(Ordering::Relaxed) && !Self::is_state_inconsistent() {
         Self::install_mouse_hook();
         SENDER
           .get()
@@ -121,7 +168,7 @@ impl WindowsApiForDragging {
         let key_press_delay_in_ms = KEY_PRESS_DELAY_IN_MS.get().expect("Key press delay not initialised");
         trace!("Installed mouse hook after {}ms delay", key_press_delay_in_ms);
       } else {
-        trace!("Win key no longer pressed when timer expired");
+        trace!("Win key no longer pressed or state was inconsistent when timer expired");
       }
     }
   }
@@ -175,6 +222,12 @@ impl WindowsApiForDragging {
   extern "system" fn low_level_mouse_callback(n_code: i32, w_param: WPARAM, l_param: LPARAM) -> LRESULT {
     unsafe {
       if n_code != HC_ACTION as i32 {
+        return CallNextHookEx(None, n_code, w_param, l_param);
+      }
+
+      if Self::is_state_inconsistent() {
+        warn!("State inconsistent in mouse callback, resetting state...");
+        Self::reset_all_state();
         return CallNextHookEx(None, n_code, w_param, l_param);
       }
 
