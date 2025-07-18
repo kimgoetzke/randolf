@@ -17,6 +17,21 @@ static HOOK_TIMER_ID: AtomicUsize = AtomicUsize::new(0);
 static SENDER: OnceLock<Arc<Mutex<Sender<Command>>>> = OnceLock::new();
 static KEY_PRESS_DELAY_IN_MS: OnceLock<u32> = OnceLock::new();
 
+const IGNORED_CLASS_NAMES: [&str; 5] = [
+  "Progman",
+  "WorkerW",
+  "Shell_TrayWnd",
+  "Shell_SecondaryTrayWnd",
+  "DV2ControlHost",
+];
+
+const IGNORED_WINDOW_TITLES: [&str; 4] = [
+  "Program Manager",
+  "Windows Input Experience",
+  "",
+  "Windows Shell Experience Host",
+];
+
 /// This struct registers a keyboard hook that, if active for [`KEY_PRESS_DELAY_IN_MS`], will install a mouse
 /// hook that allows the user to drag and resize windows by holding down the Windows key and clicking the left or right
 /// mouse button. Since this functionality is very specific and isolated from other interactions with the Windows API
@@ -292,8 +307,8 @@ impl WindowsApiForDragging {
         debug!("No window under cursor at {}", cursor_position);
         return;
       }
-      if hwnd_under_cursor.0.is_null() {
-        debug!("No top-level HWND found under cursor at {}", cursor_position);
+      if is_not_a_managed_window(&hwnd_under_cursor) {
+        debug!("Window under cursor at {} is being ignored", cursor_position);
         return;
       }
       if !Self::can_move_window(hwnd_under_cursor) {
@@ -390,8 +405,8 @@ impl WindowsApiForDragging {
         debug!("No window under cursor at {}", cursor_position);
         return;
       }
-      if hwnd_under_cursor.0.is_null() {
-        debug!("No top-level HWND found under cursor at {}", cursor_position);
+      if is_not_a_managed_window(&hwnd_under_cursor) {
+        debug!("Window under cursor at {} is being ignored", cursor_position);
         return;
       }
       if !Self::can_resize_window(hwnd_under_cursor) {
@@ -528,6 +543,41 @@ impl WindowsApiForDragging {
 
     Self::can_move_window(window)
   }
+}
+
+fn is_not_a_managed_window(handle: &HWND) -> bool {
+  let mut result = false;
+  let class_name = get_window_class_name(handle);
+  if IGNORED_CLASS_NAMES.contains(&&**&class_name) {
+    result = true;
+  }
+
+  let title = get_window_title(handle);
+  if IGNORED_WINDOW_TITLES.contains(&&*title) {
+    result = true;
+  }
+
+  debug!(
+    "{}  {:?} {} being managed (class name [{}] and title [\"{}\"])",
+    if result { "⛔" } else { "✅" },
+    handle,
+    if result { "is NOT" } else { "is" },
+    class_name,
+    title,
+  );
+  result
+}
+
+fn get_window_class_name(handle: &HWND) -> String {
+  let mut class_name: [u16; 256] = [0; 256];
+  let len = unsafe { GetClassNameW(*handle, &mut class_name) };
+  String::from_utf16_lossy(&class_name[..len as usize])
+}
+
+fn get_window_title(handle: &HWND) -> String {
+  let mut text: [u16; 512] = [0; 512];
+  let len = unsafe { GetWindowTextW(*handle, &mut text) };
+  String::from_utf16_lossy(&text[..len as usize])
 }
 
 impl Drop for WindowsApiForDragging {
