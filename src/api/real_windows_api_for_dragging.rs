@@ -17,20 +17,16 @@ static HOOK_TIMER_ID: AtomicUsize = AtomicUsize::new(0);
 static SENDER: OnceLock<Arc<Mutex<Sender<Command>>>> = OnceLock::new();
 static KEY_PRESS_DELAY_IN_MS: OnceLock<u32> = OnceLock::new();
 
-const IGNORED_CLASS_NAMES: [&str; 5] = [
+const IGNORED_CLASS_NAMES: [&str; 6] = [
   "Progman",
   "WorkerW",
   "Shell_TrayWnd",
   "Shell_SecondaryTrayWnd",
   "DV2ControlHost",
+  "SysListView32",
 ];
 
-const IGNORED_WINDOW_TITLES: [&str; 4] = [
-  "Program Manager",
-  "Windows Input Experience",
-  "",
-  "Windows Shell Experience Host",
-];
+const IGNORED_WINDOW_TITLES: [&str; 3] = ["Program Manager", "Windows Input Experience", "Windows Shell Experience Host"];
 
 /// This struct registers a keyboard hook that, if active for [`KEY_PRESS_DELAY_IN_MS`], will install a mouse
 /// hook that allows the user to drag and resize windows by holding down the Windows key and clicking the left or right
@@ -302,30 +298,34 @@ impl WindowsApiForDragging {
 
   fn start_dragging(cursor_position: Point) {
     unsafe {
-      let hwnd_under_cursor = WindowFromPoint(cursor_position.as_point());
-      if hwnd_under_cursor.0.is_null() {
+      let mut hwnd = WindowFromPoint(cursor_position.as_point());
+      if hwnd.0.is_null() {
         debug!("No window under cursor at {}", cursor_position);
         return;
       }
-      if is_not_a_managed_window(&hwnd_under_cursor) {
-        debug!("Window under cursor at {} is being ignored", cursor_position);
+      let window_title = Self::get_window_title(&hwnd);
+      if window_title.is_empty() {
+        hwnd = Self::get_top_level_hwnd(hwnd);
+      }
+      if Self::is_not_a_managed_window(&hwnd) {
+        debug!("Window under cursor at {} is not being managed", cursor_position);
         return;
       }
-      if !Self::can_move_window(hwnd_under_cursor) {
-        debug!("Cannot move window with HWND: {:?}", hwnd_under_cursor);
+      if !Self::can_move_window(hwnd) {
+        debug!("Cannot move window with HWND: {:?}", hwnd);
         return;
       }
       let mut window_rect = RECT::default();
-      if GetWindowRect(hwnd_under_cursor, &mut window_rect).is_err() {
-        error!("Failed to get window rect for HWND: {:?}", hwnd_under_cursor);
+      if GetWindowRect(hwnd, &mut window_rect).is_err() {
+        error!("Failed to get window rect for HWND: {:?}", hwnd);
         return;
       }
-      if !SetForegroundWindow(hwnd_under_cursor).as_bool() {
-        warn!("Failed to set foreground window to w#{:?}", hwnd_under_cursor.0);
+      if !SetForegroundWindow(hwnd).as_bool() {
+        warn!("Failed to set foreground window to w#{:?}", hwnd.0);
       }
       if let Ok(mut drag_state) = get_drag_state().lock() {
         let window_position = Point::new(window_rect.left, window_rect.top);
-        let window_handle = WindowHandle::from(hwnd_under_cursor);
+        let window_handle = WindowHandle::from(hwnd);
         drag_state.set(cursor_position, window_handle, window_position);
         IS_DRAGGING.store(true, Ordering::Relaxed);
       }
@@ -400,30 +400,34 @@ impl WindowsApiForDragging {
 
   fn start_resizing(cursor_position: Point) {
     unsafe {
-      let hwnd_under_cursor = WindowFromPoint(cursor_position.as_point());
-      if hwnd_under_cursor.0.is_null() {
+      let mut hwnd = WindowFromPoint(cursor_position.as_point());
+      if hwnd.0.is_null() {
         debug!("No window under cursor at {}", cursor_position);
         return;
       }
-      if is_not_a_managed_window(&hwnd_under_cursor) {
-        debug!("Window under cursor at {} is being ignored", cursor_position);
+      let window_title = Self::get_window_title(&hwnd);
+      if window_title.is_empty() {
+        hwnd = Self::get_top_level_hwnd(hwnd);
+      }
+      if Self::is_not_a_managed_window(&hwnd) {
+        debug!("Window under cursor at {} is not being managed", cursor_position);
         return;
       }
-      if !Self::can_resize_window(hwnd_under_cursor) {
-        debug!("Cannot resize window with HWND: {:?}", hwnd_under_cursor);
+      if !Self::can_resize_window(hwnd) {
+        debug!("Cannot resize window with HWND: {:?}", hwnd);
         return;
       }
       let mut window_rect = RECT::default();
-      if GetWindowRect(hwnd_under_cursor, &mut window_rect).is_err() {
-        error!("Failed to get window rect for HWND: {:?}", hwnd_under_cursor);
+      if GetWindowRect(hwnd, &mut window_rect).is_err() {
+        error!("Failed to get window rect for HWND: {:?}", hwnd);
         return;
       }
       let window_rect = Rect::from(window_rect);
-      if !SetForegroundWindow(hwnd_under_cursor).as_bool() {
-        warn!("Failed to set foreground window to w#{:?}", hwnd_under_cursor.0);
+      if !SetForegroundWindow(hwnd).as_bool() {
+        warn!("Failed to set foreground window to w#{:?}", hwnd.0);
       }
       let resize_mode = Self::determine_resize_mode(cursor_position, &window_rect);
-      let window_handle = WindowHandle::from(hwnd_under_cursor);
+      let window_handle = WindowHandle::from(hwnd);
       if let Ok(mut resize_state) = get_resize_state().lock() {
         resize_state.set(cursor_position, window_handle, window_rect, resize_mode);
         IS_RESIZING.store(true, Ordering::Relaxed);
@@ -543,41 +547,60 @@ impl WindowsApiForDragging {
 
     Self::can_move_window(window)
   }
-}
 
-fn is_not_a_managed_window(handle: &HWND) -> bool {
-  let mut result = false;
-  let class_name = get_window_class_name(handle);
-  if IGNORED_CLASS_NAMES.contains(&&**&class_name) {
-    result = true;
+  /// Retrieves the top-level `HWND` for a given `HWND`.
+  fn get_top_level_hwnd(mut window: HWND) -> HWND {
+    unsafe {
+      while !window.0.is_null() {
+        let parent = GetParent(window);
+        if parent.is_err() {
+          break;
+        }
+        let parent = parent.expect("Failed to get parent of window");
+        if parent.0.is_null() {
+          break;
+        }
+        window = parent;
+      }
+
+      window
+    }
   }
 
-  let title = get_window_title(handle);
-  if IGNORED_WINDOW_TITLES.contains(&&*title) {
-    result = true;
+  fn is_not_a_managed_window(handle: &HWND) -> bool {
+    let mut result = false;
+    let class_name = Self::get_window_class_name(handle);
+    if IGNORED_CLASS_NAMES.contains(&&**&class_name) {
+      result = true;
+    }
+
+    let title = Self::get_window_title(handle);
+    if IGNORED_WINDOW_TITLES.contains(&&*title) {
+      result = true;
+    }
+
+    debug!(
+      "{}  {:?} {} being managed (class name [{}] and title [\"{}\"])",
+      if result { "⛔" } else { "✅" },
+      handle,
+      if result { "is NOT" } else { "is" },
+      class_name,
+      title,
+    );
+    result
   }
 
-  debug!(
-    "{}  {:?} {} being managed (class name [{}] and title [\"{}\"])",
-    if result { "⛔" } else { "✅" },
-    handle,
-    if result { "is NOT" } else { "is" },
-    class_name,
-    title,
-  );
-  result
-}
+  fn get_window_class_name(handle: &HWND) -> String {
+    let mut class_name: [u16; 256] = [0; 256];
+    let len = unsafe { GetClassNameW(*handle, &mut class_name) };
+    String::from_utf16_lossy(&class_name[..len as usize])
+  }
 
-fn get_window_class_name(handle: &HWND) -> String {
-  let mut class_name: [u16; 256] = [0; 256];
-  let len = unsafe { GetClassNameW(*handle, &mut class_name) };
-  String::from_utf16_lossy(&class_name[..len as usize])
-}
-
-fn get_window_title(handle: &HWND) -> String {
-  let mut text: [u16; 512] = [0; 512];
-  let len = unsafe { GetWindowTextW(*handle, &mut text) };
-  String::from_utf16_lossy(&text[..len as usize])
+  fn get_window_title(handle: &HWND) -> String {
+    let mut text: [u16; 512] = [0; 512];
+    let len = unsafe { GetWindowTextW(*handle, &mut text) };
+    String::from_utf16_lossy(&text[..len as usize])
+  }
 }
 
 impl Drop for WindowsApiForDragging {
