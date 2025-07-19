@@ -230,6 +230,8 @@ impl WindowsApiForDragging {
     }
   }
 
+  /// Callback function for the low-level mouse hook. This function is called whenever a mouse event occurs, and it is
+  /// the main function that handles the dragging and resizing of windows when the Win key is pressed.
   extern "system" fn low_level_mouse_callback(n_code: i32, w_param: WPARAM, l_param: LPARAM) -> LRESULT {
     unsafe {
       if n_code != HC_ACTION as i32 {
