@@ -9,11 +9,11 @@ edition = "2024"
 windows = { version = "0.61.3", features = ["Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_UI_Input", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell", "Win32_System", "Win32_System_Com", "Win32_UI_HiDpi", "Win32_System_LibraryLoader"] }
 win-hotkeys = "0.5.1"
 log = "0.4.27"
-trayicon = "0.2.0"
+trayicon = "0.3.0"
 simplelog = "0.12.2"
 crossbeam-channel = "0.5.15"
 serde = { version = "1.0.219", features = ["derive"] }
-toml = "0.8.23"
+toml = "0.9.2"
 directories = "6.0.0"
 
 [dev-dependencies]
