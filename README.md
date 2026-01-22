@@ -1,6 +1,12 @@
 <p align="center">
   <img src="./assets/randolf.png" width="160" height="160" alt="Randolf"/>
 </p>
+<p align="center">
+  <img alt="Build and release" src="https://github.com/kimgoetzke/randolf/actions/workflows/release.yml/badge.svg"/>
+  <img alt="License" src="https://img.shields.io/github/license/kimgoetzke/randolf"/>
+  <img alt="Version" src="https://img.shields.io/github/v/release/kimgoetzke/randolf"/>
+  <img alt="Downloads" src="https://img.shields.io/github/downloads/kimgoetzke/randolf/total.svg"/>
+</p>
 
 # Meet Randolf
 
