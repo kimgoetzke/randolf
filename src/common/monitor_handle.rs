@@ -13,6 +13,7 @@ impl MonitorHandle {
     self.handle as i64
   }
 
+  #[allow(unused)]
   pub fn as_h_monitor(&self) -> HMONITOR {
     HMONITOR(self.handle as *mut core::ffi::c_void)
   }
