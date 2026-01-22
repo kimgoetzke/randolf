@@ -96,7 +96,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
         if let Some(target_monitor) = target_monitor {
           debug!("Moving window to [{}]", target_monitor);
           self.windows_api.set_window_position(handle, target_monitor.work_area);
-          self.near_maximize_window(handle, MonitorInfo::from(target_monitor), self.margin());
+          self.near_maximise_window(handle, MonitorInfo::from(target_monitor), self.margin());
           self.windows_api.set_cursor_position(&target_monitor.center);
         } else {
           debug!("No monitor found in [{:?}] direction, did not move window", direction);
@@ -151,7 +151,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
       true => self.restore_previous_placement(&self.known_windows, handle),
       false => {
         add_or_update_previous_placement(&mut self.known_windows, handle, placement);
-        self.near_maximize_window(handle, monitor_info, self.margin());
+        self.near_maximise_window(handle, monitor_info, self.margin());
       }
     }
   }
@@ -211,16 +211,18 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     result
   }
 
-  fn near_maximize_window(&self, handle: WindowHandle, monitor_info: MonitorInfo, margin: i32) {
+  fn near_maximise_window(&self, handle: WindowHandle, monitor_info: MonitorInfo, margin: i32) {
     info!("Near-maximizing {}", handle);
 
     // First maximise to get the animation effect
     self.windows_api.do_maximise_window(handle);
 
     // Then resize the window to the expected size
-    let work_area = monitor_info.work_area;
-    let sizing = Sizing::near_maximised(work_area, margin);
-    self.execute_window_resizing(handle, sizing);
+    if margin >= 5 {
+      let work_area = monitor_info.work_area;
+      let sizing = Sizing::near_maximised(work_area, margin);
+      self.execute_window_resizing(handle, sizing);
+    }
   }
 
   fn find_closest_window_in_direction<'a>(
@@ -529,7 +531,7 @@ mod tests {
   }
 
   #[test]
-  fn near_maximize_window_when_window_is_not_near_maximised() {
+  fn near_maximise_window_when_window_is_not_near_maximised() {
     let monitor_handle = MonitorHandle::from(1);
     let window_handle = WindowHandle::new(1);
     let sizing = Sizing::new(0, 0, 100, 100);
@@ -914,5 +916,54 @@ mod tests {
       "Cursor position should be set to the center of the closest, non-minimised window"
     );
     assert_eq!(manager.windows_api.get_foreground_window(), Some(other_window_handle));
+  }
+
+  #[test]
+  fn near_maximise_window_with_margin_below_threshold_does_not_resize() {
+    let monitor_handle = MonitorHandle::from(1);
+    let window_handle = WindowHandle::new(1);
+    let initial_sizing = Sizing::new(50, 50, 100, 100);
+    let initial_placement = WindowPlacement::new_from_sizing(initial_sizing.clone());
+    MockWindowsApi::add_or_update_window(window_handle, "Test Window".to_string(), initial_sizing, false, false, true);
+    MockWindowsApi::add_monitor(monitor_handle, Rect::new(0, 0, 200, 200), true);
+    MockWindowsApi::place_window(window_handle, monitor_handle);
+    let manager = WindowManager::default(MockWindowsApi);
+    let monitor_info = manager
+      .windows_api
+      .get_monitor_info_for_monitor(monitor_handle)
+      .expect("Failed to get monitor info");
+
+    manager.near_maximise_window(window_handle, monitor_info, 3);
+
+    let actual_placement = manager.windows_api.get_window_placement(window_handle);
+    assert!(actual_placement.is_some());
+    assert_eq!(actual_placement.unwrap(), initial_placement);
+  }
+
+  #[test]
+  fn near_maximise_window_with_margin_above_threshold_resizes() {
+    let monitor_handle = MonitorHandle::from(1);
+    let window_handle = WindowHandle::new(1);
+    let initial_sizing = Sizing::new(50, 50, 100, 100);
+    let initial_placement = WindowPlacement::new_from_sizing(initial_sizing.clone());
+    MockWindowsApi::add_or_update_window(window_handle, "Test Window".to_string(), initial_sizing, false, false, true);
+    MockWindowsApi::add_monitor(monitor_handle, Rect::new(0, 0, 200, 200), true);
+    MockWindowsApi::place_window(window_handle, monitor_handle);
+    let manager = WindowManager::default(MockWindowsApi);
+    let monitor_info = manager
+      .windows_api
+      .get_monitor_info_for_monitor(monitor_handle)
+      .expect("Failed to get monitor info");
+    let margin = 10;
+
+    manager.near_maximise_window(window_handle, monitor_info, margin);
+
+    let actual_placement = manager.windows_api.get_window_placement(window_handle);
+    let expected_sizing = Sizing::near_maximised(monitor_info.work_area, margin);
+    let expected_placement = WindowPlacement::new_from_sizing(expected_sizing);
+
+    assert!(actual_placement.is_some());
+    assert_eq!(actual_placement.clone().unwrap(), expected_placement);
+    assert_ne!(actual_placement.unwrap(), initial_placement);
   }
 }
