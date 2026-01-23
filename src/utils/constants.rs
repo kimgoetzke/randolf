@@ -4,3 +4,4 @@ pub const TRAY_ICON_OPEN: &str = "Failed to open tray menu";
 pub const PROJECT_DIR_QUALIFIER: &str = "io";
 pub const PROJECT_DIR_ORGANISATION_NAME: &str = "kimgoetzke";
 pub const PROJECT_DIR_APPLICATION_NAME: &str = "randolf";
+pub const MINIMUM_WINDOW_MARGIN: i32 = 5;

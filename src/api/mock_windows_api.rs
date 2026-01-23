@@ -231,6 +231,11 @@ pub(crate) mod test {
       unimplemented!()
     }
 
+    fn get_window_rect(&self, handle: WindowHandle) -> Option<Rect> {
+      trace!("Mock windows API gets window rect for {handle}");
+      MOCK_STATE.with(|state| state.borrow().windows.get(&handle).map(|ws| ws.window.rect))
+    }
+
     fn is_window_minimised(&self, handle: WindowHandle) -> bool {
       trace!("Mock windows API checks if window {handle} is minimised");
       MOCK_STATE.with(|state| {
@@ -294,7 +299,27 @@ pub(crate) mod test {
     }
 
     fn do_maximise_window(&self, handle: WindowHandle) {
-      trace!("Mock windows API maximises window {handle} - not implemented yet");
+      trace!("Mock windows API maximises window {handle}");
+      let monitor_handle = self.get_monitor_handle_for_window_handle(handle);
+      let monitor_info = self
+        .get_monitor_info_for_monitor(monitor_handle)
+        .unwrap_or_else(|| panic!("Monitor info for monitor {monitor_handle} not found"));
+
+      MOCK_STATE.with(|state| {
+        let mut ref_mut = state.borrow_mut();
+        if let Some(window_state) = ref_mut.windows.get_mut(&handle) {
+          let placement = WindowPlacement::new_from_rect(monitor_info.work_area);
+          window_state.is_minimised = false;
+          window_state.is_hidden = false;
+          window_state.is_closed = false;
+          window_state.window.rect = placement.normal_position;
+          window_state.window_placement = placement;
+          window_state.window.center = Point::from_center_of_rect(&window_state.window.rect);
+          ref_mut.foreground_window = Some(handle);
+        } else {
+          panic!("Window with handle {handle} not found - did you forget to add it?");
+        }
+      });
     }
 
     fn do_minimise_window(&self, handle: WindowHandle) {

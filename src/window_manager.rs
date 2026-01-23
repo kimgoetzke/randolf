@@ -4,11 +4,12 @@ use crate::configuration_provider::{
   ADDITIONAL_WORKSPACE_COUNT, ALLOW_MOVING_CURSOR_AFTER_OPEN_CLOSE_OR_MINIMISE, ALLOW_SELECTING_SAME_CENTER_WINDOWS,
   ConfigurationProvider, WINDOW_MARGIN,
 };
-use crate::utils::CONFIGURATION_PROVIDER_LOCK;
+use crate::utils::{CONFIGURATION_PROVIDER_LOCK, MINIMUM_WINDOW_MARGIN};
 use crate::workspace_manager::WorkspaceManager;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
+use windows::Win32::UI::WindowsAndMessaging::SW_MAXIMIZE;
 
 const TOLERANCE_IN_PX: i32 = 2;
 
@@ -147,7 +148,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
       None => return,
     };
 
-    match self.is_near_maximized(&placement, &handle, &monitor_info) {
+    match self.is_near_maximised(&placement, &handle, &monitor_info) {
       true => self.restore_previous_placement(&self.known_windows, handle),
       false => {
         add_or_update_previous_placement(&mut self.known_windows, handle, placement);
@@ -187,38 +188,48 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     }
   }
 
-  fn is_near_maximized(&self, placement: &WindowPlacement, handle: &WindowHandle, monitor_info: &MonitorInfo) -> bool {
+  fn is_near_maximised(&self, placement: &WindowPlacement, handle: &WindowHandle, monitor_info: &MonitorInfo) -> bool {
+    if placement.show_cmd == SW_MAXIMIZE.0 as u32 && self.margin() <= MINIMUM_WINDOW_MARGIN {
+      debug!("{} is reported as maximised via show_cmd={}", handle, placement.show_cmd);
+      return true;
+    }
+
     let work_area = monitor_info.work_area;
     let expected_x = work_area.left + self.margin();
     let expected_y = work_area.top + self.margin();
     let expected_width = work_area.right - work_area.left - self.margin() * 2;
     let expected_height = work_area.bottom - work_area.top - self.margin() * 2;
-    let rect = placement.normal_position;
-    let result = (rect.left - expected_x).abs() <= TOLERANCE_IN_PX
-      && (rect.top - expected_y).abs() <= TOLERANCE_IN_PX
-      && (rect.right - rect.left - expected_width).abs() <= TOLERANCE_IN_PX
-      && (rect.bottom - rect.top - expected_height).abs() <= TOLERANCE_IN_PX;
-
     let sizing = Sizing::new(expected_x, expected_y, expected_width, expected_height);
-    log_actual_vs_expected(handle, &sizing, rect);
-    debug!(
-      "{} {} near-maximized (tolerance: {})",
-      handle,
-      if result { "is currently" } else { "is currently NOT" },
-      TOLERANCE_IN_PX
-    );
 
-    result
+    if let Some(rect) = self.windows_api.get_window_rect(*handle) {
+      let result = (rect.left - expected_x).abs() <= TOLERANCE_IN_PX
+        && (rect.top - expected_y).abs() <= TOLERANCE_IN_PX
+        && (rect.right - rect.left - expected_width).abs() <= TOLERANCE_IN_PX
+        && (rect.bottom - rect.top - expected_height).abs() <= TOLERANCE_IN_PX;
+
+      log_actual_vs_expected(handle, &sizing, rect);
+      debug!(
+        "{} {} near-maximised (tolerance: {})",
+        handle,
+        if result { "is currently" } else { "is currently NOT" },
+        TOLERANCE_IN_PX
+      );
+
+      result
+    } else {
+      warn!("{} has no window rect, assuming currently NOT near-maximised", handle);
+      false
+    }
   }
 
   fn near_maximise_window(&self, handle: WindowHandle, monitor_info: MonitorInfo, margin: i32) {
-    info!("Near-maximizing {}", handle);
+    info!("Near-maximising {}", handle);
 
     // First maximise to get the animation effect
     self.windows_api.do_maximise_window(handle);
 
     // Then resize the window to the expected size
-    if margin >= 5 {
+    if margin >= MINIMUM_WINDOW_MARGIN {
       let work_area = monitor_info.work_area;
       let sizing = Sizing::near_maximised(work_area, margin);
       self.execute_window_resizing(handle, sizing);
@@ -923,7 +934,6 @@ mod tests {
     let monitor_handle = MonitorHandle::from(1);
     let window_handle = WindowHandle::new(1);
     let initial_sizing = Sizing::new(50, 50, 100, 100);
-    let initial_placement = WindowPlacement::new_from_sizing(initial_sizing.clone());
     MockWindowsApi::add_or_update_window(window_handle, "Test Window".to_string(), initial_sizing, false, false, true);
     MockWindowsApi::add_monitor(monitor_handle, Rect::new(0, 0, 200, 200), true);
     MockWindowsApi::place_window(window_handle, monitor_handle);
@@ -935,9 +945,11 @@ mod tests {
 
     manager.near_maximise_window(window_handle, monitor_info, 3);
 
+    let expected_sizing = Sizing::near_maximised(monitor_info.work_area, 0);
+    let expected_placement = WindowPlacement::new_from_sizing(expected_sizing);
     let actual_placement = manager.windows_api.get_window_placement(window_handle);
     assert!(actual_placement.is_some());
-    assert_eq!(actual_placement.unwrap(), initial_placement);
+    assert_eq!(actual_placement.unwrap(), expected_placement);
   }
 
   #[test]
@@ -965,5 +977,47 @@ mod tests {
     assert!(actual_placement.is_some());
     assert_eq!(actual_placement.clone().unwrap(), expected_placement);
     assert_ne!(actual_placement.unwrap(), initial_placement);
+  }
+
+  #[test]
+  fn near_maximise_or_restore_with_zero_margin_can_restore_initial_position() {
+    let monitor_handle = MonitorHandle::from(1);
+    let window_handle = WindowHandle::new(1);
+    let initial_sizing = Sizing::new(50, 50, 100, 100);
+    let initial_placement = WindowPlacement::new_from_sizing(initial_sizing.clone());
+    MockWindowsApi::add_or_update_window(window_handle, "Test Window".to_string(), initial_sizing, false, false, true);
+    MockWindowsApi::add_monitor(monitor_handle, Rect::new(0, 0, 200, 200), true);
+    MockWindowsApi::place_window(window_handle, monitor_handle);
+    let mut manager = WindowManager::default(MockWindowsApi);
+    let monitor_info = manager
+      .windows_api
+      .get_monitor_info_for_monitor(monitor_handle)
+      .expect("Failed to get monitor info");
+    manager
+      .configuration_provider
+      .lock()
+      .unwrap()
+      .set_i32(crate::configuration_provider::WINDOW_MARGIN, 0);
+
+    manager.near_maximise_or_restore();
+
+    let expected_sizing = Sizing::near_maximised(monitor_info.work_area, 0);
+    let maximised_placement = WindowPlacement::new_from_sizing(expected_sizing);
+    let current_placement = manager
+      .windows_api
+      .get_window_placement(window_handle)
+      .expect("Failed to get placement after maximise");
+    assert_eq!(current_placement, maximised_placement, "Window should be maximised");
+
+    manager.near_maximise_or_restore();
+
+    let current_placement = manager
+      .windows_api
+      .get_window_placement(window_handle)
+      .expect("Failed to get placement after restore");
+    assert_eq!(
+      current_placement, initial_placement,
+      "Window should be restored to its initial placement"
+    );
   }
 }

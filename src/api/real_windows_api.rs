@@ -13,10 +13,10 @@ use windows::Win32::UI::HiDpi::{GetDpiForMonitor, PROCESS_PER_MONITOR_DPI_AWARE,
 use windows::Win32::UI::Shell::{IVirtualDesktopManager, IsUserAnAdmin};
 use windows::Win32::UI::WindowsAndMessaging::{
   DispatchMessageA, EnumWindows, GetClassNameW, GetCursorPos, GetDesktopWindow, GetForegroundWindow, GetWindowInfo,
-  GetWindowPlacement, GetWindowTextW, IsIconic, IsWindowVisible, MSG, PM_REMOVE, PeekMessageA, PostMessageW, SW_HIDE,
-  SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOZORDER, SWP_SHOWWINDOW, SendMessageW,
-  SetCursorPos, SetForegroundWindow, SetWindowPlacement, SetWindowPos, ShowWindow, TranslateMessage, WINDOWINFO,
-  WINDOWPLACEMENT, WM_CLOSE, WM_PAINT,
+  GetWindowPlacement, GetWindowRect, GetWindowTextW, IsIconic, IsWindowVisible, MSG, PM_REMOVE, PeekMessageA, PostMessageW,
+  SW_HIDE, SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOZORDER, SWP_SHOWWINDOW,
+  SendMessageW, SetCursorPos, SetForegroundWindow, SetWindowPlacement, SetWindowPos, ShowWindow, TranslateMessage,
+  WINDOWINFO, WINDOWPLACEMENT, WM_CLOSE, WM_PAINT,
 };
 use windows::core::BOOL;
 
@@ -146,6 +146,17 @@ impl WindowsApi for RealWindowsApi {
     let mut class_name: [u16; 256] = [0; 256];
     let len = unsafe { GetClassNameW(handle.as_hwnd(), &mut class_name) };
     String::from_utf16_lossy(&class_name[..len as usize])
+  }
+
+  fn get_window_rect(&self, handle: WindowHandle) -> Option<Rect> {
+    let mut rc: RECT = unsafe { mem::zeroed() };
+    unsafe {
+      if GetWindowRect(handle.as_hwnd(), &mut rc).is_err() {
+        warn!("Failed to get window rect for window {handle}");
+        return None;
+      }
+    }
+    Some(Rect::from(rc))
   }
 
   fn is_window_minimised(&self, handle: WindowHandle) -> bool {
