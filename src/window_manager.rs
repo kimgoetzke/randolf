@@ -324,18 +324,17 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
       .collect::<Vec<&Window>>();
 
     if !windows_under_cursor.is_empty() {
-      if let Some(foreground_window) = self.windows_api.get_foreground_window() {
-        if let Some(window_info) = windows_under_cursor
+      if let Some(foreground_window) = self.windows_api.get_foreground_window()
+        && let Some(window_info) = windows_under_cursor
           .iter()
           .find(|window_info| window_info.handle == foreground_window)
-        {
-          debug!(
-            "Cursor is currently over foreground window {} \"{}\" at {point}",
-            window_info.handle,
-            window_info.title_trunc()
-          );
-          return Some(window_info);
-        }
+      {
+        debug!(
+          "Cursor is currently over foreground window {} \"{}\" at {point}",
+          window_info.handle,
+          window_info.title_trunc()
+        );
+        return Some(window_info);
       }
 
       let mut closest_window = None;
