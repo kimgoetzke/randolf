@@ -173,7 +173,8 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
   }
 
   fn margin(&self) -> i32 {
-    self.configuration_provider.lock().unwrap().get_i32(WINDOW_MARGIN)
+    let margin = self.configuration_provider.lock().unwrap().get_i32(WINDOW_MARGIN);
+    if margin >= MINIMUM_WINDOW_MARGIN { margin } else { 0 }
   }
 
   fn restore_previous_placement(&self, known_windows: &HashMap<String, WindowPlacement>, handle: WindowHandle) {
@@ -189,7 +190,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
   }
 
   fn is_near_maximised(&self, placement: &WindowPlacement, handle: &WindowHandle, monitor_info: &MonitorInfo) -> bool {
-    if placement.show_cmd == SW_MAXIMIZE.0 as u32 && self.margin() <= MINIMUM_WINDOW_MARGIN {
+    if placement.show_cmd == SW_MAXIMIZE.0 as u32 && self.margin() < MINIMUM_WINDOW_MARGIN {
       debug!("{} is reported as maximised via show_cmd={}", handle, placement.show_cmd);
       return true;
     }
@@ -493,11 +494,11 @@ fn is_of_expected_size(handle: WindowHandle, placement: &WindowPlacement, sizing
 }
 
 fn log_actual_vs_expected(handle: &WindowHandle, sizing: &Sizing, rc: Rect) {
-  trace!(
+  debug!(
     "Expected size of {}: ({},{})x({},{})",
     handle, sizing.x, sizing.y, sizing.width, sizing.height
   );
-  trace!(
+  debug!(
     "Actual size of {}: ({},{})x({},{})",
     handle,
     rc.left,
