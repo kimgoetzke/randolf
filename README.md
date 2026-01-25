@@ -10,7 +10,7 @@
 
 # Meet Randolf
 
-Randolf is a window management utility for Windows 11 that allows you to:
+Randolf is a small window management utility for Windows 11 that allows you to:
 
 - `Win` + `\` - near-maximise the foreground window (maximise minus margin).
 - `Win` + `Shift` + `Left`/`Top`/`Right`/`Down` or `h`/`j`/`k`/`l` - near-snap (snap minus margin) the foreground window
@@ -35,8 +35,8 @@ are welcome.
 
 #### Additional features
 
-- Reset the window to its previous size and position (i.e. undo the near-maximisation) by pressing `Win` + `\` on a
-  near-maximised window will
+- Reset the window to its previous size and position (i.e. undo the near-maximisation) by pressing `Win` + `\` on an
+  already near-maximised window
 - Minimise the foreground window by pressing `Win` + `Shift` + `\`
 - Store and load configuration from `randolf.toml` in `%APPDATA%\kimgoetzke\randolf\`
 - Write application logs to `randolf.log` in `%LOCALAPPDATA%\kimgoetzke\randolf\logs\`
@@ -83,16 +83,16 @@ allow_moving_cursor_after_open_close_or_minimise = true
 
 [exclusion_settings]
 window_titles = [
-    "Program Manager",
-    "Windows Input Experience",
-    # And more...
+  "Program Manager",
+  "Windows Input Experience",
+  # And more...
 ]
 window_class_names = [
-    "Progman",
-    "WorkerW",
-    "Shell_TrayWnd",
-    "Shell_SecondaryTrayWnd",
-    # And more...
+  "Progman",
+  "WorkerW",
+  "Shell_TrayWnd",
+  "Shell_SecondaryTrayWnd",
+  # And more...
 ]
 ```
 
