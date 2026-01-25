@@ -1,6 +1,7 @@
 use crate::api::WindowsApi;
 use crate::common::{Monitor, MonitorHandle, MonitorInfo, Monitors, Point, Rect, Window, WindowHandle, WindowPlacement};
 use crate::configuration_provider::ExclusionSettings;
+use std::ffi::c_void;
 use std::mem::MaybeUninit;
 use std::{mem, ptr};
 use windows::Win32::Foundation::{HWND, LPARAM, POINT, RECT, WPARAM};
@@ -19,6 +20,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
   WINDOWINFO, WINDOWPLACEMENT, WM_CLOSE, WM_PAINT,
 };
 use windows::core::BOOL;
+use windows::core::HRESULT;
 
 #[derive(Clone)]
 pub struct RealWindowsApi {
@@ -157,6 +159,23 @@ impl WindowsApi for RealWindowsApi {
       }
     }
     Some(Rect::from(rc))
+  }
+
+  fn get_extended_frame_bounds(&self, handle: WindowHandle) -> Option<Rect> {
+    unsafe {
+      let mut rc: RECT = mem::zeroed();
+      let hr = DwmGetWindowAttribute(
+        handle.as_hwnd(),
+        9u32,
+        &mut rc as *mut RECT as *mut c_void,
+        size_of::<RECT>() as u32,
+      );
+      if hr.0 != 0 {
+        warn!("DwmGetWindowAttribute failed for {handle}: HRESULT={}", hr.0);
+        return None;
+      }
+      Some(Rect::from(rc))
+    }
   }
 
   fn is_window_minimised(&self, handle: WindowHandle) -> bool {
@@ -610,6 +629,11 @@ fn get_persistent_device_name(_handle: &MonitorHandle, info: &MONITORINFOEXW) ->
   // );
 
   info.szDevice
+}
+
+#[link(name = "dwmapi")]
+unsafe extern "system" {
+  fn DwmGetWindowAttribute(h_wnd: HWND, dw_attribute: u32, pv_attribute: *mut c_void, cb_attribute: u32) -> HRESULT;
 }
 
 pub fn do_process_windows_messages() {

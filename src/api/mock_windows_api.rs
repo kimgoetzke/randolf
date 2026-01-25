@@ -236,6 +236,11 @@ pub(crate) mod test {
       MOCK_STATE.with(|state| state.borrow().windows.get(&handle).map(|ws| ws.window.rect))
     }
 
+    fn get_extended_frame_bounds(&self, handle: WindowHandle) -> Option<Rect> {
+      trace!("Mock windows API gets extended frame bounds for {handle}");
+      MOCK_STATE.with(|state| state.borrow().windows.get(&handle).map(|ws| ws.window.rect))
+    }
+
     fn is_window_minimised(&self, handle: WindowHandle) -> bool {
       trace!("Mock windows API checks if window {handle} is minimised");
       MOCK_STATE.with(|state| {

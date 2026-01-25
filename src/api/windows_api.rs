@@ -12,6 +12,8 @@ pub trait WindowsApi {
   fn get_window_class_name(&self, handle: &WindowHandle) -> String;
   /// Returns the on-screen bounding rectangle for the given window.
   fn get_window_rect(&self, handle: WindowHandle) -> Option<Rect>;
+  /// Returns the DWM extended frame bounds (includes drop shadows) when available.
+  fn get_extended_frame_bounds(&self, handle: WindowHandle) -> Option<Rect>;
   fn is_window_minimised(&self, handle: WindowHandle) -> bool;
   fn is_not_a_managed_window(&self, handle: &WindowHandle) -> bool;
   fn is_window_hidden(&self, handle: &WindowHandle) -> bool;

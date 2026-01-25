@@ -191,7 +191,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
 
   fn is_near_maximised(&self, placement: &WindowPlacement, handle: &WindowHandle, monitor_info: &MonitorInfo) -> bool {
     if placement.show_cmd == SW_MAXIMIZE.0 as u32 && self.margin() < MINIMUM_WINDOW_MARGIN {
-      debug!("{} is reported as maximised via show_cmd={}", handle, placement.show_cmd);
+      debug!("{} is reported as maximised and margins are disabled", handle);
       return true;
     }
 
@@ -307,8 +307,19 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
   }
 
   fn execute_window_resizing(&self, handle: WindowHandle, sizing: Sizing) {
-    let placement = WindowPlacement::new_from_sizing(sizing);
+    let placement = WindowPlacement::new_from_sizing(sizing.clone());
     self.windows_api.set_window_placement_and_force_repaint(handle, placement);
+
+    // If margins are disabled, attempt a Desktop Window Manager-aware correction
+    if self.margin() == 0
+      && let Some(rect) = self
+        .windows_api
+        .get_extended_frame_bounds(handle)
+        .or_else(|| self.windows_api.get_window_rect(handle))
+      && let Some(compensating_rect) = calculate_compensating_rect_if_required(&rect, &sizing)
+    {
+      self.windows_api.set_window_position(handle, compensating_rect);
+    }
   }
 
   /// Returns the window under the cursor, if any. If there are multiple windows under the cursor, the foreground window
@@ -506,6 +517,25 @@ fn log_actual_vs_expected(handle: &WindowHandle, sizing: &Sizing, rc: Rect) {
     rc.right - rc.left,
     rc.bottom - rc.top
   );
+}
+
+fn calculate_compensating_rect_if_required(rect: &Rect, sizing: &Sizing) -> Option<Rect> {
+  let requested_left = sizing.x;
+  let requested_right = sizing.x + sizing.width;
+  let left_inset = rect.left - requested_left;
+  let right_inset = requested_right - rect.right;
+
+  if left_inset > 0 || right_inset > 0 {
+    let compensating_left = requested_left - left_inset.max(0);
+    let compensating_right = requested_right + right_inset.max(0);
+    return Some(Rect::new(
+      compensating_left,
+      sizing.y,
+      compensating_right,
+      sizing.y + sizing.height,
+    ));
+  }
+  None
 }
 
 #[cfg(test)]
