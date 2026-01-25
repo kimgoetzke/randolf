@@ -1,10 +1,16 @@
 <p align="center">
   <img src="./assets/randolf.png" width="160" height="160" alt="Randolf"/>
 </p>
+<p align="center">
+  <img alt="Build and release" src="https://github.com/kimgoetzke/randolf/actions/workflows/release.yml/badge.svg"/>
+  <img alt="License" src="https://img.shields.io/github/license/kimgoetzke/randolf"/>
+  <img alt="Version" src="https://img.shields.io/github/v/release/kimgoetzke/randolf"/>
+  <img alt="Downloads" src="https://img.shields.io/github/downloads/kimgoetzke/randolf/total.svg"/>
+</p>
 
 # Meet Randolf
 
-Randolf is a window management utility for Windows 11 that allows you to:
+Randolf is a small window management utility for Windows 11 that allows you to:
 
 - `Win` + `\` - near-maximise the foreground window (maximise minus margin).
 - `Win` + `Shift` + `Left`/`Top`/`Right`/`Down` or `h`/`j`/`k`/`l` - near-snap (snap minus margin) the foreground window
@@ -29,8 +35,8 @@ are welcome.
 
 #### Additional features
 
-- Reset the window to its previous size and position (i.e. undo the near-maximisation) by pressing `Win` + `\` on a
-  near-maximised window will
+- Reset the window to its previous size and position (i.e. undo the near-maximisation) by pressing `Win` + `\` on an
+  already near-maximised window
 - Minimise the foreground window by pressing `Win` + `Shift` + `\`
 - Store and load configuration from `randolf.toml` in `%APPDATA%\kimgoetzke\randolf\`
 - Write application logs to `randolf.log` in `%LOCALAPPDATA%\kimgoetzke\randolf\logs\`
@@ -77,16 +83,16 @@ allow_moving_cursor_after_open_close_or_minimise = true
 
 [exclusion_settings]
 window_titles = [
-    "Program Manager",
-    "Windows Input Experience",
-    # And more...
+  "Program Manager",
+  "Windows Input Experience",
+  # And more...
 ]
 window_class_names = [
-    "Progman",
-    "WorkerW",
-    "Shell_TrayWnd",
-    "Shell_SecondaryTrayWnd",
-    # And more...
+  "Progman",
+  "WorkerW",
+  "Shell_TrayWnd",
+  "Shell_SecondaryTrayWnd",
+  # And more...
 ]
 ```
 
@@ -159,12 +165,12 @@ You can create a shortcut to the executable and place it in the startup folder (
 ### Why does this application even exist? What is its purpose?
 
 While [Komorebi](https://github.com/LGUG2Z/komorebi/) is the most feature-rich window tiling manager for Windows I know,
-it requires a commercial license (particularly problematic for me since I only use Windows for work), depends on a
+it requires a commercial licence (particularly problematic for me since I only use Windows for work), depends on a
 separate hotkey daemon, and enforces tiling for all windows unless explicitly excepted.
 
 Randolf was created as a simpler alternative that:
 
-- Does not require a paid commercial license
+- Does not require a paid commercial licence
 - Runs as a standalone application
 - Only includes a handful of essential window management features
 - Provides hotkeys to facilitate a clean desktop without forcing automatic tiling

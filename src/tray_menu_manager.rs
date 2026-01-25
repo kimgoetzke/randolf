@@ -232,7 +232,7 @@ impl TrayMenuManager {
   }
 }
 
-fn unlocked_config_provider(config_provider: &Arc<Mutex<ConfigurationProvider>>) -> MutexGuard<ConfigurationProvider> {
+fn unlocked_config_provider(config_provider: &Arc<Mutex<ConfigurationProvider>>) -> MutexGuard<'_, ConfigurationProvider> {
   config_provider.lock().expect(CONFIGURATION_PROVIDER_LOCK)
 }
 
@@ -257,6 +257,7 @@ fn build_menu(config_provider: &Arc<Mutex<ConfigurationProvider>>) -> MenuBuilde
     .submenu(
       "Set window margin to...",
       MenuBuilder::new()
+        .checkable("0 px", 0 == current_margin, Event::SetMargin(0))
         .checkable("10 px", 10 == current_margin, Event::SetMargin(10))
         .checkable("15 px", 15 == current_margin, Event::SetMargin(15))
         .checkable("20 px (default)", 20 == current_margin, Event::SetMargin(20))

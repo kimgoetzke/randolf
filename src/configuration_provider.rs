@@ -410,7 +410,7 @@ mod tests {
       }
     }
 
-    fn new_test(temp_path: PathBuf) -> Self {
+    pub fn new_test(temp_path: PathBuf) -> Self {
       let file_manager = FileManager::new_test(temp_path);
       Self::new_with(file_manager)
     }

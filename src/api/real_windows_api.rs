@@ -1,6 +1,7 @@
 use crate::api::WindowsApi;
 use crate::common::{Monitor, MonitorHandle, MonitorInfo, Monitors, Point, Rect, Window, WindowHandle, WindowPlacement};
 use crate::configuration_provider::ExclusionSettings;
+use std::ffi::c_void;
 use std::mem::MaybeUninit;
 use std::{mem, ptr};
 use windows::Win32::Foundation::{HWND, LPARAM, POINT, RECT, WPARAM};
@@ -13,12 +14,13 @@ use windows::Win32::UI::HiDpi::{GetDpiForMonitor, PROCESS_PER_MONITOR_DPI_AWARE,
 use windows::Win32::UI::Shell::{IVirtualDesktopManager, IsUserAnAdmin};
 use windows::Win32::UI::WindowsAndMessaging::{
   DispatchMessageA, EnumWindows, GetClassNameW, GetCursorPos, GetDesktopWindow, GetForegroundWindow, GetWindowInfo,
-  GetWindowPlacement, GetWindowTextW, IsIconic, IsWindowVisible, MSG, PM_REMOVE, PeekMessageA, PostMessageW, SW_HIDE,
-  SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOZORDER, SWP_SHOWWINDOW, SendMessageW,
-  SetCursorPos, SetForegroundWindow, SetWindowPlacement, SetWindowPos, ShowWindow, TranslateMessage, WINDOWINFO,
-  WINDOWPLACEMENT, WM_CLOSE, WM_PAINT,
+  GetWindowPlacement, GetWindowRect, GetWindowTextW, IsIconic, IsWindowVisible, MSG, PM_REMOVE, PeekMessageA, PostMessageW,
+  SW_HIDE, SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOZORDER, SWP_SHOWWINDOW,
+  SendMessageW, SetCursorPos, SetForegroundWindow, SetWindowPlacement, SetWindowPos, ShowWindow, TranslateMessage,
+  WINDOWINFO, WINDOWPLACEMENT, WM_CLOSE, WM_PAINT,
 };
 use windows::core::BOOL;
+use windows::core::HRESULT;
 
 #[derive(Clone)]
 pub struct RealWindowsApi {
@@ -146,6 +148,34 @@ impl WindowsApi for RealWindowsApi {
     let mut class_name: [u16; 256] = [0; 256];
     let len = unsafe { GetClassNameW(handle.as_hwnd(), &mut class_name) };
     String::from_utf16_lossy(&class_name[..len as usize])
+  }
+
+  fn get_window_rect(&self, handle: WindowHandle) -> Option<Rect> {
+    let mut rc: RECT = unsafe { mem::zeroed() };
+    unsafe {
+      if GetWindowRect(handle.as_hwnd(), &mut rc).is_err() {
+        warn!("Failed to get window rect for window {handle}");
+        return None;
+      }
+    }
+    Some(Rect::from(rc))
+  }
+
+  fn get_extended_frame_bounds(&self, handle: WindowHandle) -> Option<Rect> {
+    unsafe {
+      let mut rc: RECT = mem::zeroed();
+      let hr = DwmGetWindowAttribute(
+        handle.as_hwnd(),
+        9u32,
+        &mut rc as *mut RECT as *mut c_void,
+        size_of::<RECT>() as u32,
+      );
+      if hr.0 != 0 {
+        warn!("DwmGetWindowAttribute failed for {handle}: HRESULT={}", hr.0);
+        return None;
+      }
+      Some(Rect::from(rc))
+    }
   }
 
   fn is_window_minimised(&self, handle: WindowHandle) -> bool {
@@ -599,6 +629,11 @@ fn get_persistent_device_name(_handle: &MonitorHandle, info: &MONITORINFOEXW) ->
   // );
 
   info.szDevice
+}
+
+#[link(name = "dwmapi")]
+unsafe extern "system" {
+  fn DwmGetWindowAttribute(h_wnd: HWND, dw_attribute: u32, pv_attribute: *mut c_void, cb_attribute: u32) -> HRESULT;
 }
 
 pub fn do_process_windows_messages() {
