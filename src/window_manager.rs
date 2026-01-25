@@ -11,7 +11,8 @@ use std::sync::{Arc, Mutex};
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
 use windows::Win32::UI::WindowsAndMessaging::SW_MAXIMIZE;
 
-const TOLERANCE_IN_PX: i32 = 2;
+const REGULAR_TOLERANCE_IN_PX: i32 = 2;
+const DWM_TOLERANCE_IN_PX: i32 = 8;
 
 pub struct WindowManager<T: WindowsApi> {
   configuration_provider: Arc<Mutex<ConfigurationProvider>>,
@@ -89,7 +90,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
       Direction::Down => Sizing::bottom_half_of_screen(monitor_info.work_area, self.margin()),
     };
 
-    match is_of_expected_size(handle, &placement, &sizing) {
+    match self.is_of_expected_size(handle, &placement, &sizing) {
       true => {
         let all_monitors = self.windows_api.get_all_monitors();
         let this_monitor = self.windows_api.get_monitor_handle_for_window_handle(handle);
@@ -203,17 +204,17 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     let sizing = Sizing::new(expected_x, expected_y, expected_width, expected_height);
 
     if let Some(rect) = self.windows_api.get_window_rect(*handle) {
-      let result = (rect.left - expected_x).abs() <= TOLERANCE_IN_PX
-        && (rect.top - expected_y).abs() <= TOLERANCE_IN_PX
-        && (rect.right - rect.left - expected_width).abs() <= TOLERANCE_IN_PX
-        && (rect.bottom - rect.top - expected_height).abs() <= TOLERANCE_IN_PX;
+      let result = (rect.left - expected_x).abs() <= REGULAR_TOLERANCE_IN_PX
+        && (rect.top - expected_y).abs() <= REGULAR_TOLERANCE_IN_PX
+        && (rect.right - rect.left - expected_width).abs() <= REGULAR_TOLERANCE_IN_PX
+        && (rect.bottom - rect.top - expected_height).abs() <= REGULAR_TOLERANCE_IN_PX;
 
       log_actual_vs_expected(handle, &sizing, rect);
       debug!(
         "{} {} near-maximised (tolerance: {})",
         handle,
         if result { "is currently" } else { "is currently NOT" },
-        TOLERANCE_IN_PX
+        REGULAR_TOLERANCE_IN_PX
       );
 
       result
@@ -466,6 +467,54 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
       info!("No window found to move focus to after closing the current window");
     }
   }
+
+  /// Determines whether the given window placement matches the expected sizing. If margins are disabled, allows a
+  /// small tolerance when comparing against the DWM extended frame bounds to account for shadows/rounded corners added
+  /// by the OS.
+  ///
+  /// Note: This extra check may be useful in all cases, but I don't understand the Windows API well enough yet, and
+  /// I've never had this problem before despite my heavy use of this application.
+  fn is_of_expected_size(&self, handle: WindowHandle, placement: &WindowPlacement, sizing: &Sizing) -> bool {
+    let rect = placement.normal_position;
+    let is_expected_size = rect.left == sizing.x
+      && rect.top == sizing.y
+      && rect.right - rect.left == sizing.width
+      && rect.bottom - rect.top == sizing.height;
+    if is_expected_size {
+      log_actual_vs_expected(&handle, sizing, rect);
+      debug!("{} is currently of expected size (exact placement match)", handle);
+      return true;
+    }
+
+    if self.margin() == 0
+      && let Some(compensating_rect) = self
+        .windows_api
+        .get_extended_frame_bounds(handle)
+        .or_else(|| self.windows_api.get_window_rect(handle))
+    {
+      let is_compensating_match = (compensating_rect.left - sizing.x).abs() <= DWM_TOLERANCE_IN_PX
+        && (compensating_rect.top - sizing.y).abs() <= DWM_TOLERANCE_IN_PX
+        && (compensating_rect.right - compensating_rect.left - sizing.width).abs() <= DWM_TOLERANCE_IN_PX
+        && (compensating_rect.bottom - compensating_rect.top - sizing.height).abs() <= DWM_TOLERANCE_IN_PX;
+      log_actual_vs_expected(&handle, sizing, compensating_rect);
+      debug!(
+        "{} {} of expected size (dwm_tolerance: {})",
+        handle,
+        if is_compensating_match {
+          "is currently"
+        } else {
+          "is currently NOT"
+        },
+        DWM_TOLERANCE_IN_PX
+      );
+
+      return is_compensating_match;
+    }
+
+    log_actual_vs_expected(&handle, sizing, rect);
+    debug!("{} is currently NOT of expected size (strict placement comparison)", handle,);
+    false
+  }
 }
 
 fn add_or_update_previous_placement(
@@ -484,24 +533,6 @@ fn add_or_update_previous_placement(
 
   known_windows.insert(window_id.clone(), placement);
   trace!("Adding/updating previous placement for window {}", handle);
-}
-
-fn is_of_expected_size(handle: WindowHandle, placement: &WindowPlacement, sizing: &Sizing) -> bool {
-  let rect = placement.normal_position;
-  let result = rect.left == sizing.x
-    && rect.top == sizing.y
-    && rect.right - rect.left == sizing.width
-    && rect.bottom - rect.top == sizing.height;
-
-  log_actual_vs_expected(&handle, sizing, rect);
-  debug!(
-    "{} {} of expected size (tolerance: {})",
-    handle,
-    if result { "is currently" } else { "is currently NOT" },
-    TOLERANCE_IN_PX
-  );
-
-  result
 }
 
 fn log_actual_vs_expected(handle: &WindowHandle, sizing: &Sizing, rc: Rect) {
@@ -543,8 +574,10 @@ mod tests {
   use crate::api::{MockWindowsApi, WindowsApi};
   use crate::common::{Direction, MonitorHandle, Point, Rect, Sizing, WindowHandle, WindowPlacement};
   use crate::configuration_provider::ConfigurationProvider;
-  use crate::window_manager::{WindowManager, is_of_expected_size};
+  use crate::utils::create_temp_directory;
+  use crate::window_manager::{DWM_TOLERANCE_IN_PX, WindowManager};
   use crate::workspace_manager::WorkspaceManager;
+  use std::path::PathBuf;
   use std::sync::{Arc, Mutex};
 
   impl WindowManager<MockWindowsApi> {
@@ -558,6 +591,25 @@ mod tests {
         windows_api: api,
       }
     }
+
+    pub fn new_test(api: MockWindowsApi, config_path: PathBuf) -> Self {
+      WindowManager {
+        configuration_provider: Arc::new(Mutex::new(ConfigurationProvider::new_test(config_path))),
+        known_windows: Default::default(),
+        allow_moving_cursor_after_close_or_minimise: true,
+        workspace_manager: WorkspaceManager::default(),
+        virtual_desktop_manager: None,
+        windows_api: api,
+      }
+    }
+  }
+
+  fn with_margin_set_to(margin: i32, manager: &mut WindowManager<MockWindowsApi>) {
+    manager
+      .configuration_provider
+      .lock()
+      .unwrap()
+      .set_i32(crate::configuration_provider::WINDOW_MARGIN, margin);
   }
 
   #[test]
@@ -565,10 +617,11 @@ mod tests {
     let handle = WindowHandle::new(1);
     let placement = WindowPlacement::new_from_sizing(Sizing::new(0, 0, 100, 100));
     let sizing = Sizing::new(0, 0, 100, 100);
-    assert!(is_of_expected_size(handle, &placement, &sizing));
+    let manager = WindowManager::default(MockWindowsApi);
+    assert!(manager.is_of_expected_size(handle, &placement, &sizing));
 
     let placement = WindowPlacement::new_from_sizing(Sizing::new(1, 0, 101, 100));
-    assert!(!is_of_expected_size(handle, &placement, &sizing));
+    assert!(!manager.is_of_expected_size(handle, &placement, &sizing));
   }
 
   #[test]
@@ -1003,7 +1056,6 @@ mod tests {
     let actual_placement = manager.windows_api.get_window_placement(window_handle);
     let expected_sizing = Sizing::near_maximised(monitor_info.work_area, margin);
     let expected_placement = WindowPlacement::new_from_sizing(expected_sizing);
-
     assert!(actual_placement.is_some());
     assert_eq!(actual_placement.clone().unwrap(), expected_placement);
     assert_ne!(actual_placement.unwrap(), initial_placement);
@@ -1023,11 +1075,7 @@ mod tests {
       .windows_api
       .get_monitor_info_for_monitor(monitor_handle)
       .expect("Failed to get monitor info");
-    manager
-      .configuration_provider
-      .lock()
-      .unwrap()
-      .set_i32(crate::configuration_provider::WINDOW_MARGIN, 0);
+    with_margin_set_to(0, &mut manager);
 
     manager.near_maximise_or_restore();
 
@@ -1049,5 +1097,82 @@ mod tests {
       current_placement, initial_placement,
       "Window should be restored to its initial placement"
     );
+  }
+
+  #[test]
+  fn is_of_expected_size_returns_true_when_same_size() {
+    let directory = create_temp_directory();
+    let path = directory.path().join("file.toml");
+    let mut manager = WindowManager::new_test(MockWindowsApi, path);
+    let window_handle = WindowHandle::new(1);
+    let rect = Rect::new(0, 0, 1280, 720);
+    let placement = WindowPlacement::new_from_rect(rect);
+    let sizing = rect.into();
+    with_margin_set_to(10, &mut manager);
+
+    assert!(manager.is_of_expected_size(window_handle, &placement, &sizing));
+  }
+
+  #[test]
+  fn is_of_expected_size_returns_false_when_different_size() {
+    let directory = create_temp_directory();
+    let path = directory.path().join("file.toml");
+    let mut manager = WindowManager::new_test(MockWindowsApi, path);
+    let window_handle = WindowHandle::new(1);
+    let rect = Rect::new(0, 0, 1280, 720);
+    let placement = WindowPlacement::new_from_rect(rect);
+    let mut sizing: Sizing = rect.into();
+    sizing.x += 5; // Introducing a discrepancy here
+    with_margin_set_to(10, &mut manager);
+
+    assert!(!manager.is_of_expected_size(window_handle, &placement, &sizing));
+  }
+
+  #[test]
+  fn is_of_expected_size_returns_true_when_difference_is_within_dwm_tolerance() {
+    let directory = create_temp_directory();
+    let path = directory.path().join("file.toml");
+    let window_handle = WindowHandle::new(1);
+    let rect = Rect::new(0, 0, 1280, 720);
+    let placement = WindowPlacement::new_from_rect(rect);
+    let expected_sizing = Sizing::new(0, 0, 640, 720);
+    // Windows API returns a different sizing that is within the tolerance for a no-margin configuration
+    let api_sizing = Sizing::new(DWM_TOLERANCE_IN_PX - 1, DWM_TOLERANCE_IN_PX - 1, 640, 720);
+    MockWindowsApi::add_or_update_window(
+      window_handle,
+      "Test Window".to_string(),
+      api_sizing.clone(),
+      false,
+      false,
+      true,
+    );
+    let mut manager = WindowManager::new_test(MockWindowsApi, path);
+    with_margin_set_to(0, &mut manager);
+
+    assert!(manager.is_of_expected_size(window_handle, &placement, &expected_sizing));
+  }
+
+  #[test]
+  fn is_of_expected_size_returns_false_when_difference_is_outside_dwm_tolerance() {
+    let directory = create_temp_directory();
+    let path = directory.path().join("file.toml");
+    let window_handle = WindowHandle::new(1);
+    let rect = Rect::new(0, 0, 1280, 720);
+    let placement = WindowPlacement::new_from_rect(rect);
+    let expected_sizing = Sizing::new(0, 0, 640, 720);
+    // Windows API returns a different sizing that is outside the tolerance for a no-margin configuration
+    let api_sizing = Sizing::new(15, 0, 640, 720);
+    MockWindowsApi::add_or_update_window(
+      window_handle,
+      "Test Window".to_string(),
+      api_sizing.clone(),
+      false,
+      false,
+      true,
+    );
+    let mut manager = WindowManager::new_test(MockWindowsApi, path);
+    with_margin_set_to(0, &mut manager);
+
+    assert!(!manager.is_of_expected_size(window_handle, &placement, &expected_sizing));
   }
 }
