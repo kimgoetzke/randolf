@@ -165,12 +165,12 @@ You can create a shortcut to the executable and place it in the startup folder (
 ### Why does this application even exist? What is its purpose?
 
 While [Komorebi](https://github.com/LGUG2Z/komorebi/) is the most feature-rich window tiling manager for Windows I know,
-it requires a commercial license (particularly problematic for me since I only use Windows for work), depends on a
+it requires a commercial licence (particularly problematic for me since I only use Windows for work), depends on a
 separate hotkey daemon, and enforces tiling for all windows unless explicitly excepted.
 
 Randolf was created as a simpler alternative that:
 
-- Does not require a paid commercial license
+- Does not require a paid commercial licence
 - Runs as a standalone application
 - Only includes a handful of essential window management features
 - Provides hotkeys to facilitate a clean desktop without forcing automatic tiling
