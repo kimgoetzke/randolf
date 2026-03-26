@@ -4,7 +4,7 @@ use crate::configuration_provider::{
   ADDITIONAL_WORKSPACE_COUNT, ALLOW_MOVING_CURSOR_AFTER_OPEN_CLOSE_OR_MINIMISE, ALLOW_SELECTING_SAME_CENTER_WINDOWS,
   ConfigurationProvider, WINDOW_MARGIN,
 };
-use crate::utils::{CONFIGURATION_PROVIDER_LOCK, MINIMUM_WINDOW_MARGIN};
+use crate::utils::{CONFIGURATION_PROVIDER_LOCK, MINIMUM_WINDOW_DIMENSION, MINIMUM_WINDOW_MARGIN};
 use crate::workspace_manager::WorkspaceManager;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -110,6 +110,29 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
         self.windows_api.set_cursor_position(&cursor_target_point);
       }
     }
+  }
+
+  pub fn resize_window(&mut self, direction: Direction) {
+    let (handle, placement, _monitor_info) = match self.get_window_and_monitor_info() {
+      Some(value) => value,
+      None => return,
+    };
+    let current_sizing = Sizing::from(placement.normal_position);
+    let new_sizing = current_sizing.halved(direction, self.margin());
+    debug!(
+      "Expected size of {}: ({},{})x({},{})",
+      handle, new_sizing.x, new_sizing.y, new_sizing.width, new_sizing.height
+    );
+    if new_sizing.width < MINIMUM_WINDOW_DIMENSION || new_sizing.height < MINIMUM_WINDOW_DIMENSION {
+      debug!(
+        "Not resizing {} because resulting size ({}x{}) is below minimum ({})",
+        handle, new_sizing.width, new_sizing.height, MINIMUM_WINDOW_DIMENSION
+      );
+      return;
+    }
+    let cursor_target_point = Point::from_center_of_sizing(&new_sizing);
+    self.execute_window_resizing(handle, new_sizing);
+    self.windows_api.set_cursor_position(&cursor_target_point);
   }
 
   pub fn move_cursor(&mut self, direction: Direction) {
@@ -1174,5 +1197,127 @@ mod tests {
     with_margin_set_to(0, &mut manager);
 
     assert!(!manager.is_of_expected_size(window_handle, &placement, &expected_sizing));
+  }
+
+  #[test]
+  fn resize_window_halves_window_in_direction() {
+    let monitor_handle = MonitorHandle::from(1);
+    let window_handle = WindowHandle::new(1);
+    let work_area = Rect::new(0, 0, 2000, 1000);
+    let sizing = Sizing::near_maximised(work_area, 20);
+    MockWindowsApi::add_or_update_window(window_handle, "Test Window".to_string(), sizing, false, false, true);
+    MockWindowsApi::add_monitor(monitor_handle, work_area, true);
+    MockWindowsApi::place_window(window_handle, monitor_handle);
+    let mut manager = WindowManager::default(MockWindowsApi);
+
+    manager.resize_window(Direction::Left);
+
+    let actual_placement = manager.windows_api.get_window_placement(window_handle);
+    let expected_sizing = Sizing::left_half_of_screen(work_area, 20);
+    let expected_placement = WindowPlacement::new_from_sizing(expected_sizing.clone());
+    assert!(actual_placement.is_some());
+    assert_eq!(actual_placement.unwrap(), expected_placement);
+    assert_eq!(
+      manager.windows_api.get_cursor_position(),
+      Point::from_center_of_sizing(&expected_sizing)
+    );
+  }
+
+  #[test]
+  fn resize_window_halves_left_half_left_into_leftmost_quarter() {
+    let monitor_handle = MonitorHandle::from(1);
+    let window_handle = WindowHandle::new(1);
+    let work_area = Rect::new(0, 0, 2000, 1000);
+    let left_half = Sizing::left_half_of_screen(work_area, 20);
+    MockWindowsApi::add_or_update_window(
+      window_handle,
+      "Test Window".to_string(),
+      left_half.clone(),
+      false,
+      false,
+      true,
+    );
+    MockWindowsApi::add_monitor(monitor_handle, work_area, true);
+    MockWindowsApi::place_window(window_handle, monitor_handle);
+    let mut manager = WindowManager::default(MockWindowsApi);
+
+    manager.resize_window(Direction::Left);
+
+    let actual_placement = manager.windows_api.get_window_placement(window_handle);
+    let expected_sizing = left_half.halved(Direction::Left, 20);
+    let expected_placement = WindowPlacement::new_from_sizing(expected_sizing.clone());
+    assert!(actual_placement.is_some());
+    assert_eq!(actual_placement.unwrap(), expected_placement);
+    assert_eq!(
+      manager.windows_api.get_cursor_position(),
+      Point::from_center_of_sizing(&expected_sizing)
+    );
+  }
+
+  #[test]
+  fn resize_window_halves_left_half_right_into_second_column() {
+    let monitor_handle = MonitorHandle::from(1);
+    let window_handle = WindowHandle::new(1);
+    let work_area = Rect::new(0, 0, 2000, 1000);
+    let left_half = Sizing::left_half_of_screen(work_area, 20);
+    MockWindowsApi::add_or_update_window(
+      window_handle,
+      "Test Window".to_string(),
+      left_half.clone(),
+      false,
+      false,
+      true,
+    );
+    MockWindowsApi::add_monitor(monitor_handle, work_area, true);
+    MockWindowsApi::place_window(window_handle, monitor_handle);
+    let mut manager = WindowManager::default(MockWindowsApi);
+
+    manager.resize_window(Direction::Right);
+
+    let actual_placement = manager.windows_api.get_window_placement(window_handle);
+    let expected_sizing = left_half.halved(Direction::Right, 20);
+    let expected_placement = WindowPlacement::new_from_sizing(expected_sizing.clone());
+    assert!(actual_placement.is_some());
+    assert_eq!(actual_placement.unwrap(), expected_placement);
+    assert_eq!(
+      manager.windows_api.get_cursor_position(),
+      Point::from_center_of_sizing(&expected_sizing)
+    );
+  }
+
+  #[test]
+  fn resize_window_does_nothing_when_below_minimum_dimension() {
+    let monitor_handle = MonitorHandle::from(1);
+    let window_handle = WindowHandle::new(1);
+    let small_sizing = Sizing::new(20, 20, 200, 200);
+    MockWindowsApi::add_or_update_window(
+      window_handle,
+      "Test Window".to_string(),
+      small_sizing.clone(),
+      false,
+      false,
+      true,
+    );
+    MockWindowsApi::add_monitor(monitor_handle, Rect::new(0, 0, 2000, 1000), true);
+    MockWindowsApi::place_window(window_handle, monitor_handle);
+    let initial_cursor = Point::default();
+    MockWindowsApi::set_cursor_position(initial_cursor);
+    let mut manager = WindowManager::default(MockWindowsApi);
+
+    manager.resize_window(Direction::Left);
+
+    let actual_placement = manager.windows_api.get_window_placement(window_handle);
+    let expected_placement = WindowPlacement::new_from_sizing(small_sizing);
+    assert!(actual_placement.is_some());
+    assert_eq!(
+      actual_placement.unwrap(),
+      expected_placement,
+      "Window should not have been resized"
+    );
+    assert_eq!(
+      manager.windows_api.get_cursor_position(),
+      initial_cursor,
+      "Cursor should not have moved"
+    );
   }
 }

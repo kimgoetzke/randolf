@@ -11,6 +11,7 @@ win-hotkeys = "0.5.1"
 log = "0.4.29"
 trayicon = "0.4.0"
 simplelog = "0.12.2"
+time = "0.3.47" # Pin this transitive dependency to deal with CVE-2026-25727
 crossbeam-channel = "0.5.15"
 serde = { version = "1.0.228", features = ["derive"] }
 toml = "0.9.11"

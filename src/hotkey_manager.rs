@@ -10,6 +10,7 @@ use win_hotkeys::{InterruptHandle, VKey};
 const BACKSLASH: u32 = 0xDC;
 const MAIN_MOD: VKey = VKey::LWin;
 const SECONDARY_MOD: VKey = VKey::Shift;
+const TERTIARY_MOD: VKey = VKey::Control;
 
 pub struct HotkeyManager {
   hkm: win_hotkeys::HotkeyManager<Command>,
@@ -46,6 +47,16 @@ impl HotkeyManager {
     hotkey_manager.register_move_window_hotkey(Direction::Down, VKey::J);
     hotkey_manager.register_move_window_hotkey(Direction::Up, VKey::K);
     hotkey_manager.register_move_window_hotkey(Direction::Right, VKey::L);
+
+    // Resize window
+    hotkey_manager.register_resize_window_hotkey(Direction::Left, VKey::Left);
+    hotkey_manager.register_resize_window_hotkey(Direction::Down, VKey::Down);
+    hotkey_manager.register_resize_window_hotkey(Direction::Up, VKey::Up);
+    hotkey_manager.register_resize_window_hotkey(Direction::Right, VKey::Right);
+    hotkey_manager.register_resize_window_hotkey(Direction::Left, VKey::H);
+    hotkey_manager.register_resize_window_hotkey(Direction::Down, VKey::J);
+    hotkey_manager.register_resize_window_hotkey(Direction::Up, VKey::K);
+    hotkey_manager.register_resize_window_hotkey(Direction::Right, VKey::L);
 
     // Other window management
     hotkey_manager.register_close_window_hotkey(VKey::Q);
@@ -212,6 +223,15 @@ impl HotkeyManager {
       .hkm
       .register_hotkey(key, &[MAIN_MOD, VKey::Shift], move || Command::MoveWindow(direction))
       .unwrap_or_else(|err| panic!("Failed to register hotkey for {:?}: {err}", Command::MoveWindow(direction)));
+  }
+
+  fn register_resize_window_hotkey(&mut self, direction: Direction, key: VKey) {
+    self
+      .hkm
+      .register_hotkey(key, &[MAIN_MOD, SECONDARY_MOD, TERTIARY_MOD], move || {
+        Command::ResizeWindow(direction)
+      })
+      .unwrap_or_else(|err| panic!("Failed to register hotkey for {:?}: {err}", Command::ResizeWindow(direction)));
   }
 }
 
