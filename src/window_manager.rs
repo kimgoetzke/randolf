@@ -119,6 +119,10 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     };
     let current_sizing = Sizing::from(placement.normal_position);
     let new_sizing = current_sizing.halved(direction, self.margin());
+    debug!(
+      "Expected size of {}: ({},{})x({},{})",
+      handle, new_sizing.x, new_sizing.y, new_sizing.width, new_sizing.height
+    );
     if new_sizing.width < MINIMUM_WINDOW_DIMENSION || new_sizing.height < MINIMUM_WINDOW_DIMENSION {
       debug!(
         "Not resizing {} because resulting size ({}x{}) is below minimum ({})",
