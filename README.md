@@ -13,11 +13,11 @@
 Randolf is a small window management utility for Windows 11 that allows you to:
 
 - `Win` + `\` - near-maximise the foreground window (maximise minus margin).
-- `Win` + `Shift` + `Left`/`Top`/`Right`/`Down` or `h`/`j`/`k`/`l` - near-snap (snap minus margin) the foreground window
+- `Win` + `Shift` + `Left`/`Up`/`Right`/`Down` or `h`/`j`/`k`/`l` - near-snap (snap minus margin) the foreground window
   to the left, top, right, or bottom of the screen.
-- `Win` + `Shift` + `Ctrl` + `Left`/`Top`/`Right`/`Down` or `h`/`j`/`k`/`l` - halve the foreground window's size in
-  the given direction, keeping the arrow-key side fixed and reducing the opposite side.
-- `Win` + `Left`/`Top`/`Right`/`Down` - move the cursor to the closest window in the direction of the arrow key (and
+- `Win` + `Shift` + `Ctrl` + `Left`/`Up`/`Right`/`Down` or `h`/`j`/`k`/`l` - step-resize the foreground window in the
+  given direction.
+- `Win` + `Left`/`Up`/`Right`/`Down` - move the cursor to the closest window in the direction of the arrow key (and
   activate the window) or to the center of the window-free monitor, if it exists.
 - `Win` + `Shift` + `q` - close the foreground window.
 - `Win` + `1`/`2`/... - switch between workspaces.

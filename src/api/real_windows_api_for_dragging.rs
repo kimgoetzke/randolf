@@ -26,7 +26,17 @@ const IGNORED_CLASS_NAMES: [&str; 6] = [
   "SysListView32",
 ];
 
-const IGNORED_WINDOW_TITLES: [&str; 3] = ["Program Manager", "Windows Input Experience", "Windows Shell Experience Host"];
+const IGNORED_WINDOW_TITLES: [&str; 9] = [
+  "Program Manager",
+  "Settings",
+  "Windows Input Experience",
+  "Windows Shell Experience Host",
+  "Realtek Audio Console",
+  "ZPToolBarParentWnd",
+  "Annotation MainToolbar",
+  "Annotation Entry Point",
+  "Annotation - Zoom",
+];
 
 /// This struct registers a keyboard hook that, if active for [`KEY_PRESS_DELAY_IN_MS`], will install a mouse
 /// hook that allows the user to drag and resize windows by holding down the Windows key and clicking the left or right
