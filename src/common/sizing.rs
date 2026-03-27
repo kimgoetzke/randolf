@@ -61,6 +61,40 @@ impl Sizing {
     }
   }
 
+  /// Returns a new [`Sizing`] that is 75% of the near-maximised size in the dimension corresponding to the given
+  /// direction. The edge on the arrow-key side is anchored to the near-maximised edge; a gap of `margin / 2` is
+  /// subtracted at the split edge only (matching [`halved`](Self::halved) exactly).
+  pub fn three_quarter_near_maximised(work_area: Rect, direction: Direction, margin: i32) -> Self {
+    let near_max = Self::near_maximised(work_area, margin);
+    let half_margin = margin / 2;
+    match direction {
+      Direction::Left => Self {
+        x: near_max.x,
+        y: near_max.y,
+        width: near_max.width * 3 / 4 - half_margin,
+        height: near_max.height,
+      },
+      Direction::Right => Self {
+        x: near_max.x + near_max.width / 4 + half_margin,
+        y: near_max.y,
+        width: near_max.width * 3 / 4 - half_margin,
+        height: near_max.height,
+      },
+      Direction::Up => Self {
+        x: near_max.x,
+        y: near_max.y,
+        width: near_max.width,
+        height: near_max.height * 3 / 4 - half_margin,
+      },
+      Direction::Down => Self {
+        x: near_max.x,
+        y: near_max.y + near_max.height / 4 + half_margin,
+        width: near_max.width,
+        height: near_max.height * 3 / 4 - half_margin,
+      },
+    }
+  }
+
   /// Returns a new [`Sizing`] that is half the size of the current one in the dimension corresponding to the given
   /// direction, keeping the edge on the arrow-key side fixed and contracting the opposite edge inward. A gap of
   /// `margin / 2` is subtracted from each side of the split point, resulting in a total gap of `margin` between the
@@ -171,6 +205,92 @@ mod tests {
     assert_eq!(sizing.y, 10);
     assert_eq!(sizing.width, 80);
     assert_eq!(sizing.height, 180);
+  }
+
+  #[test]
+  fn three_quarter_near_maximised_left_keeps_left_edge_and_returns_three_quarter_width() {
+    let work_area = Rect::new(0, 0, 100, 200);
+    let result = Sizing::three_quarter_near_maximised(work_area, Direction::Left, 10);
+
+    assert_eq!(result.x, 10);
+    assert_eq!(result.y, 10);
+    assert_eq!(result.width, 55);
+    assert_eq!(result.height, 180);
+  }
+
+  #[test]
+  fn three_quarter_near_maximised_right_keeps_right_edge_and_returns_three_quarter_width() {
+    let work_area = Rect::new(0, 0, 100, 200);
+    let result = Sizing::three_quarter_near_maximised(work_area, Direction::Right, 10);
+
+    assert_eq!(result.x, 35);
+    assert_eq!(result.y, 10);
+    assert_eq!(result.width, 55);
+    assert_eq!(result.height, 180);
+  }
+
+  #[test]
+  fn three_quarter_near_maximised_up_keeps_top_edge_and_returns_three_quarter_height() {
+    let work_area = Rect::new(0, 0, 100, 200);
+    let result = Sizing::three_quarter_near_maximised(work_area, Direction::Up, 10);
+
+    assert_eq!(result.x, 10);
+    assert_eq!(result.y, 10);
+    assert_eq!(result.width, 80);
+    assert_eq!(result.height, 130);
+  }
+
+  #[test]
+  fn three_quarter_near_maximised_down_keeps_bottom_edge_and_returns_three_quarter_height() {
+    let work_area = Rect::new(0, 0, 100, 200);
+    let result = Sizing::three_quarter_near_maximised(work_area, Direction::Down, 10);
+
+    assert_eq!(result.x, 10);
+    assert_eq!(result.y, 60);
+    assert_eq!(result.width, 80);
+    assert_eq!(result.height, 130);
+  }
+
+  #[test]
+  fn three_quarter_near_maximised_with_zero_margin_produces_exact_three_quarters() {
+    let work_area = Rect::new(0, 0, 100, 200);
+
+    let left = Sizing::three_quarter_near_maximised(work_area, Direction::Left, 0);
+    assert_eq!(left, Sizing::new(0, 0, 75, 200));
+
+    let right = Sizing::three_quarter_near_maximised(work_area, Direction::Right, 0);
+    assert_eq!(right, Sizing::new(25, 0, 75, 200));
+
+    let up = Sizing::three_quarter_near_maximised(work_area, Direction::Up, 0);
+    assert_eq!(up, Sizing::new(0, 0, 100, 150));
+
+    let down = Sizing::three_quarter_near_maximised(work_area, Direction::Down, 0);
+    assert_eq!(down, Sizing::new(0, 50, 100, 150));
+  }
+
+  #[test]
+  fn three_quarter_near_maximised_deducts_half_margin_at_split_edge() {
+    let work_area = Rect::new(0, 0, 100, 200);
+    let margin = 10;
+    let half_margin = margin / 2;
+    let near_max = Sizing::near_maximised(work_area, margin);
+
+    let left = Sizing::three_quarter_near_maximised(work_area, Direction::Left, margin);
+    let right = Sizing::three_quarter_near_maximised(work_area, Direction::Right, margin);
+    let up = Sizing::three_quarter_near_maximised(work_area, Direction::Up, margin);
+    let down = Sizing::three_quarter_near_maximised(work_area, Direction::Down, margin);
+
+    // Left: split (right) edge is half_margin before the 3/4 split point
+    assert_eq!(near_max.x + near_max.width * 3 / 4 - (left.x + left.width), half_margin);
+
+    // Right: split (left) edge is half_margin after the 1/4 split point
+    assert_eq!(right.x - (near_max.x + near_max.width / 4), half_margin);
+
+    // Up: split (bottom) edge is half_margin before the 3/4 split point
+    assert_eq!(near_max.y + near_max.height * 3 / 4 - (up.y + up.height), half_margin);
+
+    // Down: split (top) edge is half_margin after the 1/4 split point
+    assert_eq!(down.y - (near_max.y + near_max.height / 4), half_margin);
   }
 
   #[test]
