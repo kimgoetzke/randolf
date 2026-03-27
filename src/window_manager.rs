@@ -1589,7 +1589,11 @@ mod tests {
 
     manager.resize_window(Direction::Left);
 
-    assert_eq!(manager.windows_api.get_cursor_position(), initial_cursor, "Cursor should not have moved");
+    assert_eq!(
+      manager.windows_api.get_cursor_position(),
+      initial_cursor,
+      "Cursor should not have moved"
+    );
   }
 
   #[test]
@@ -1615,7 +1619,11 @@ mod tests {
       WindowPlacement::new_from_sizing(sizing),
       "Window should not have been resized"
     );
-    assert_eq!(manager.windows_api.get_cursor_position(), initial_cursor, "Cursor should not have moved");
+    assert_eq!(
+      manager.windows_api.get_cursor_position(),
+      initial_cursor,
+      "Cursor should not have moved"
+    );
   }
 
   #[test]
@@ -1643,7 +1651,11 @@ mod tests {
       WindowPlacement::new_from_sizing(sizing),
       "Window should not have been resized"
     );
-    assert_eq!(manager.windows_api.get_cursor_position(), initial_cursor, "Cursor should not have moved");
+    assert_eq!(
+      manager.windows_api.get_cursor_position(),
+      initial_cursor,
+      "Cursor should not have moved"
+    );
   }
 
   #[test]
@@ -1662,8 +1674,14 @@ mod tests {
     let expected_sizing = Sizing::three_quarter_near_maximised(work_area, Direction::Right, 20);
     let actual_placement = manager.windows_api.get_window_placement(window_handle);
     assert!(actual_placement.is_some());
-    assert_eq!(actual_placement.unwrap(), WindowPlacement::new_from_sizing(expected_sizing.clone()));
-    assert_eq!(manager.windows_api.get_cursor_position(), Point::from_center_of_sizing(&expected_sizing));
+    assert_eq!(
+      actual_placement.unwrap(),
+      WindowPlacement::new_from_sizing(expected_sizing.clone())
+    );
+    assert_eq!(
+      manager.windows_api.get_cursor_position(),
+      Point::from_center_of_sizing(&expected_sizing)
+    );
   }
 
   #[test]
@@ -1682,8 +1700,14 @@ mod tests {
     let expected_sizing = Sizing::three_quarter_near_maximised(work_area, Direction::Up, 20);
     let actual_placement = manager.windows_api.get_window_placement(window_handle);
     assert!(actual_placement.is_some());
-    assert_eq!(actual_placement.unwrap(), WindowPlacement::new_from_sizing(expected_sizing.clone()));
-    assert_eq!(manager.windows_api.get_cursor_position(), Point::from_center_of_sizing(&expected_sizing));
+    assert_eq!(
+      actual_placement.unwrap(),
+      WindowPlacement::new_from_sizing(expected_sizing.clone())
+    );
+    assert_eq!(
+      manager.windows_api.get_cursor_position(),
+      Point::from_center_of_sizing(&expected_sizing)
+    );
   }
 
   #[test]
@@ -1702,8 +1726,14 @@ mod tests {
     let expected_sizing = Sizing::right_half_of_screen(work_area, 20);
     let actual_placement = manager.windows_api.get_window_placement(window_handle);
     assert!(actual_placement.is_some());
-    assert_eq!(actual_placement.unwrap(), WindowPlacement::new_from_sizing(expected_sizing.clone()));
-    assert_eq!(manager.windows_api.get_cursor_position(), Point::from_center_of_sizing(&expected_sizing));
+    assert_eq!(
+      actual_placement.unwrap(),
+      WindowPlacement::new_from_sizing(expected_sizing.clone())
+    );
+    assert_eq!(
+      manager.windows_api.get_cursor_position(),
+      Point::from_center_of_sizing(&expected_sizing)
+    );
   }
 
   #[test]
@@ -1722,7 +1752,13 @@ mod tests {
     let expected_sizing = Sizing::top_half_of_screen(work_area, 20);
     let actual_placement = manager.windows_api.get_window_placement(window_handle);
     assert!(actual_placement.is_some());
-    assert_eq!(actual_placement.unwrap(), WindowPlacement::new_from_sizing(expected_sizing.clone()));
-    assert_eq!(manager.windows_api.get_cursor_position(), Point::from_center_of_sizing(&expected_sizing));
+    assert_eq!(
+      actual_placement.unwrap(),
+      WindowPlacement::new_from_sizing(expected_sizing.clone())
+    );
+    assert_eq!(
+      manager.windows_api.get_cursor_position(),
+      Point::from_center_of_sizing(&expected_sizing)
+    );
   }
 }
