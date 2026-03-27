@@ -95,6 +95,31 @@ impl Sizing {
     }
   }
 
+  /// Returns a new [`Sizing`] occupying the centre half of the near-maximised area in the axis corresponding to
+  /// `direction`. Left/Right produce a horizontally centred window (the intersection of [`three_quarter_near_maximised`]
+  /// Left and Right); Up/Down produce a vertically centred window. A gap of `margin / 2` is maintained on each inner
+  /// edge, consistent with the rest of the margin system.
+  ///
+  /// [`three_quarter_near_maximised`]: Self::three_quarter_near_maximised
+  pub fn centre_near_maximised(work_area: Rect, direction: Direction, margin: i32) -> Self {
+    let near_max = Self::near_maximised(work_area, margin);
+    let half_margin = margin / 2;
+    match direction {
+      Direction::Left | Direction::Right => Self {
+        x: near_max.x + near_max.width / 4 + half_margin,
+        y: near_max.y,
+        width: near_max.width / 2 - margin,
+        height: near_max.height,
+      },
+      Direction::Up | Direction::Down => Self {
+        x: near_max.x,
+        y: near_max.y + near_max.height / 4 + half_margin,
+        width: near_max.width,
+        height: near_max.height / 2 - margin,
+      },
+    }
+  }
+
   /// Returns a new [`Sizing`] that is half the size of the current one in the dimension corresponding to the given
   /// direction, keeping the edge on the arrow-key side fixed and contracting the opposite edge inward. A gap of
   /// `margin / 2` is subtracted from each side of the split point, resulting in a total gap of `margin` between the
@@ -439,5 +464,61 @@ mod tests {
     let right = sizing.halved(Direction::Right, 0);
 
     assert_eq!(right.x - (left.x + left.width), 0);
+  }
+
+  #[test]
+  fn centre_near_maximised_left_and_right_produce_identical_horizontal_centre() {
+    let work_area = Rect::new(0, 0, 100, 200);
+    let left = Sizing::centre_near_maximised(work_area, Direction::Left, 10);
+    let right = Sizing::centre_near_maximised(work_area, Direction::Right, 10);
+
+    assert_eq!(left, right);
+  }
+
+  #[test]
+  fn centre_near_maximised_up_and_down_produce_identical_vertical_centre() {
+    let work_area = Rect::new(0, 0, 100, 200);
+    let up = Sizing::centre_near_maximised(work_area, Direction::Up, 10);
+    let down = Sizing::centre_near_maximised(work_area, Direction::Down, 10);
+
+    assert_eq!(up, down);
+  }
+
+  #[test]
+  fn centre_near_maximised_horizontal_is_intersection_of_three_quarter_left_and_right() {
+    let work_area = Rect::new(0, 0, 100, 200);
+    let margin = 10;
+    let tq_left = Sizing::three_quarter_near_maximised(work_area, Direction::Left, margin);
+    let tq_right = Sizing::three_quarter_near_maximised(work_area, Direction::Right, margin);
+    let centre = Sizing::centre_near_maximised(work_area, Direction::Left, margin);
+
+    // Centre left edge equals three_quarter_right left edge
+    assert_eq!(centre.x, tq_right.x);
+    // Centre right edge equals three_quarter_left right edge
+    assert_eq!(centre.x + centre.width, tq_left.x + tq_left.width);
+  }
+
+  #[test]
+  fn centre_near_maximised_vertical_is_intersection_of_three_quarter_up_and_down() {
+    let work_area = Rect::new(0, 0, 100, 200);
+    let margin = 10;
+    let tq_up = Sizing::three_quarter_near_maximised(work_area, Direction::Up, margin);
+    let tq_down = Sizing::three_quarter_near_maximised(work_area, Direction::Down, margin);
+    let centre = Sizing::centre_near_maximised(work_area, Direction::Up, margin);
+
+    // Centre top edge equals three_quarter_down top edge
+    assert_eq!(centre.y, tq_down.y);
+    // Centre bottom edge equals three_quarter_up bottom edge
+    assert_eq!(centre.y + centre.height, tq_up.y + tq_up.height);
+  }
+
+  #[test]
+  fn centre_near_maximised_with_zero_margin_occupies_exact_middle_half() {
+    let work_area = Rect::new(0, 0, 100, 200);
+    let h = Sizing::centre_near_maximised(work_area, Direction::Left, 0);
+    assert_eq!(h, Sizing::new(25, 0, 50, 200));
+
+    let v = Sizing::centre_near_maximised(work_area, Direction::Up, 0);
+    assert_eq!(v, Sizing::new(0, 50, 100, 100));
   }
 }

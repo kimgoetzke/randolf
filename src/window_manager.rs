@@ -126,7 +126,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     } else if self.is_three_quarter_near_maximised(&handle, &monitor_info, direction) {
       Sizing::near_maximised(work_area, self.margin()).halved(direction, self.margin())
     } else if self.is_three_quarter_near_maximised(&handle, &monitor_info, direction.opposite()) {
-      Sizing::three_quarter_near_maximised(work_area, direction, self.margin())
+      Sizing::centre_near_maximised(work_area, direction, self.margin())
     } else {
       current_sizing.halved(direction, self.margin())
     };
@@ -1765,8 +1765,7 @@ mod tests {
   }
 
   #[test]
-  fn resize_window_three_quarter_left_steps_to_three_quarter_right_when_pressing_right() {
-    // Bug: was halving the three-quarter window instead of stepping to three_quarter_right
+  fn resize_window_three_quarter_left_produces_centre_when_pressing_right() {
     let monitor_handle = MonitorHandle::from(1);
     let window_handle = WindowHandle::new(1);
     let work_area = Rect::new(0, 0, 2000, 1000);
@@ -1778,7 +1777,7 @@ mod tests {
 
     manager.resize_window(Direction::Right);
 
-    let expected_sizing = Sizing::three_quarter_near_maximised(work_area, Direction::Right, 20);
+    let expected_sizing = Sizing::centre_near_maximised(work_area, Direction::Right, 20);
     let actual_placement = manager.windows_api.get_window_placement(window_handle);
     assert!(actual_placement.is_some());
     assert_eq!(
@@ -1792,8 +1791,7 @@ mod tests {
   }
 
   #[test]
-  fn resize_window_three_quarter_right_steps_to_three_quarter_left_when_pressing_left() {
-    // Bug: was halving the three-quarter window instead of stepping to three_quarter_left
+  fn resize_window_three_quarter_right_produces_centre_when_pressing_left() {
     let monitor_handle = MonitorHandle::from(1);
     let window_handle = WindowHandle::new(1);
     let work_area = Rect::new(0, 0, 2000, 1000);
@@ -1805,7 +1803,7 @@ mod tests {
 
     manager.resize_window(Direction::Left);
 
-    let expected_sizing = Sizing::three_quarter_near_maximised(work_area, Direction::Left, 20);
+    let expected_sizing = Sizing::centre_near_maximised(work_area, Direction::Left, 20);
     let actual_placement = manager.windows_api.get_window_placement(window_handle);
     assert!(actual_placement.is_some());
     assert_eq!(
@@ -1819,8 +1817,7 @@ mod tests {
   }
 
   #[test]
-  fn resize_window_three_quarter_up_steps_to_three_quarter_down_when_pressing_down() {
-    // Bug: was halving the three-quarter window instead of stepping to three_quarter_down
+  fn resize_window_three_quarter_up_produces_centre_when_pressing_down() {
     let monitor_handle = MonitorHandle::from(1);
     let window_handle = WindowHandle::new(1);
     let work_area = Rect::new(0, 0, 2000, 1000);
@@ -1832,7 +1829,7 @@ mod tests {
 
     manager.resize_window(Direction::Down);
 
-    let expected_sizing = Sizing::three_quarter_near_maximised(work_area, Direction::Down, 20);
+    let expected_sizing = Sizing::centre_near_maximised(work_area, Direction::Down, 20);
     let actual_placement = manager.windows_api.get_window_placement(window_handle);
     assert!(actual_placement.is_some());
     assert_eq!(
@@ -1846,8 +1843,7 @@ mod tests {
   }
 
   #[test]
-  fn resize_window_three_quarter_down_steps_to_three_quarter_up_when_pressing_up() {
-    // Bug: was halving the three-quarter window instead of stepping to three_quarter_up
+  fn resize_window_three_quarter_down_produces_centre_when_pressing_up() {
     let monitor_handle = MonitorHandle::from(1);
     let window_handle = WindowHandle::new(1);
     let work_area = Rect::new(0, 0, 2000, 1000);
@@ -1859,7 +1855,7 @@ mod tests {
 
     manager.resize_window(Direction::Up);
 
-    let expected_sizing = Sizing::three_quarter_near_maximised(work_area, Direction::Up, 20);
+    let expected_sizing = Sizing::centre_near_maximised(work_area, Direction::Up, 20);
     let actual_placement = manager.windows_api.get_window_placement(window_handle);
     assert!(actual_placement.is_some());
     assert_eq!(
