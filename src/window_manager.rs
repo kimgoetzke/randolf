@@ -4,7 +4,9 @@ use crate::configuration_provider::{
   ADDITIONAL_WORKSPACE_COUNT, ALLOW_MOVING_CURSOR_AFTER_OPEN_CLOSE_OR_MINIMISE, ALLOW_SELECTING_SAME_CENTER_WINDOWS,
   ConfigurationProvider, WINDOW_MARGIN,
 };
-use crate::utils::{CONFIGURATION_PROVIDER_LOCK, MINIMUM_WINDOW_DIMENSION, MINIMUM_WINDOW_MARGIN};
+use crate::utils::{
+  CONFIGURATION_PROVIDER_LOCK, MINIMUM_WINDOW_DIMENSION, MINIMUM_WINDOW_DIMENSION_DIVISOR, MINIMUM_WINDOW_MARGIN,
+};
 use crate::workspace_manager::WorkspaceManager;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -130,8 +132,8 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
       "Expected size of {}: ({},{})x({},{})",
       handle, new_sizing.x, new_sizing.y, new_sizing.width, new_sizing.height
     );
-    let min_width = MINIMUM_WINDOW_DIMENSION.max((work_area.right - work_area.left) / 8);
-    let min_height = MINIMUM_WINDOW_DIMENSION.max((work_area.bottom - work_area.top) / 8);
+    let min_width = MINIMUM_WINDOW_DIMENSION.max((work_area.right - work_area.left) / MINIMUM_WINDOW_DIMENSION_DIVISOR);
+    let min_height = MINIMUM_WINDOW_DIMENSION.max((work_area.bottom - work_area.top) / MINIMUM_WINDOW_DIMENSION_DIVISOR);
     if new_sizing.width < min_width || new_sizing.height < min_height {
       let is_below_constant = min_width <= MINIMUM_WINDOW_DIMENSION || min_height <= MINIMUM_WINDOW_DIMENSION;
       debug!(
@@ -642,7 +644,7 @@ mod tests {
   use crate::api::{MockWindowsApi, WindowsApi};
   use crate::common::{Direction, MonitorHandle, Point, Rect, Sizing, WindowHandle, WindowPlacement};
   use crate::configuration_provider::ConfigurationProvider;
-  use crate::utils::create_temp_directory;
+  use crate::utils::{MINIMUM_WINDOW_DIMENSION, MINIMUM_WINDOW_DIMENSION_DIVISOR, create_temp_directory};
   use crate::window_manager::{DWM_TOLERANCE_IN_PX, WindowManager};
   use crate::workspace_manager::WorkspaceManager;
   use std::path::PathBuf;
@@ -1391,15 +1393,19 @@ mod tests {
   }
 
   #[test]
-  fn resize_window_does_nothing_when_dynamic_minimum_from_quarter_screen_applies() {
-    // Dynamic min = max(MINIMUM_WINDOW_DIMENSION, work_area/4). On a 2000px-wide screen the quarter
-    // is 500px, which is larger than the constant (350px). A window whose halved width (440px) is
-    // below that threshold should not be resized.
+  fn resize_window_does_nothing_when_dynamic_minimum_exceeds_constant_and_result_is_below_it() {
+    // Use a screen wide enough that W/DIVISOR > MINIMUM_WINDOW_DIMENSION, so the dynamic minimum
+    // takes over. Work area width = MINIMUM * DIVISOR * 2, giving dynamic_min = MINIMUM * 2.
+    // The window is sized so its halved width falls between the constant and the dynamic minimum.
     let monitor_handle = MonitorHandle::from(1);
     let window_handle = WindowHandle::new(1);
-    let sizing = Sizing::new(20, 20, 900, 600);
+    let work_area_width = MINIMUM_WINDOW_DIMENSION * MINIMUM_WINDOW_DIMENSION_DIVISOR * 2;
+    // dynamic_min = work_area_width / DIVISOR = MINIMUM_WINDOW_DIMENSION * 2
+    let sizing = Sizing::new(20, 20, MINIMUM_WINDOW_DIMENSION * 3, 600);
+    // halved width = (MINIMUM * 3) / 2 - half_margin (with default margin 20)
+    // = 375 - 10 = 365, which is > MINIMUM (250) but < dynamic_min (500) → blocked
     MockWindowsApi::add_or_update_window(window_handle, "Test Window".to_string(), sizing.clone(), false, false, true);
-    MockWindowsApi::add_monitor(monitor_handle, Rect::new(0, 0, 2000, 1020), true);
+    MockWindowsApi::add_monitor(monitor_handle, Rect::new(0, 0, work_area_width, 1020), true);
     MockWindowsApi::place_window(window_handle, monitor_handle);
     let initial_cursor = Point::default();
     MockWindowsApi::set_cursor_position(initial_cursor);
@@ -1453,12 +1459,12 @@ mod tests {
   }
 
   #[test]
-  fn resize_window_does_nothing_when_halving_left_half_would_fall_below_quarter_screen_minimum() {
-    // With margin > 0, halving left_half_of_screen always produces W/4 - margin_offset, which is
-    // below the W/4 dynamic minimum on any screen. Resize should be blocked.
+  fn resize_window_halves_left_half_of_screen_in_left_direction() {
+    // With DIVISOR=8, dynamic_min = max(MINIMUM, W/8). On a 2000px screen, dynamic_min = max(250, 250) = 250.
+    // Halving left_half produces ~475px > 250 → resize succeeds.
     let monitor_handle = MonitorHandle::from(1);
     let window_handle = WindowHandle::new(1);
-    let work_area = Rect::new(0, 0, 2000, 1000);
+    let work_area = Rect::new(0, 0, MINIMUM_WINDOW_DIMENSION * MINIMUM_WINDOW_DIMENSION_DIVISOR, 1000);
     let left_half = Sizing::left_half_of_screen(work_area, 20);
     MockWindowsApi::add_or_update_window(
       window_handle,
@@ -1468,7 +1474,11 @@ mod tests {
       false,
       true,
     );
-    MockWindowsApi::add_monitor(monitor_handle, Rect::new(0, 0, 2000, 1020), true);
+    MockWindowsApi::add_monitor(
+      monitor_handle,
+      Rect::new(0, 0, MINIMUM_WINDOW_DIMENSION * MINIMUM_WINDOW_DIMENSION_DIVISOR, 1020),
+      true,
+    );
     MockWindowsApi::place_window(window_handle, monitor_handle);
     let initial_cursor = Point::default();
     MockWindowsApi::set_cursor_position(initial_cursor);
@@ -1476,26 +1486,28 @@ mod tests {
 
     manager.resize_window(Direction::Left);
 
+    let expected = left_half.halved(Direction::Left, 20);
     let actual_placement = manager.windows_api.get_window_placement(window_handle);
     assert!(actual_placement.is_some());
     assert_eq!(
       actual_placement.unwrap(),
-      WindowPlacement::new_from_sizing(left_half),
-      "Window should not have been resized"
+      WindowPlacement::new_from_sizing(expected),
+      "Window should have been halved"
     );
-    assert_eq!(
+    assert_ne!(
       manager.windows_api.get_cursor_position(),
       initial_cursor,
-      "Cursor should not have moved"
+      "Cursor should have moved"
     );
   }
 
   #[test]
-  fn resize_window_does_nothing_when_halving_right_half_would_fall_below_quarter_screen_minimum() {
-    // Mirror of the Left case: halving right_half_of_screen is also blocked by the W/4 dynamic minimum.
+  fn resize_window_halves_right_half_of_screen_in_right_direction() {
+    // Mirror of the Left case: with DIVISOR=8, dynamic_min = max(250, 250) = 250.
+    // Halving right_half produces ~475px > 250 → resize succeeds.
     let monitor_handle = MonitorHandle::from(1);
     let window_handle = WindowHandle::new(1);
-    let work_area = Rect::new(0, 0, 2000, 1000);
+    let work_area = Rect::new(0, 0, MINIMUM_WINDOW_DIMENSION * MINIMUM_WINDOW_DIMENSION_DIVISOR, 1000);
     let right_half = Sizing::right_half_of_screen(work_area, 20);
     MockWindowsApi::add_or_update_window(
       window_handle,
@@ -1505,7 +1517,11 @@ mod tests {
       false,
       true,
     );
-    MockWindowsApi::add_monitor(monitor_handle, Rect::new(0, 0, 2000, 1020), true);
+    MockWindowsApi::add_monitor(
+      monitor_handle,
+      Rect::new(0, 0, MINIMUM_WINDOW_DIMENSION * MINIMUM_WINDOW_DIMENSION_DIVISOR, 1020),
+      true,
+    );
     MockWindowsApi::place_window(window_handle, monitor_handle);
     let initial_cursor = Point::default();
     MockWindowsApi::set_cursor_position(initial_cursor);
@@ -1513,17 +1529,18 @@ mod tests {
 
     manager.resize_window(Direction::Right);
 
+    let expected = right_half.halved(Direction::Right, 20);
     let actual_placement = manager.windows_api.get_window_placement(window_handle);
     assert!(actual_placement.is_some());
     assert_eq!(
       actual_placement.unwrap(),
-      WindowPlacement::new_from_sizing(right_half),
-      "Window should not have been resized"
+      WindowPlacement::new_from_sizing(expected),
+      "Window should have been halved"
     );
-    assert_eq!(
+    assert_ne!(
       manager.windows_api.get_cursor_position(),
       initial_cursor,
-      "Cursor should not have moved"
+      "Cursor should have moved"
     );
   }
 
