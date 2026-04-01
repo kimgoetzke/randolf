@@ -14,11 +14,11 @@ Randolf is a small window management utility for Windows 11 that allows you to:
 
 - `Win` + `\` - near-maximise the foreground window (maximise minus margin).
 - `Win` + `Shift` + `Left`/`Up`/`Right`/`Down` or `h`/`j`/`k`/`l` - near-snap (snap minus margin) the foreground window
-  to the left, top, right, or bottom of the screen.
+  to the left, top, right, or bottom of the screen or, on repeated press, move it to the next monitor in that direction.
 - `Win` + `Shift` + `Ctrl` + `Left`/`Up`/`Right`/`Down` or `h`/`j`/`k`/`l` - step-resize the foreground window in the
   given direction.
 - `Win` + `Left`/`Up`/`Right`/`Down` - move the cursor to the closest window in the direction of the arrow key (and
-  activate the window) or to the center of the window-free monitor, if it exists.
+  activate the window) or to the centre of the closest window-free monitor in that direction, if it exists.
 - `Win` + `Shift` + `q` - close the foreground window.
 - `Win` + `1`/`2`/... - switch between workspaces.
 - `Win` + `Shift` + `1`/`2`/... - move the foreground window to respective workspace.
@@ -64,6 +64,9 @@ Switching between workspaces and moving windows between them using hotkeys only:
 
 Moving and resizing windows using the mouse while holding the `Win` key:
 ![Demo GIF 4](assets/demo_4.gif)
+
+Resizing (and opening and moving) windows using hotkeys only:
+![Demo GIF 5](assets/demo_5.gif)
 
 ## How to configure
 
