@@ -53,9 +53,9 @@ fn validate_window_margin(config_str: &str, configuration_provider: &mut Configu
       WINDOW_MARGIN, DEFAULT_WINDOW_MARGIN_VALUE
     );
     configuration_provider.set_i32(WINDOW_MARGIN, DEFAULT_WINDOW_MARGIN_VALUE);
-  } else if configuration_provider.config.general.window_margin <= 0 {
+  } else if configuration_provider.config.general.window_margin < 0 {
     warn!(
-      "[{}] is 0 or negative, setting to default value: {}",
+      "[{}] is negative, setting to default value: {}",
       WINDOW_MARGIN, DEFAULT_WINDOW_MARGIN_VALUE
     );
     configuration_provider.set_i32(WINDOW_MARGIN, DEFAULT_WINDOW_MARGIN_VALUE);
@@ -586,6 +586,26 @@ mod tests {
 
     let config_string = fs::read_to_string(path).expect("Failed to read config file");
     assert!(config_string.contains("window_margin = 20"));
+  }
+
+  #[test]
+  fn validate_config_preserves_window_margin_if_zero_value_loaded() {
+    let directory = create_temp_directory();
+    let path = directory.path().join(CONFIGURATION_FILE_NAME);
+    let config_string = r#"
+      [general]
+      window_margin = 0
+      "#;
+    fs::write(&path, config_string).expect("Failed to write config file");
+    let mut config = Configuration::default();
+    config.general.window_margin = 0;
+    let mut configuration_provider = ConfigurationProvider::new_test_without_validation(path.clone(), config);
+
+    configuration_provider.validate_config(Some(config_string.into()));
+
+    let config_string = fs::read_to_string(path).expect("Failed to read config file");
+    assert!(config_string.contains("window_margin = 0"));
+    assert_eq!(configuration_provider.config.general.window_margin, 0);
   }
 
   #[test]
