@@ -310,73 +310,32 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     }
   }
 
-  fn find_closest_window_in_direction<'a>(
+  fn find_closest_window_in_direction<'window>(
     &self,
     reference_point: &Point,
     direction: Direction,
-    windows: &'a Vec<Window>,
+    windows: &'window [Window],
     virtual_desktop_manager: &IVirtualDesktopManager,
     reference_window: Option<&Window>,
-  ) -> Option<&'a Window> {
-    let mut closest_window = None;
-    let mut closest_score = f64::MAX;
+  ) -> Option<&'window Window> {
+    // Keep only current-desktop windows
+    let windows_on_current_desktop = windows
+      .iter()
+      .filter(|window| self.windows_api.is_window_on_current_desktop(virtual_desktop_manager, window))
+      .collect::<Vec<_>>();
+    let allow_selecting_same_center_windows = self
+      .configuration_provider
+      .lock()
+      .expect(CONFIGURATION_PROVIDER_LOCK)
+      .get_bool(ALLOW_SELECTING_SAME_CENTER_WINDOWS);
 
-    for window in windows {
-      // Skip windows that are not on the current desktop
-      if !self.windows_api.is_window_on_current_desktop(virtual_desktop_manager, window) {
-        continue;
-      }
-
-      let target_center_x = window.rect.left + (window.rect.right - window.rect.left) / 2;
-      let target_center_y = window.rect.top + (window.rect.bottom - window.rect.top) / 2;
-      let dx = target_center_x as i64 - reference_point.x() as i64;
-      let dy = target_center_y as i64 - reference_point.y() as i64;
-
-      // Skip windows that are not in the right direction, unless it has the same center as the reference window, if
-      // the relevant configuration is enabled (see README for more information)
-      let is_selecting_same_center_windows_disabled = !self
-        .configuration_provider
-        .lock()
-        .expect(CONFIGURATION_PROVIDER_LOCK)
-        .get_bool(ALLOW_SELECTING_SAME_CENTER_WINDOWS);
-      if is_selecting_same_center_windows_disabled
-        || (reference_window.is_some() && reference_window?.center != window.center)
-        || (reference_window.is_some() && reference_window?.handle == window.handle)
-      {
-        match direction {
-          Direction::Left if dx >= 0 => continue,
-          Direction::Right if dx <= 0 => continue,
-          Direction::Up if dy >= 0 => continue,
-          Direction::Down if dy <= 0 => continue,
-          _ => {}
-        }
-      }
-      let distance = ((dx.pow(2) + dy.pow(2)) as f64).sqrt().trunc();
-
-      // Calculate angle between the vector and the direction vector
-      let angle = match direction {
-        Direction::Left => (dy as f64).atan2((-dx) as f64).abs(),
-        Direction::Right => (dy as f64).atan2(dx as f64).abs(),
-        Direction::Up => (dx as f64).atan2((-dy) as f64).abs(),
-        Direction::Down => (dx as f64).atan2(dy as f64).abs(),
-      };
-
-      // Calculate a score based on the distance and angle and select the closest window
-      let score = distance + angle;
-      trace!(
-        "Score for {} is [{}] (i.e. normalised_angle={}, distance={})",
-        window.handle,
-        score.trunc(),
-        angle,
-        distance,
-      );
-      if score < closest_score {
-        closest_score = score;
-        closest_window = Some(window);
-      }
-    }
-
-    closest_window
+    select_window_in_direction(
+      reference_point,
+      direction,
+      &windows_on_current_desktop,
+      reference_window,
+      allow_selecting_same_center_windows,
+    )
   }
 
   fn execute_window_resizing(&self, handle: WindowHandle, sizing: Sizing) {
@@ -589,6 +548,90 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
   }
 }
 
+fn select_window_in_direction<'window>(
+  reference_point: &Point,
+  direction: Direction,
+  windows: &[&'window Window],
+  reference_window: Option<&Window>,
+  allow_selecting_same_center_windows: bool,
+) -> Option<&'window Window> {
+  // Cycle same-centre windows first
+  if allow_selecting_same_center_windows
+    && let Some(reference_window) = reference_window
+    && let Some(next_window) = find_next_same_center_window(reference_window, windows)
+  {
+    return Some(next_window);
+  }
+
+  let mut closest_window = None;
+  let mut closest_score = f64::MAX;
+
+  for &window in windows {
+    let target_center_x = window.rect.left + (window.rect.right - window.rect.left) / 2;
+    let target_center_y = window.rect.top + (window.rect.bottom - window.rect.top) / 2;
+    let dx = target_center_x as i64 - reference_point.x() as i64;
+    let dy = target_center_y as i64 - reference_point.y() as i64;
+    let should_filter_by_direction = !allow_selecting_same_center_windows
+      || reference_window.is_some_and(|reference_window| {
+        reference_window.center != window.center || reference_window.handle == window.handle
+      });
+
+    // Skip windows outside the requested direction
+    if should_filter_by_direction {
+      match direction {
+        Direction::Left if dx >= 0 => continue,
+        Direction::Right if dx <= 0 => continue,
+        Direction::Up if dy >= 0 => continue,
+        Direction::Down if dy <= 0 => continue,
+        _ => {}
+      }
+    }
+
+    // Score by distance and directional alignment
+    let distance = ((dx.pow(2) + dy.pow(2)) as f64).sqrt().trunc();
+    let angle = match direction {
+      Direction::Left => (dy as f64).atan2((-dx) as f64).abs(),
+      Direction::Right => (dy as f64).atan2(dx as f64).abs(),
+      Direction::Up => (dx as f64).atan2((-dy) as f64).abs(),
+      Direction::Down => (dx as f64).atan2(dy as f64).abs(),
+    };
+    let score = distance + angle;
+    trace!(
+      "Score for {} is [{}] (i.e. normalised_angle={}, distance={})",
+      window.handle,
+      score.trunc(),
+      angle,
+      distance,
+    );
+    if score < closest_score {
+      closest_score = score;
+      closest_window = Some(window);
+    }
+  }
+
+  closest_window
+}
+
+fn find_next_same_center_window<'window>(reference_window: &Window, windows: &[&'window Window]) -> Option<&'window Window> {
+  let mut same_center_windows = windows
+    .iter()
+    .copied()
+    .filter(|window| window.center == reference_window.center)
+    .collect::<Vec<_>>();
+  if same_center_windows.len() < 2 {
+    return None;
+  }
+
+  // Keep cycling independent of Z-order
+  same_center_windows.sort_unstable_by_key(|window| window.handle.hwnd);
+  let reference_index = same_center_windows
+    .iter()
+    .position(|window| window.handle == reference_window.handle)?;
+  same_center_windows
+    .get((reference_index + 1) % same_center_windows.len())
+    .copied()
+}
+
 fn add_or_update_previous_placement(
   known_windows: &mut HashMap<String, WindowPlacement>,
   handle: WindowHandle,
@@ -644,10 +687,10 @@ fn calculate_compensating_rect_if_required(rect: &Rect, sizing: &Sizing) -> Opti
 #[cfg(test)]
 mod tests {
   use crate::api::{MockWindowsApi, WindowsApi};
-  use crate::common::{Direction, MonitorHandle, Point, Rect, Sizing, WindowHandle, WindowPlacement};
+  use crate::common::{Direction, MonitorHandle, Point, Rect, Sizing, Window, WindowHandle, WindowPlacement};
   use crate::configuration_provider::ConfigurationProvider;
   use crate::utils::{MINIMUM_WINDOW_DIMENSION, MINIMUM_WINDOW_DIMENSION_DIVISOR, create_temp_directory};
-  use crate::window_manager::{DWM_TOLERANCE_IN_PX, WindowManager};
+  use crate::window_manager::{DWM_TOLERANCE_IN_PX, WindowManager, select_window_in_direction};
   use crate::workspace_manager::WorkspaceManager;
   use std::path::PathBuf;
   use std::sync::{Arc, Mutex};
@@ -803,6 +846,53 @@ mod tests {
     assert!(actual_placement.is_some());
     assert_eq!(actual_placement.unwrap(), expected_placement);
     assert_eq!(manager.windows_api.get_cursor_position(), Point::new(300, 100))
+  }
+
+  #[test]
+  fn select_window_in_direction_cycles_through_all_windows() {
+    let rect = Rect::new(0, 0, 100, 100);
+    let first = Window::new_test(1, rect);
+    let second = Window::new_test(2, rect);
+    let third = Window::new_test(3, rect);
+    let windows = [&third, &first, &second];
+
+    assert_eq!(
+      select_window_in_direction(&first.center, Direction::Right, &windows, Some(&first), true).map(|window| window.handle),
+      Some(second.handle)
+    );
+    assert_eq!(
+      select_window_in_direction(&second.center, Direction::Right, &windows, Some(&second), true)
+        .map(|window| window.handle),
+      Some(third.handle)
+    );
+    assert_eq!(
+      select_window_in_direction(&third.center, Direction::Right, &windows, Some(&third), true).map(|window| window.handle),
+      Some(first.handle)
+    );
+  }
+
+  #[test]
+  fn select_window_in_direction_uses_direction_when_disabled() {
+    let reference = Window::new_test(1, Rect::new(0, 0, 100, 100));
+    let same_center = Window::new_test(2, Rect::new(0, 0, 100, 100));
+    let right = Window::new_test(3, Rect::new(100, 0, 200, 100));
+    let windows = [&reference, &same_center, &right];
+
+    let selected = select_window_in_direction(&reference.center, Direction::Right, &windows, Some(&reference), false);
+
+    assert_eq!(selected.map(|window| window.handle), Some(right.handle));
+  }
+
+  #[test]
+  fn select_window_in_direction_falls_back_to_closest_window_in_direction() {
+    let reference = Window::new_test(1, Rect::new(0, 0, 100, 100));
+    let closest_right = Window::new_test(2, Rect::new(100, 0, 200, 100));
+    let furthest_right = Window::new_test(3, Rect::new(200, 0, 300, 100));
+    let windows = [&reference, &furthest_right, &closest_right];
+
+    let selected = select_window_in_direction(&reference.center, Direction::Right, &windows, Some(&reference), true);
+
+    assert_eq!(selected.map(|window| window.handle), Some(closest_right.handle));
   }
 
   #[test]
