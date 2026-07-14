@@ -543,7 +543,7 @@ mod tests {
     workspace.minimised_windows.push((window_1.handle, false));
     workspace.minimised_windows.push((window_2.handle, true));
 
-    workspace.remove_windows_if_present(&[window_1.clone()]);
+    workspace.remove_windows_if_present(std::slice::from_ref(&window_1));
 
     assert_eq!(workspace.windows.len(), 1);
     assert_eq!(workspace.windows[0].handle, window_2.handle);
@@ -559,7 +559,7 @@ mod tests {
     workspace.windows.push(window_1.clone());
     workspace.minimised_windows.push((window_1.handle, false));
 
-    workspace.remove_windows_if_present(&[window_2.clone()]);
+    workspace.remove_windows_if_present(std::slice::from_ref(&window_2));
 
     assert_eq!(workspace.windows.len(), 1);
     assert_eq!(workspace.windows[0].handle, window_1.handle);

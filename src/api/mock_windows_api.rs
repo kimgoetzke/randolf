@@ -20,6 +20,7 @@ pub(crate) mod test {
     monitors: HashMap<MonitorHandle, MonitorState>,
     monitor_windows: HashMap<MonitorHandle, Vec<WindowHandle>>,
     foreground_window: Option<WindowHandle>,
+    position_batches: Vec<Vec<(WindowHandle, Rect)>>,
   }
 
   struct WindowState {
@@ -28,6 +29,7 @@ pub(crate) mod test {
     is_minimised: bool,
     is_hidden: bool,
     is_closed: bool,
+    is_manageable: bool,
   }
 
   #[derive(Clone)]
@@ -64,6 +66,7 @@ pub(crate) mod test {
             is_minimised,
             is_hidden,
             is_closed: false,
+            is_manageable: true,
           },
         );
         if is_foreground {
@@ -129,6 +132,16 @@ pub(crate) mod test {
       });
     }
 
+    pub fn assign_window_to_monitor(window_handle: WindowHandle, monitor_handle: MonitorHandle) {
+      MOCK_STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        for windows in state.monitor_windows.values_mut() {
+          windows.retain(|handle| *handle != window_handle);
+        }
+        state.monitor_windows.entry(monitor_handle).or_default().push(window_handle);
+      });
+    }
+
     pub fn set_foreground_window(handle: WindowHandle) {
       trace!("Mock windows API sets foreground window {handle}");
       MOCK_STATE.with(|state| {
@@ -141,6 +154,22 @@ pub(crate) mod test {
       MOCK_STATE.with(|state| {
         state.borrow_mut().cursor_position = position;
       });
+    }
+
+    pub fn mark_window_unmanageable(handle: WindowHandle) {
+      MOCK_STATE.with(|state| {
+        if let Some(window) = state.borrow_mut().windows.get_mut(&handle) {
+          window.is_manageable = false;
+        }
+      });
+    }
+
+    pub fn clear_position_batches() {
+      MOCK_STATE.with(|state| state.borrow_mut().position_batches.clear());
+    }
+
+    pub fn position_batches() -> Vec<Vec<(WindowHandle, Rect)>> {
+      MOCK_STATE.with(|state| state.borrow().position_batches.clone())
     }
 
     #[allow(dead_code)]
@@ -177,7 +206,7 @@ pub(crate) mod test {
           .borrow()
           .windows
           .values()
-          .filter(|ws| !ws.is_closed)
+          .filter(|ws| !ws.is_closed && ws.is_manageable)
           .map(|ws| ws.window.clone())
           .collect()
       })
@@ -190,7 +219,7 @@ pub(crate) mod test {
           .borrow()
           .windows
           .values()
-          .filter(|ws| !ws.is_hidden && !ws.is_closed && !ws.is_minimised)
+          .filter(|ws| !ws.is_hidden && !ws.is_closed && !ws.is_minimised && ws.is_manageable)
           .map(|ws| ws.window.clone())
           .collect()
       })
@@ -204,7 +233,7 @@ pub(crate) mod test {
           .windows
           .iter()
           .filter_map(|(_, ws)| {
-            if ws.window.rect.intersects(&rect) && !ws.is_hidden {
+            if ws.window.rect.intersects(&rect) && !ws.is_hidden && ws.is_manageable {
               Some(ws.window.clone())
             } else {
               None
@@ -253,7 +282,7 @@ pub(crate) mod test {
 
     fn is_not_a_managed_window(&self, handle: &WindowHandle) -> bool {
       trace!("Mock windows API checks if window {handle} is not a managed window");
-      unimplemented!()
+      MOCK_STATE.with(|state| state.borrow().windows.get(handle).is_none_or(|window| !window.is_manageable))
     }
 
     fn is_window_hidden(&self, handle: &WindowHandle) -> bool {
@@ -273,6 +302,26 @@ pub(crate) mod test {
           window_state.window_placement = WindowPlacement::new_from_rect(rect);
           window_state.window.rect = rect;
         }
+      });
+    }
+
+    fn set_window_positions(&self, positions: &[(WindowHandle, Rect)], focused: WindowHandle) {
+      trace!("Mock windows API atomically positions [{}] windows", positions.len());
+      MOCK_STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        let mut ordered = Vec::with_capacity(positions.len());
+        if let Some(position) = positions.iter().find(|(handle, _)| *handle == focused) {
+          ordered.push(*position);
+        }
+        ordered.extend(positions.iter().copied().filter(|(handle, _)| *handle != focused));
+        for (handle, rect) in &ordered {
+          if let Some(window_state) = state.windows.get_mut(handle) {
+            window_state.window_placement = WindowPlacement::new_from_rect(*rect);
+            window_state.window.rect = *rect;
+            window_state.window.center = Point::from_center_of_rect(rect);
+          }
+        }
+        state.position_batches.push(ordered);
       });
     }
 

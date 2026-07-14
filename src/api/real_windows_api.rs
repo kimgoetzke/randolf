@@ -13,14 +13,23 @@ use windows::Win32::System::Com::{CLSCTX_ALL, COINIT_APARTMENTTHREADED, CoCreate
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, PROCESS_PER_MONITOR_DPI_AWARE, SetProcessDpiAwareness};
 use windows::Win32::UI::Shell::{IVirtualDesktopManager, IsUserAnAdmin};
 use windows::Win32::UI::WindowsAndMessaging::{
-  DispatchMessageA, EnumWindows, GetClassNameW, GetCursorPos, GetDesktopWindow, GetForegroundWindow, GetWindowInfo,
-  GetWindowPlacement, GetWindowRect, GetWindowTextW, IsIconic, IsWindowVisible, MSG, PM_REMOVE, PeekMessageA, PostMessageW,
-  SW_HIDE, SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOZORDER, SWP_SHOWWINDOW,
-  SendMessageW, SetCursorPos, SetForegroundWindow, SetWindowPlacement, SetWindowPos, ShowWindow, TranslateMessage,
-  WINDOWINFO, WINDOWPLACEMENT, WM_CLOSE, WM_PAINT,
+  BeginDeferWindowPos, DeferWindowPos, DispatchMessageA, EndDeferWindowPos, EnumWindows, GetClassNameW, GetCursorPos,
+  GetDesktopWindow, GetForegroundWindow, GetWindowInfo, GetWindowPlacement, GetWindowRect, GetWindowTextW,
+  GetWindowThreadProcessId, HWND_TOP, IsIconic, IsWindowVisible, MSG, PM_REMOVE, PeekMessageA, PostMessageW, SW_HIDE,
+  SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOZORDER, SWP_SHOWWINDOW, SendMessageW,
+  SetCursorPos, SetForegroundWindow, SetWindowPlacement, SetWindowPos, ShowWindow, TranslateMessage, WINDOWINFO,
+  WINDOWPLACEMENT, WM_CLOSE, WM_PAINT,
 };
 use windows::core::BOOL;
 use windows::core::HRESULT;
+
+const TRANSIENT_WINDOW_CLASSES: &[&str] = &[
+  "#32768",
+  "tooltips_class32",
+  "NotifyIconOverflowWindow",
+  "Xaml_WindowedPopupClass",
+  "TopLevelWindowForOverflowXamlIsland",
+];
 
 #[derive(Clone)]
 pub struct RealWindowsApi {
@@ -183,8 +192,16 @@ impl WindowsApi for RealWindowsApi {
   }
 
   fn is_not_a_managed_window(&self, handle: &WindowHandle) -> bool {
-    let mut result = false;
+    let mut process_id = 0;
+    unsafe {
+      GetWindowThreadProcessId(handle.as_hwnd(), Some(&mut process_id));
+    }
+    if process_id == std::process::id() {
+      return true;
+    }
+
     let class_name = self.get_window_class_name(handle);
+    let mut result = TRANSIENT_WINDOW_CLASSES.contains(&class_name.as_str());
     if self.ignored_class_names.contains(&class_name) {
       result = true;
     }
@@ -223,6 +240,48 @@ impl WindowsApi for RealWindowsApi {
       ) {
         warn!("Failed to set window position for window {handle}: {}", err.message());
       }
+    }
+  }
+
+  fn set_window_positions(&self, positions: &[(WindowHandle, Rect)], focused: WindowHandle) {
+    if positions.is_empty() {
+      return;
+    }
+    let count = i32::try_from(positions.len()).unwrap_or(i32::MAX);
+    let Ok(mut batch) = (unsafe { BeginDeferWindowPos(count) }) else {
+      warn!("Failed to begin positioning [{count}] windows");
+      return;
+    };
+    let ordered = positions
+      .iter()
+      .filter(|(handle, _)| *handle == focused)
+      .chain(positions.iter().filter(|(handle, _)| *handle != focused));
+    let mut insert_after = HWND_TOP;
+    for (handle, rect) in ordered {
+      match unsafe {
+        DeferWindowPos(
+          batch,
+          handle.as_hwnd(),
+          Some(insert_after),
+          rect.left,
+          rect.top,
+          rect.width(),
+          rect.height(),
+          SWP_NOACTIVATE,
+        )
+      } {
+        Ok(next_batch) => {
+          batch = next_batch;
+          insert_after = handle.as_hwnd();
+        }
+        Err(err) => {
+          warn!("Failed to defer positioning for {handle}: {}", err.message());
+          return;
+        }
+      }
+    }
+    if let Err(err) = unsafe { EndDeferWindowPos(batch) } {
+      warn!("Failed to position windows: {}", err.message());
     }
   }
 

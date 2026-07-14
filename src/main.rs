@@ -5,6 +5,7 @@ mod application_launcher;
 mod common;
 mod configuration_provider;
 mod files;
+mod horizontal_layout;
 mod hotkey_manager;
 mod log_manager;
 mod tray_menu_manager;
@@ -37,6 +38,7 @@ use std::time::{Duration, Instant};
 
 const EVENT_LOOP_SLEEP_DURATION: Duration = Duration::from_millis(20);
 const HEART_BEAT_DURATION: Duration = Duration::from_secs(5);
+const HORIZONTAL_LAYOUT_RECONCILIATION_DURATION: Duration = Duration::from_millis(250);
 
 fn main() {
   LogManager::new_initialised();
@@ -82,6 +84,7 @@ fn main() {
     configuration_manager.clone(),
     windows_api.clone(),
   )));
+  wm.borrow_mut().reconcile_horizontal_layout();
   let workspace_ids = wm.borrow_mut().get_ordered_permanent_workspace_ids();
   let hkm = HotkeyManager::new_with_hotkeys(configuration_manager.clone(), workspace_ids);
   let interrupt_handle = hkm.initialise(command_sender.clone());
@@ -95,6 +98,7 @@ fn main() {
 
   // Run event loop
   let mut last_heartbeat = Instant::now();
+  let mut last_horizontal_layout_reconciliation = Instant::now();
   loop {
     api::do_process_windows_messages();
     if let Ok(command) = command_receiver.try_recv() {
@@ -144,6 +148,10 @@ fn main() {
           std::process::exit(0);
         }
       }
+    }
+    if last_horizontal_layout_reconciliation.elapsed() >= HORIZONTAL_LAYOUT_RECONCILIATION_DURATION {
+      wm.borrow_mut().reconcile_horizontal_layout();
+      last_horizontal_layout_reconciliation = Instant::now();
     }
     last_heartbeat = update_heart_beat(last_heartbeat);
     std::thread::sleep(EVENT_LOOP_SLEEP_DURATION);

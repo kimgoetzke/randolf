@@ -85,6 +85,7 @@ additional_workspace_count = 2
 enable_features_using_mouse = true
 delay_in_ms_before_dragging_is_allowed = 750
 allow_moving_cursor_after_open_close_or_minimise = true
+enable_horizontal_layout = false
 
 [exclusion_settings]
 window_titles = [
@@ -114,12 +115,22 @@ The `[general]` section contains the general settings for the application.
 | `enable_features_using_mouse`                      | `true`        | Whether to enable the features that allow moving and resizing windows using the mouse. The advantage of this feature over the native Windows approach is that you don't have to select the title bar to move or the edges of a window to resize - you can simply do it anywhere while holding the `Win` key. If you do not want to use these features, you can set this to `false`.                                                                                                                                                                                                                     |
 | `delay_in_ms_before_dragging_is_allowed`           | `750`         | Only used when `enable_features_using_mouse` is `true`. Defines the time in milliseconds for which you have to hold `Win` before the application allows you to move or resize a window. The idea here is to prevent enabling these modes when you press the `Win` key quickly for any other reason i.e. setting this to a non-zero value can prevent you from accidental dragging or resizing of windows. Lower this delay if you want mouse-based features to be more responsive, esp. if you use them frequently.                                                                                     |
 | `allow_moving_cursor_after_open_close_or_minimise` | `true`        | Whether to move the cursor automatically to after using an application launcher hotkey or the closest window after closing or minimising a window. If set to `true`, the cursor will be moved to the foreground window after using a custom application launcher hotkey or to the closest visible window after you use a Randolf hotkey to close or minimise a window. Randolf does not use Windows API callbacks (yet) which can, for example, cause the cursor to move when the window to be closed did not close immediately but opened a separate confirmation pop-up before executing the command. |
+| `enable_horizontal_layout`                         | `false`       | Enables the workspace-aware horizontal scrolling layout described below. |
+
+### Horizontal scrolling layout
+
+When `enable_horizontal_layout = true`, Randolf adopts manageable visible windows at startup, ordered left-to-right, and near-maximises them using `window_margin`. Each workspace on each monitor owns an independent ordered strip. Only the focused member occupies the monitor; other members remain one monitor width apart and may sit wholly off-screen.
+
+New foreground windows are inserted immediately before the previously active member. `Win+Left/Right` selects an adjacent member and animates the outgoing and incoming windows across the strip; inactive members remain below the focused window in Z-order. `Win+Up/Down` retains normal spatial window and monitor navigation. `Win+Shift+Left/Right` reorders the focused member. Vertical keyboard moves and all keyboard resize commands are ignored in this mode.
+
+Closing, minimising, moving between workspaces, and switching workspaces preserve strip order. Window discovery is periodic, so externally opened or closed windows may take up to 250 ms to be reconciled.
 
 ### Exclusion settings
 
 The `[exclusion_settings]` section contains the settings for excluding certain windows from being interactable (e.g.
 selectable/movable) via the application. A small number of windows are excluded by default in order for the application
-to function properly.
+to function properly. Randolf also always ignores its own tray windows and transient Windows shell UI such as menus,
+tooltips, and tray overflow pop-ups.
 
 You can add additional windows to the exclusion list by adding their title or class name to the `[exclusion_settings]`
 section. Randolf currently does not provide any features to identify the title or class name of a window other than

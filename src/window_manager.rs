@@ -2,24 +2,32 @@ use crate::api::WindowsApi;
 use crate::common::*;
 use crate::configuration_provider::{
   ADDITIONAL_WORKSPACE_COUNT, ALLOW_MOVING_CURSOR_AFTER_OPEN_CLOSE_OR_MINIMISE, ALLOW_SELECTING_SAME_CENTER_WINDOWS,
-  ConfigurationProvider, WINDOW_MARGIN,
+  ConfigurationProvider, ENABLE_HORIZONTAL_LAYOUT, WINDOW_MARGIN,
 };
+use crate::horizontal_layout::HorizontalLayout;
 use crate::utils::{
   CONFIGURATION_PROVIDER_LOCK, MINIMUM_WINDOW_DIMENSION, MINIMUM_WINDOW_DIMENSION_DIVISOR, MINIMUM_WINDOW_MARGIN,
 };
 use crate::workspace_manager::WorkspaceManager;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
 use windows::Win32::UI::WindowsAndMessaging::SW_MAXIMIZE;
 
 const REGULAR_TOLERANCE_IN_PX: i32 = 2;
 const DWM_TOLERANCE_IN_PX: i32 = 8;
+const HORIZONTAL_ANIMATION_FRAMES: u32 = 12;
+const HORIZONTAL_ANIMATION_DURATION: Duration = Duration::from_millis(120);
 
 pub struct WindowManager<T: WindowsApi> {
   configuration_provider: Arc<Mutex<ConfigurationProvider>>,
   known_windows: HashMap<String, WindowPlacement>,
   allow_moving_cursor_after_close_or_minimise: bool,
+  horizontal_layout: HorizontalLayout,
+  horizontal_layout_positions: HashMap<PersistentWorkspaceId, Vec<(WindowHandle, Rect)>>,
+  horizontal_layout_initialised: bool,
+  previous_foreground_window: Option<WindowHandle>,
   workspace_manager: WorkspaceManager<T>,
   virtual_desktop_manager: Option<IVirtualDesktopManager>,
   windows_api: T,
@@ -45,6 +53,10 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     Self {
       known_windows: HashMap::new(),
       allow_moving_cursor_after_close_or_minimise,
+      horizontal_layout: HorizontalLayout::default(),
+      horizontal_layout_positions: HashMap::new(),
+      horizontal_layout_initialised: false,
+      previous_foreground_window: None,
       virtual_desktop_manager: Some(
         api
           .get_virtual_desktop_manager()
@@ -66,6 +78,12 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
       return;
     };
 
+    if self.horizontal_layout_enabled() {
+      self.windows_api.do_close_window(window);
+      self.remove_horizontal_member_and_refocus(window);
+      return;
+    }
+
     self.windows_api.do_close_window(window);
     if self.allow_moving_cursor_after_close_or_minimise {
       self.find_and_select_closest_window(window);
@@ -73,14 +91,57 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
   }
 
   pub fn switch_workspace(&mut self, id: PersistentWorkspaceId) {
-    self.workspace_manager.switch_workspace(id);
+    if !self.horizontal_layout_enabled() {
+      self.workspace_manager.switch_workspace(id);
+      return;
+    }
+
+    let source = self
+      .workspace_manager
+      .active_workspace_ids()
+      .into_iter()
+      .find(|workspace| workspace.monitor_id == id.monitor_id);
+    let additional_windows = source.map_or_else(Vec::new, |workspace| self.horizontal_layout.members(workspace).to_vec());
+    self
+      .workspace_manager
+      .switch_workspace_with_additional_windows(id, &additional_windows);
+    self.reflow_horizontal_workspace(id);
+    self.focus_horizontal_workspace(id);
   }
 
   pub fn move_window_to_workspace(&mut self, id: PersistentWorkspaceId) {
+    if !self.horizontal_layout_enabled() {
+      self.workspace_manager.move_window_to_workspace(id);
+      return;
+    }
+
+    let foreground = self.windows_api.get_foreground_window();
+    let source = foreground.and_then(|handle| self.horizontal_layout.workspace_containing(handle));
+    if source == Some(id) || self.workspace_manager.monitor_for_workspace(id).is_none() {
+      return;
+    }
     self.workspace_manager.move_window_to_workspace(id);
+    if let (Some(handle), Some(source)) = (foreground, source) {
+      self.horizontal_layout.remove(source, handle);
+      self.horizontal_layout.insert_before(id, handle, None);
+      if self.workspace_manager.is_workspace_active(source) {
+        self.reflow_horizontal_workspace(source);
+        self.focus_horizontal_workspace(source);
+      }
+      if self.workspace_manager.is_workspace_active(id) {
+        self.reflow_horizontal_workspace(id);
+        self.focus_horizontal_workspace(id);
+      }
+    }
   }
 
   pub fn move_window(&mut self, direction: Direction) {
+    if self.horizontal_layout_enabled() {
+      if matches!(direction, Direction::Left | Direction::Right) {
+        self.reorder_horizontal_window(direction);
+      }
+      return;
+    }
     let (handle, placement, monitor_info) = match self.get_window_and_monitor_info() {
       Some(value) => value,
       None => return,
@@ -115,6 +176,10 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
   }
 
   pub fn resize_window(&mut self, direction: Direction) {
+    if self.horizontal_layout_enabled() {
+      return;
+    }
+
     let (handle, placement, monitor_info) = match self.get_window_and_monitor_info() {
       Some(value) => value,
       None => return,
@@ -155,6 +220,13 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
   }
 
   pub fn move_cursor(&mut self, direction: Direction) {
+    if self.horizontal_layout_enabled()
+      && matches!(direction, Direction::Left | Direction::Right)
+      && self.move_horizontal_focus(direction)
+    {
+      return;
+    }
+
     let windows = self.windows_api.get_all_visible_windows();
     let cursor_position = self.windows_api.get_cursor_position();
     let (ref_point, ref_window) = match self.find_window_at_cursor(&cursor_position, &windows) {
@@ -205,6 +277,12 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
       return;
     };
 
+    if self.horizontal_layout_enabled() {
+      self.windows_api.do_minimise_window(window);
+      self.remove_horizontal_member_and_refocus(window);
+      return;
+    }
+
     self.windows_api.do_minimise_window(window);
     if self.allow_moving_cursor_after_close_or_minimise {
       self.find_and_select_closest_window(window);
@@ -213,6 +291,227 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
 
   pub fn restore_all_managed_windows(&mut self) {
     self.workspace_manager.restore_all_managed_windows();
+  }
+
+  /// Reconciles visible windows with active horizontal strips.
+  pub fn reconcile_horizontal_layout(&mut self) {
+    if !self.horizontal_layout_enabled() {
+      return;
+    }
+
+    let foreground = self.windows_api.get_foreground_window();
+    if foreground.is_some_and(|handle| self.windows_api.is_not_a_managed_window(&handle)) {
+      return;
+    }
+    let previous_workspace = self
+      .previous_foreground_window
+      .and_then(|handle| self.horizontal_layout.workspace_containing(handle));
+    let mut windows = self
+      .windows_api
+      .get_all_visible_windows()
+      .into_iter()
+      .filter(|window| {
+        self
+          .virtual_desktop_manager
+          .as_ref()
+          .is_none_or(|vdm| self.windows_api.is_window_on_current_desktop(vdm, window))
+      })
+      .collect::<Vec<_>>();
+    windows.sort_by_key(|window| (window.rect.left, window.rect.top, window.handle.hwnd));
+
+    let mut by_workspace: HashMap<PersistentWorkspaceId, Vec<Window>> = HashMap::new();
+    for window in windows {
+      let workspace = self
+        .horizontal_layout
+        .workspace_containing(window.handle)
+        .filter(|workspace| self.workspace_manager.is_workspace_active(*workspace))
+        .or_else(|| self.workspace_manager.active_workspace_for_window(window.handle));
+      if let Some(workspace) = workspace {
+        by_workspace.entry(workspace).or_default().push(window);
+      }
+    }
+
+    for (workspace, windows) in &by_workspace {
+      for window in windows {
+        if let Some(previous_workspace) = self.horizontal_layout.workspace_containing(window.handle)
+          && previous_workspace != *workspace
+        {
+          self.horizontal_layout.remove(previous_workspace, window.handle);
+        }
+      }
+    }
+
+    let active_workspaces = self.workspace_manager.active_workspace_ids();
+    let mut newly_focused = None;
+    if !self.horizontal_layout_initialised {
+      for workspace in &active_workspaces {
+        let members = by_workspace
+          .get(workspace)
+          .map(|windows| windows.iter().map(|window| window.handle).collect())
+          .unwrap_or_default();
+        self.horizontal_layout.adopt(*workspace, members, foreground);
+      }
+      self.horizontal_layout_initialised = true;
+    } else {
+      for workspace in &active_workspaces {
+        let visible = by_workspace
+          .get(workspace)
+          .map(|windows| windows.iter().map(|window| window.handle).collect::<Vec<_>>())
+          .unwrap_or_default();
+        self.horizontal_layout.retain(*workspace, &visible);
+
+        let new_members = visible
+          .iter()
+          .copied()
+          .filter(|handle| self.horizontal_layout.workspace_containing(*handle).is_none())
+          .collect::<Vec<_>>();
+        let desired_focus = foreground
+          .filter(|handle| new_members.contains(handle))
+          .or_else(|| new_members.last().copied());
+        for member in new_members {
+          self
+            .horizontal_layout
+            .insert_before(*workspace, member, self.previous_foreground_window);
+        }
+        if let Some(member) = desired_focus {
+          self.horizontal_layout.set_focused(*workspace, member);
+          newly_focused = Some((*workspace, member));
+        }
+      }
+    }
+
+    for workspace in active_workspaces {
+      self.reflow_horizontal_workspace(workspace);
+    }
+    if let Some((workspace, _)) = newly_focused {
+      self.reflow_horizontal_workspace(workspace);
+      self.focus_horizontal_workspace(workspace);
+    } else if let Some(handle) = foreground
+      && let Some(workspace) = self.horizontal_layout.workspace_containing(handle)
+    {
+      self.horizontal_layout.set_focused(workspace, handle);
+      self.reflow_horizontal_workspace(workspace);
+    } else if let Some(workspace) = previous_workspace
+      && self.workspace_manager.is_workspace_active(workspace)
+      && self
+        .previous_foreground_window
+        .is_some_and(|handle| self.horizontal_layout.workspace_containing(handle).is_none())
+    {
+      self.reflow_horizontal_workspace(workspace);
+      self.focus_horizontal_workspace(workspace);
+    }
+    self.previous_foreground_window = self.windows_api.get_foreground_window();
+  }
+
+  fn horizontal_layout_enabled(&self) -> bool {
+    self
+      .configuration_provider
+      .lock()
+      .expect(CONFIGURATION_PROVIDER_LOCK)
+      .get_bool(ENABLE_HORIZONTAL_LAYOUT)
+  }
+
+  fn reflow_horizontal_workspace(&mut self, workspace: PersistentWorkspaceId) {
+    let Some(monitor) = self.workspace_manager.monitor_for_workspace(workspace) else {
+      return;
+    };
+    let positions = self
+      .horizontal_layout
+      .placements(workspace, monitor.work_area, self.margin())
+      .into_iter()
+      .map(|(handle, sizing)| (handle, Rect::from(sizing)))
+      .collect::<Vec<_>>();
+    if self.horizontal_layout_positions.get(&workspace) == Some(&positions) {
+      return;
+    }
+    if let Some(focused) = self.horizontal_layout.focused(workspace) {
+      self.windows_api.set_window_positions(&positions, focused);
+    }
+    self.horizontal_layout_positions.insert(workspace, positions);
+  }
+
+  fn animate_horizontal_workspace(&mut self, workspace: PersistentWorkspaceId, outgoing: WindowHandle) {
+    let Some(monitor) = self.workspace_manager.monitor_for_workspace(workspace) else {
+      return;
+    };
+    let desired = self
+      .horizontal_layout
+      .placements(workspace, monitor.work_area, self.margin())
+      .into_iter()
+      .map(|(handle, sizing)| (handle, Rect::from(sizing)))
+      .collect::<Vec<_>>();
+    let starts = desired
+      .iter()
+      .map(|(handle, target)| (*handle, self.windows_api.get_window_rect(*handle).unwrap_or(*target)))
+      .collect::<HashMap<_, _>>();
+    let frame_duration = HORIZONTAL_ANIMATION_DURATION / HORIZONTAL_ANIMATION_FRAMES;
+    for frame in 1..=HORIZONTAL_ANIMATION_FRAMES {
+      let progress = f64::from(frame) / f64::from(HORIZONTAL_ANIMATION_FRAMES);
+      let eased_progress = 1.0 - (1.0 - progress).powi(3);
+      let positions = desired
+        .iter()
+        .map(|(handle, target)| {
+          let start = starts.get(handle).copied().unwrap_or(*target);
+          (*handle, interpolate_rect(start, *target, eased_progress))
+        })
+        .collect::<Vec<_>>();
+      self.windows_api.set_window_positions(&positions, outgoing);
+      if frame < HORIZONTAL_ANIMATION_FRAMES {
+        std::thread::sleep(frame_duration);
+      }
+    }
+    if let Some(focused) = self.horizontal_layout.focused(workspace) {
+      self.windows_api.set_window_positions(&desired, focused);
+    }
+    self.horizontal_layout_positions.insert(workspace, desired);
+  }
+
+  fn focus_horizontal_workspace(&self, workspace: PersistentWorkspaceId) {
+    let Some(handle) = self.horizontal_layout.focused(workspace) else {
+      return;
+    };
+    let Some(monitor) = self.workspace_manager.monitor_for_workspace(workspace) else {
+      return;
+    };
+    let sizing = Sizing::near_maximised(monitor.work_area, self.margin());
+    self.windows_api.set_foreground_window(handle);
+    self.windows_api.set_cursor_position(&Point::from_center_of_sizing(&sizing));
+  }
+
+  fn move_horizontal_focus(&mut self, direction: Direction) -> bool {
+    let Some(current) = self.windows_api.get_foreground_window() else {
+      return false;
+    };
+    let Some(workspace) = self.horizontal_layout.workspace_containing(current) else {
+      return false;
+    };
+    if self.horizontal_layout.focus_adjacent(workspace, current, direction).is_some() {
+      self.animate_horizontal_workspace(workspace, current);
+      self.focus_horizontal_workspace(workspace);
+    }
+    true
+  }
+
+  fn reorder_horizontal_window(&mut self, direction: Direction) {
+    let Some(current) = self.windows_api.get_foreground_window() else {
+      return;
+    };
+    let Some(workspace) = self.horizontal_layout.workspace_containing(current) else {
+      return;
+    };
+    if self.horizontal_layout.reorder(workspace, current, direction) {
+      self.reflow_horizontal_workspace(workspace);
+      self.focus_horizontal_workspace(workspace);
+    }
+  }
+
+  fn remove_horizontal_member_and_refocus(&mut self, member: WindowHandle) {
+    let Some(workspace) = self.horizontal_layout.workspace_containing(member) else {
+      return;
+    };
+    self.horizontal_layout.remove(workspace, member);
+    self.reflow_horizontal_workspace(workspace);
+    self.focus_horizontal_workspace(workspace);
   }
 
   fn margin(&self) -> i32 {
@@ -632,6 +931,19 @@ fn find_next_same_center_window<'window>(reference_window: &Window, windows: &[&
     .copied()
 }
 
+fn interpolate_rect(start: Rect, target: Rect, progress: f64) -> Rect {
+  fn coordinate(start: i32, target: i32, progress: f64) -> i32 {
+    (f64::from(start) + f64::from(target - start) * progress.clamp(0.0, 1.0)).round() as i32
+  }
+
+  Rect::new(
+    coordinate(start.left, target.left, progress),
+    coordinate(start.top, target.top, progress),
+    coordinate(start.right, target.right, progress),
+    coordinate(start.bottom, target.bottom, progress),
+  )
+}
+
 fn add_or_update_previous_placement(
   known_windows: &mut HashMap<String, WindowPlacement>,
   handle: WindowHandle,
@@ -688,10 +1000,12 @@ fn calculate_compensating_rect_if_required(rect: &Rect, sizing: &Sizing) -> Opti
 mod tests {
   use crate::api::{MockWindowsApi, WindowsApi};
   use crate::common::{Direction, MonitorHandle, Point, Rect, Sizing, Window, WindowHandle, WindowPlacement};
-  use crate::configuration_provider::ConfigurationProvider;
+  use crate::configuration_provider::{ConfigurationProvider, ENABLE_HORIZONTAL_LAYOUT};
+  use crate::horizontal_layout::HorizontalLayout;
   use crate::utils::{MINIMUM_WINDOW_DIMENSION, MINIMUM_WINDOW_DIMENSION_DIVISOR, create_temp_directory};
   use crate::window_manager::{DWM_TOLERANCE_IN_PX, WindowManager, select_window_in_direction};
   use crate::workspace_manager::WorkspaceManager;
+  use std::collections::HashMap;
   use std::path::PathBuf;
   use std::sync::{Arc, Mutex};
 
@@ -701,6 +1015,10 @@ mod tests {
         configuration_provider: Arc::new(Mutex::new(ConfigurationProvider::default())),
         known_windows: Default::default(),
         allow_moving_cursor_after_close_or_minimise: true,
+        horizontal_layout: HorizontalLayout::default(),
+        horizontal_layout_positions: HashMap::new(),
+        horizontal_layout_initialised: false,
+        previous_foreground_window: None,
         workspace_manager: WorkspaceManager::default(),
         virtual_desktop_manager: None,
         windows_api: api,
@@ -712,11 +1030,39 @@ mod tests {
         configuration_provider: Arc::new(Mutex::new(ConfigurationProvider::new_test(config_path))),
         known_windows: Default::default(),
         allow_moving_cursor_after_close_or_minimise: true,
+        horizontal_layout: HorizontalLayout::default(),
+        horizontal_layout_positions: HashMap::new(),
+        horizontal_layout_initialised: false,
+        previous_foreground_window: None,
         workspace_manager: WorkspaceManager::default(),
         virtual_desktop_manager: None,
         windows_api: api,
       }
     }
+  }
+
+  fn horizontal_manager() -> (WindowManager<MockWindowsApi>, tempfile::TempDir) {
+    MockWindowsApi::reset();
+    let directory = create_temp_directory();
+    let workspace_manager = WorkspaceManager::new_test(true, directory.path().join("workspaces.toml"));
+    let configuration_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
+    configuration_provider
+      .lock()
+      .unwrap()
+      .set_bool(ENABLE_HORIZONTAL_LAYOUT, true);
+    let manager = WindowManager {
+      configuration_provider,
+      known_windows: Default::default(),
+      allow_moving_cursor_after_close_or_minimise: true,
+      horizontal_layout: HorizontalLayout::default(),
+      horizontal_layout_positions: HashMap::new(),
+      horizontal_layout_initialised: false,
+      previous_foreground_window: None,
+      workspace_manager,
+      virtual_desktop_manager: None,
+      windows_api: MockWindowsApi,
+    };
+    (manager, directory)
   }
 
   fn with_margin_set_to(margin: i32, manager: &mut WindowManager<MockWindowsApi>) {
@@ -725,6 +1071,437 @@ mod tests {
       .lock()
       .unwrap()
       .set_i32(crate::configuration_provider::WINDOW_MARGIN, margin);
+  }
+
+  #[test]
+  fn disabled_horizontal_layout_does_not_reposition_windows() {
+    MockWindowsApi::reset();
+    let handle = WindowHandle::new(1);
+    let sizing = Sizing::new(5, 10, 100, 80);
+    MockWindowsApi::add_or_update_window(handle, "Window".to_string(), sizing.clone(), false, false, true);
+    MockWindowsApi::add_monitor(1.into(), Rect::new(0, 0, 200, 200), true);
+    MockWindowsApi::place_window(handle, 1.into());
+    let mut manager = WindowManager::default(MockWindowsApi);
+
+    manager.reconcile_horizontal_layout();
+
+    assert_eq!(
+      manager.windows_api.get_window_placement(handle).unwrap(),
+      WindowPlacement::new_from_sizing(sizing)
+    );
+  }
+
+  #[test]
+  fn horizontal_reconciliation_ignores_non_manageable_windows() {
+    let (mut manager, _directory) = horizontal_manager();
+    let tray_menu = WindowHandle::new(2);
+    let original = Sizing::new(300, 300, 200, 100);
+    MockWindowsApi::add_or_update_window(tray_menu, "Tray menu".to_string(), original.clone(), false, false, false);
+    MockWindowsApi::place_window(tray_menu, 1.into());
+    MockWindowsApi::mark_window_unmanageable(tray_menu);
+
+    manager.reconcile_horizontal_layout();
+
+    assert_eq!(
+      manager.windows_api.get_window_placement(tray_menu).unwrap(),
+      WindowPlacement::new_from_sizing(original)
+    );
+  }
+
+  #[test]
+  fn horizontal_reconciliation_does_not_steal_focus_or_mouse_from_unmanaged_popup() {
+    let (mut manager, _directory) = horizontal_manager();
+    manager.reconcile_horizontal_layout();
+    let tray_popup = WindowHandle::new(2);
+    MockWindowsApi::add_or_update_window(
+      tray_popup,
+      "Tray popup".to_string(),
+      Sizing::new(1500, 900, 200, 100),
+      false,
+      false,
+      true,
+    );
+    MockWindowsApi::place_window(tray_popup, 1.into());
+    MockWindowsApi::mark_window_unmanageable(tray_popup);
+    let click_position = Point::new(1800, 1000);
+    MockWindowsApi::set_cursor_position(click_position);
+    MockWindowsApi::clear_position_batches();
+
+    manager.reconcile_horizontal_layout();
+
+    assert!(MockWindowsApi::position_batches().is_empty());
+    assert_eq!(manager.windows_api.get_foreground_window(), Some(tray_popup));
+    assert_eq!(manager.windows_api.get_cursor_position(), click_position);
+  }
+
+  #[test]
+  fn off_screen_member_keeps_its_stored_workspace_when_windows_reports_another_monitor() {
+    let (mut manager, _directory) = horizontal_manager();
+    let second = WindowHandle::new(2);
+    MockWindowsApi::add_or_update_window(
+      second,
+      "Second".to_string(),
+      Sizing::new(500, 50, 100, 100),
+      false,
+      false,
+      false,
+    );
+    MockWindowsApi::place_window(second, 1.into());
+    manager.reconcile_horizontal_layout();
+    MockWindowsApi::assign_window_to_monitor(second, 2.into());
+
+    manager.reconcile_horizontal_layout();
+
+    assert_eq!(
+      manager.windows_api.get_window_placement(second).unwrap().normal_position.left,
+      1940
+    );
+  }
+
+  #[test]
+  fn unchanged_horizontal_reconciliation_does_not_reposition_windows() {
+    let (mut manager, _directory) = horizontal_manager();
+    manager.reconcile_horizontal_layout();
+    MockWindowsApi::clear_position_batches();
+
+    manager.reconcile_horizontal_layout();
+
+    assert!(MockWindowsApi::position_batches().is_empty());
+  }
+
+  #[test]
+  fn horizontal_reconciliation_does_not_reset_mouse_position() {
+    let (mut manager, _directory) = horizontal_manager();
+    manager.reconcile_horizontal_layout();
+    let mouse_position = Point::new(300, 400);
+    MockWindowsApi::set_cursor_position(mouse_position);
+
+    manager.reconcile_horizontal_layout();
+
+    assert_eq!(manager.windows_api.get_cursor_position(), mouse_position);
+  }
+
+  #[test]
+  fn horizontal_layout_adopts_and_places_existing_windows() {
+    let (mut manager, _directory) = horizontal_manager();
+    let second = WindowHandle::new(2);
+    MockWindowsApi::add_or_update_window(
+      second,
+      "Second".to_string(),
+      Sizing::new(500, 50, 100, 100),
+      false,
+      false,
+      false,
+    );
+    MockWindowsApi::place_window(second, 1.into());
+
+    manager.reconcile_horizontal_layout();
+
+    assert_eq!(
+      manager.windows_api.get_window_placement(1.into()).unwrap(),
+      WindowPlacement::new_from_sizing(Sizing::new(20, 20, 1880, 990))
+    );
+    assert_eq!(
+      manager.windows_api.get_window_placement(second).unwrap(),
+      WindowPlacement::new_from_sizing(Sizing::new(1940, 20, 1880, 990))
+    );
+  }
+
+  #[test]
+  fn horizontal_layout_inserts_new_foreground_before_previous_foreground() {
+    let (mut manager, _directory) = horizontal_manager();
+    let second = WindowHandle::new(2);
+    MockWindowsApi::add_or_update_window(
+      second,
+      "Second".to_string(),
+      Sizing::new(500, 50, 100, 100),
+      false,
+      false,
+      false,
+    );
+    MockWindowsApi::place_window(second, 1.into());
+    manager.reconcile_horizontal_layout();
+    let new_window = WindowHandle::new(3);
+    MockWindowsApi::add_or_update_window(
+      new_window,
+      "New".to_string(),
+      Sizing::new(300, 50, 100, 100),
+      false,
+      false,
+      true,
+    );
+    MockWindowsApi::place_window(new_window, 1.into());
+
+    manager.reconcile_horizontal_layout();
+
+    assert_eq!(manager.windows_api.get_foreground_window(), Some(new_window));
+    assert_eq!(
+      manager
+        .windows_api
+        .get_window_placement(new_window)
+        .unwrap()
+        .normal_position
+        .left,
+      20
+    );
+    assert_eq!(
+      manager
+        .windows_api
+        .get_window_placement(1.into())
+        .unwrap()
+        .normal_position
+        .left,
+      1940
+    );
+    assert_eq!(
+      manager.windows_api.get_window_placement(second).unwrap().normal_position.left,
+      3860
+    );
+  }
+
+  #[test]
+  fn horizontal_layout_focuses_new_window_even_before_it_becomes_foreground() {
+    let (mut manager, _directory) = horizontal_manager();
+    manager.reconcile_horizontal_layout();
+    let new_window = WindowHandle::new(2);
+    MockWindowsApi::add_or_update_window(
+      new_window,
+      "New".to_string(),
+      Sizing::new(300, 50, 100, 100),
+      false,
+      false,
+      false,
+    );
+    MockWindowsApi::place_window(new_window, 1.into());
+
+    manager.reconcile_horizontal_layout();
+
+    assert_eq!(manager.windows_api.get_foreground_window(), Some(new_window));
+    assert_eq!(
+      manager
+        .windows_api
+        .get_window_placement(new_window)
+        .unwrap()
+        .normal_position
+        .left,
+      20
+    );
+  }
+
+  #[test]
+  fn horizontal_focus_scrolls_strip_and_horizontal_move_reorders_it() {
+    let (mut manager, _directory) = horizontal_manager();
+    let second = WindowHandle::new(2);
+    MockWindowsApi::add_or_update_window(
+      second,
+      "Second".to_string(),
+      Sizing::new(500, 50, 100, 100),
+      false,
+      false,
+      false,
+    );
+    MockWindowsApi::place_window(second, 1.into());
+    manager.reconcile_horizontal_layout();
+
+    manager.move_cursor(Direction::Right);
+    assert_eq!(manager.windows_api.get_foreground_window(), Some(second));
+    assert_eq!(
+      manager.windows_api.get_window_placement(second).unwrap().normal_position.left,
+      20
+    );
+
+    manager.move_window(Direction::Left);
+    assert_eq!(
+      manager.windows_api.get_window_placement(second).unwrap().normal_position.left,
+      20
+    );
+    assert_eq!(
+      manager
+        .windows_api
+        .get_window_placement(1.into())
+        .unwrap()
+        .normal_position
+        .left,
+      1940
+    );
+  }
+
+  #[test]
+  fn horizontal_focus_animates_batched_intermediate_positions() {
+    let (mut manager, _directory) = horizontal_manager();
+    let second = WindowHandle::new(2);
+    MockWindowsApi::add_or_update_window(
+      second,
+      "Second".to_string(),
+      Sizing::new(500, 50, 100, 100),
+      false,
+      false,
+      false,
+    );
+    MockWindowsApi::place_window(second, 1.into());
+    manager.reconcile_horizontal_layout();
+    MockWindowsApi::clear_position_batches();
+
+    manager.move_cursor(Direction::Right);
+
+    let batches = MockWindowsApi::position_batches();
+    assert!(batches.len() > 2);
+    let first_incoming = batches[0]
+      .iter()
+      .find(|(handle, _)| *handle == second)
+      .map(|(_, rect)| *rect)
+      .unwrap();
+    assert!(first_incoming.left < 1940 && first_incoming.left > 20);
+    assert_eq!(batches.last().unwrap()[0].0, second, "Focused window should be topmost");
+    assert_eq!(
+      manager.windows_api.get_window_placement(second).unwrap().normal_position.left,
+      20
+    );
+  }
+
+  #[test]
+  fn horizontal_layout_disables_vertical_move_and_resize() {
+    let (mut manager, _directory) = horizontal_manager();
+    manager.reconcile_horizontal_layout();
+    let initial = manager.windows_api.get_window_placement(1.into()).unwrap();
+
+    manager.move_window(Direction::Up);
+    manager.resize_window(Direction::Left);
+
+    assert_eq!(manager.windows_api.get_window_placement(1.into()).unwrap(), initial);
+  }
+
+  #[test]
+  fn horizontal_workspace_switch_preserves_off_screen_strip_members() {
+    let (mut manager, _directory) = horizontal_manager();
+    let second = WindowHandle::new(2);
+    MockWindowsApi::add_or_update_window(
+      second,
+      "Second".to_string(),
+      Sizing::new(500, 50, 100, 100),
+      false,
+      false,
+      false,
+    );
+    MockWindowsApi::place_window(second, 1.into());
+    manager.reconcile_horizontal_layout();
+    let first_workspace =
+      crate::common::PersistentWorkspaceId::from(*crate::workspace_manager::tests::primary_active_ws_id());
+    let second_workspace = manager
+      .workspace_manager
+      .workspaces
+      .keys()
+      .find(|id| id.monitor_id == first_workspace.monitor_id && id.workspace == 2)
+      .copied()
+      .unwrap();
+
+    manager.switch_workspace(second_workspace);
+    assert!(manager.windows_api.get_all_visible_windows().is_empty());
+    manager.switch_workspace(first_workspace);
+
+    assert_eq!(manager.windows_api.get_all_visible_windows().len(), 2);
+    assert_eq!(
+      manager
+        .windows_api
+        .get_window_placement(1.into())
+        .unwrap()
+        .normal_position
+        .left,
+      20
+    );
+    assert_eq!(
+      manager.windows_api.get_window_placement(second).unwrap().normal_position.left,
+      1940
+    );
+  }
+
+  #[test]
+  fn horizontal_move_to_workspace_updates_both_strips() {
+    let (mut manager, _directory) = horizontal_manager();
+    let second = WindowHandle::new(2);
+    MockWindowsApi::add_or_update_window(
+      second,
+      "Second".to_string(),
+      Sizing::new(500, 50, 100, 100),
+      false,
+      false,
+      false,
+    );
+    MockWindowsApi::place_window(second, 1.into());
+    manager.reconcile_horizontal_layout();
+    let first_workspace =
+      crate::common::PersistentWorkspaceId::from(*crate::workspace_manager::tests::primary_active_ws_id());
+    let second_workspace = manager
+      .workspace_manager
+      .workspaces
+      .keys()
+      .find(|id| id.monitor_id == first_workspace.monitor_id && id.workspace == 2)
+      .copied()
+      .unwrap();
+
+    manager.move_window_to_workspace(second_workspace);
+    assert_eq!(manager.windows_api.get_foreground_window(), Some(second));
+    manager.switch_workspace(second_workspace);
+
+    assert_eq!(manager.windows_api.get_foreground_window(), Some(1.into()));
+    assert_eq!(
+      manager
+        .windows_api
+        .get_window_placement(1.into())
+        .unwrap()
+        .normal_position
+        .left,
+      20
+    );
+  }
+
+  #[test]
+  fn horizontal_reconciliation_removes_externally_closed_member() {
+    let (mut manager, _directory) = horizontal_manager();
+    let second = WindowHandle::new(2);
+    MockWindowsApi::add_or_update_window(
+      second,
+      "Second".to_string(),
+      Sizing::new(500, 50, 100, 100),
+      false,
+      false,
+      false,
+    );
+    MockWindowsApi::place_window(second, 1.into());
+    manager.reconcile_horizontal_layout();
+    manager.windows_api.do_close_window(1.into());
+
+    manager.reconcile_horizontal_layout();
+
+    assert_eq!(manager.windows_api.get_foreground_window(), Some(second));
+    assert_eq!(
+      manager.windows_api.get_window_placement(second).unwrap().normal_position.left,
+      20
+    );
+  }
+
+  #[test]
+  fn horizontal_layout_removes_closed_member_and_focuses_neighbour() {
+    let (mut manager, _directory) = horizontal_manager();
+    let second = WindowHandle::new(2);
+    MockWindowsApi::add_or_update_window(
+      second,
+      "Second".to_string(),
+      Sizing::new(500, 50, 100, 100),
+      false,
+      false,
+      false,
+    );
+    MockWindowsApi::place_window(second, 1.into());
+    manager.reconcile_horizontal_layout();
+
+    manager.close_window();
+
+    assert_eq!(manager.windows_api.get_foreground_window(), Some(second));
+    assert_eq!(
+      manager.windows_api.get_window_placement(second).unwrap().normal_position.left,
+      20
+    );
   }
 
   #[test]

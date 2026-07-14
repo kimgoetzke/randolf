@@ -1,5 +1,5 @@
 use crate::api::WindowsApi;
-use crate::common::{Monitors, PersistentWorkspaceId, TransientWorkspaceId, Window, Workspace};
+use crate::common::{Monitor, Monitors, PersistentWorkspaceId, TransientWorkspaceId, Window, WindowHandle, Workspace};
 use crate::files::{FileManager, FileType, WorkspacesFile};
 use crate::workspace_guard::WorkspaceGuard;
 use std::collections::{HashMap, HashSet};
@@ -105,8 +105,48 @@ impl<T: WindowsApi + Clone> WorkspaceManager<T> {
   }
 
   pub fn switch_workspace(&mut self, target_workspace_id: PersistentWorkspaceId) {
+    self.switch_workspace_with_additional_windows(target_workspace_id, &[]);
+  }
+
+  /// Switches workspace while capturing supplied off-screen members.
+  pub fn switch_workspace_with_additional_windows(
+    &mut self,
+    target_workspace_id: PersistentWorkspaceId,
+    additional_windows: &[WindowHandle],
+  ) {
     let mut guard = WorkspaceGuard::new(self);
-    guard.switch_workspace(target_workspace_id);
+    guard.switch_workspace_with_additional_windows(target_workspace_id, additional_windows);
+  }
+
+  /// Returns the active workspace containing a window's monitor.
+  pub fn active_workspace_for_window(&self, handle: WindowHandle) -> Option<PersistentWorkspaceId> {
+    let monitor_handle = self.windows_api.get_monitor_handle_for_window_handle(handle);
+    let monitor_id = self.windows_api.get_monitor_id_for_handle(monitor_handle)?;
+    self
+      .workspaces
+      .iter()
+      .find_map(|(id, workspace)| (workspace.is_active() && id.monitor_id == monitor_id).then_some(*id))
+  }
+
+  /// Returns all active workspace IDs.
+  pub fn active_workspace_ids(&self) -> Vec<PersistentWorkspaceId> {
+    let mut ids = self
+      .workspaces
+      .iter()
+      .filter_map(|(id, workspace)| workspace.is_active().then_some(*id))
+      .collect::<Vec<_>>();
+    ids.sort();
+    ids
+  }
+
+  /// Returns a workspace's current monitor.
+  pub fn monitor_for_workspace(&self, id: PersistentWorkspaceId) -> Option<Monitor> {
+    self.workspaces.get(&id).map(|workspace| workspace.monitor.clone())
+  }
+
+  /// Returns whether a workspace is active.
+  pub fn is_workspace_active(&self, id: PersistentWorkspaceId) -> bool {
+    self.workspaces.get(&id).is_some_and(Workspace::is_active)
   }
 
   pub fn move_window_to_workspace(&mut self, target_workspace_id: PersistentWorkspaceId) {

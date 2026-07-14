@@ -582,12 +582,12 @@ impl WindowsApiForDragging {
   fn is_not_a_managed_window(handle: &HWND) -> bool {
     let mut result = false;
     let class_name = Self::get_window_class_name(handle);
-    if IGNORED_CLASS_NAMES.contains(&&**&class_name) {
+    if IGNORED_CLASS_NAMES.contains(&class_name.as_str()) {
       result = true;
     }
 
     let title = Self::get_window_title(handle);
-    if IGNORED_WINDOW_TITLES.contains(&&*title) {
+    if IGNORED_WINDOW_TITLES.contains(&title.as_str()) {
       result = true;
     }
 
