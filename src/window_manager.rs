@@ -291,6 +291,9 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
 
   pub fn restore_all_managed_windows(&mut self) {
     self.workspace_manager.restore_all_managed_windows();
+    if self.horizontal_layout_enabled() {
+      self.restore_off_screen_horizontal_windows();
+    }
   }
 
   /// Reconciles visible windows with active horizontal strips.
@@ -409,6 +412,37 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
       .lock()
       .expect(CONFIGURATION_PROVIDER_LOCK)
       .get_bool(ENABLE_HORIZONTAL_LAYOUT)
+  }
+
+  fn restore_off_screen_horizontal_windows(&self) {
+    let monitors = self.windows_api.get_all_monitors();
+    let screen_areas = monitors
+      .get_all()
+      .into_iter()
+      .map(|monitor| monitor.monitor_area)
+      .collect::<Vec<_>>();
+    let fallback_monitor = monitors
+      .get_all()
+      .into_iter()
+      .find(|monitor| monitor.is_primary)
+      .or_else(|| monitors.get_all().into_iter().next());
+    let margin = self.margin();
+
+    for workspace in self.horizontal_layout.workspace_ids() {
+      let Some(monitor) = monitors.get_by_id(&workspace.monitor_id).or(fallback_monitor) else {
+        continue;
+      };
+      let target = Rect::from(Sizing::near_maximised(monitor.work_area, margin));
+      for handle in self.horizontal_layout.members(workspace) {
+        let is_off_screen = self
+          .windows_api
+          .get_window_rect(*handle)
+          .is_some_and(|rect| !screen_areas.iter().any(|area| rect.intersects(area)));
+        if is_off_screen {
+          self.windows_api.set_window_position(*handle, target);
+        }
+      }
+    }
   }
 
   fn reflow_horizontal_workspace(&mut self, workspace: PersistentWorkspaceId) {
@@ -1413,6 +1447,42 @@ mod tests {
       manager.windows_api.get_window_placement(second).unwrap().normal_position.left,
       1940
     );
+  }
+
+  #[test]
+  fn restoring_horizontal_layout_moves_off_screen_members_onto_their_monitor() {
+    let (mut manager, _directory) = horizontal_manager();
+    let second = WindowHandle::new(2);
+    MockWindowsApi::add_or_update_window(
+      second,
+      "Second".to_string(),
+      Sizing::new(500, 50, 100, 100),
+      false,
+      false,
+      false,
+    );
+    MockWindowsApi::place_window(second, 1.into());
+    manager.reconcile_horizontal_layout();
+    let first_workspace =
+      crate::common::PersistentWorkspaceId::from(*crate::workspace_manager::tests::primary_active_ws_id());
+    let empty_workspace = manager
+      .workspace_manager
+      .workspaces
+      .keys()
+      .find(|id| id.monitor_id == first_workspace.monitor_id && id.workspace == 2)
+      .copied()
+      .unwrap();
+    manager.switch_workspace(empty_workspace);
+
+    manager.restore_all_managed_windows();
+
+    let visible_windows = manager.windows_api.get_all_visible_windows();
+    assert_eq!(visible_windows.len(), 2);
+    assert!(visible_windows.iter().all(|window| {
+      window
+        .rect
+        .intersects(&crate::workspace_manager::tests::primary_monitor().monitor_area)
+    }));
   }
 
   #[test]

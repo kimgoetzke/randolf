@@ -47,6 +47,11 @@ impl HorizontalLayout {
     self.strips.get(&workspace).map_or(&[], |strip| strip.members.as_slice())
   }
 
+  /// Returns IDs for all tracked workspaces.
+  pub(crate) fn workspace_ids(&self) -> impl Iterator<Item = PersistentWorkspaceId> + '_ {
+    self.strips.keys().copied()
+  }
+
   /// Returns the workspace containing a member.
   pub(crate) fn workspace_containing(&self, member: WindowHandle) -> Option<PersistentWorkspaceId> {
     self
