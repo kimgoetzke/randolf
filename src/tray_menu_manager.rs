@@ -1,7 +1,7 @@
 use crate::api::get_all_monitors;
 use crate::common::{Command, PersistentWorkspaceId};
 use crate::configuration_provider::{
-  ALLOW_SELECTING_SAME_CENTER_WINDOWS, ConfigurationProvider, FORCE_USING_ADMIN_PRIVILEGES, WINDOW_MARGIN,
+  ALLOW_SELECTING_SAME_CENTER_WINDOWS, ConfigurationProvider, FORCE_USING_ADMIN_PRIVILEGES, Layout, WINDOW_MARGIN,
 };
 use crate::utils::{CONFIGURATION_PROVIDER_LOCK, TRAY_ICON_LOCK, TRAY_ICON_OPEN};
 use crossbeam_channel::{Receiver, Sender, unbounded};
@@ -28,6 +28,7 @@ enum Event {
   Exit,
   DisabledItem,
   SetMargin(i32),
+  SetDefaultLayout(Layout),
   ToggleSelectingSameCenterWindows,
   ToggleForceUsingAdminPrivileges,
   LogMonitorLayout,
@@ -123,6 +124,17 @@ impl TrayMenuManager {
               error!("Failed to set menu: {err}");
             }
             debug!("Set window margin to [{}]", margin);
+          }
+        }
+        Event::SetDefaultLayout(layout) => {
+          let current_layout = { unlocked_config_provider(&config_provider).get_default_layout() };
+          if current_layout != layout {
+            unlocked_config_provider(&config_provider).set_default_layout(layout);
+            let menu = build_menu(&config_provider);
+            if let Err(err) = tray_icon.lock().expect(TRAY_ICON_LOCK).set_menu(&menu) {
+              error!("Failed to set menu: {err}");
+            }
+            debug!("Set default layout to [{:?}]", layout);
           }
         }
         Event::ToggleSelectingSameCenterWindows => {
@@ -239,6 +251,7 @@ fn unlocked_config_provider(config_provider: &Arc<Mutex<ConfigurationProvider>>)
 fn build_menu(config_provider: &Arc<Mutex<ConfigurationProvider>>) -> MenuBuilder<Event> {
   let config = unlocked_config_provider(config_provider);
   let current_margin: i32 = config.get_i32(WINDOW_MARGIN);
+  let current_layout = config.get_default_layout();
   let icon_bytes = include_bytes!("../assets/randolf.ico");
 
   MenuBuilder::new()
@@ -268,6 +281,7 @@ fn build_menu(config_provider: &Arc<Mutex<ConfigurationProvider>>) -> MenuBuilde
         .checkable("100 px", 100 == current_margin, Event::SetMargin(100))
         .checkable("150 px", 150 == current_margin, Event::SetMargin(150)),
     )
+    .submenu("Set default layout...", build_default_layout_menu(current_layout))
     .separator()
     .checkable(
       "Allow selecting same center windows",
@@ -288,10 +302,24 @@ fn build_menu(config_provider: &Arc<Mutex<ConfigurationProvider>>) -> MenuBuilde
     .item("Exit (restores any hidden windows)", Event::Exit)
 }
 
+fn build_default_layout_menu(current_layout: Layout) -> MenuBuilder<Event> {
+  MenuBuilder::new()
+    .checkable(
+      "Spatial",
+      current_layout == Layout::Spatial,
+      Event::SetDefaultLayout(Layout::Spatial),
+    )
+    .checkable(
+      "Scrolling",
+      current_layout == Layout::Scrolling,
+      Event::SetDefaultLayout(Layout::Scrolling),
+    )
+}
+
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::configuration_provider::ConfigurationProvider;
+  use crate::configuration_provider::{ConfigurationProvider, Layout};
   use serial_test::serial;
   use std::sync::{Arc, Mutex};
 
@@ -448,6 +476,24 @@ mod test {
     });
     assert!(!IS_DRAG_ICON_SHOWN.load(std::sync::atomic::Ordering::Relaxed));
     assert_eq!(WORKSPACE.load(std::sync::atomic::Ordering::Relaxed), 2);
+  }
+
+  #[test]
+  fn default_layout_menu_checks_spatial_only_when_spatial_is_selected() {
+    let expected = MenuBuilder::new()
+      .checkable("Spatial", true, Event::SetDefaultLayout(Layout::Spatial))
+      .checkable("Scrolling", false, Event::SetDefaultLayout(Layout::Scrolling));
+
+    assert_eq!(build_default_layout_menu(Layout::Spatial), expected);
+  }
+
+  #[test]
+  fn default_layout_menu_checks_scrolling_only_when_scrolling_is_selected() {
+    let expected = MenuBuilder::new()
+      .checkable("Spatial", false, Event::SetDefaultLayout(Layout::Spatial))
+      .checkable("Scrolling", true, Event::SetDefaultLayout(Layout::Scrolling));
+
+    assert_eq!(build_default_layout_menu(Layout::Scrolling), expected);
   }
 
   #[test]

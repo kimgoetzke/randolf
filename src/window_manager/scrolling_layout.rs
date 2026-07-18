@@ -47,6 +47,38 @@ impl ScrollingLayout {
     self.layout.insert_before(workspace, window, None);
   }
 
+  /// Restores and releases active strips that no longer use Scrolling Layout.
+  pub(super) fn deactivate<T: WindowsApi + Clone>(
+    &mut self,
+    api: &T,
+    workspace_manager: &WorkspaceManager<T>,
+    workspaces: &[PersistentWorkspaceId],
+    margin: i32,
+  ) {
+    let screen_areas = api
+      .get_all_monitors()
+      .get_all()
+      .into_iter()
+      .map(|monitor| monitor.monitor_area)
+      .collect::<Vec<_>>();
+    for workspace in workspaces {
+      let members = self.layout.remove_workspace(*workspace);
+      self.positions.remove(workspace);
+      let Some(monitor) = workspace_manager.monitor_for_workspace(*workspace) else {
+        continue;
+      };
+      let target = Rect::from(Sizing::near_maximised(monitor.work_area, margin));
+      for handle in members {
+        let off_screen = api
+          .get_window_rect(handle)
+          .is_some_and(|rect| !screen_areas.iter().any(|area| rect.intersects(area)));
+        if off_screen {
+          api.set_window_position(handle, target);
+        }
+      }
+    }
+  }
+
   /// Updates active strips to match the visible managed windows.
   pub(super) fn reconcile<T: WindowsApi + Clone>(
     &mut self,

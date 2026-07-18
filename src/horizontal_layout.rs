@@ -52,6 +52,11 @@ impl HorizontalLayout {
     self.strips.keys().copied()
   }
 
+  /// Removes a workspace strip and returns its members.
+  pub(crate) fn remove_workspace(&mut self, workspace: PersistentWorkspaceId) -> Vec<WindowHandle> {
+    self.strips.remove(&workspace).map_or_else(Vec::new, |strip| strip.members)
+  }
+
   /// Returns the workspace containing a member.
   pub(crate) fn workspace_containing(&self, member: WindowHandle) -> Option<PersistentWorkspaceId> {
     self

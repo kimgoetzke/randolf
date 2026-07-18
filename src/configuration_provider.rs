@@ -436,6 +436,17 @@ impl ConfigurationProvider {
     self.save_config_or_log_error();
   }
 
+  /// Returns the fallback layout for monitors without an override.
+  pub fn get_default_layout(&self) -> Layout {
+    self.config.layout.default
+  }
+
+  /// Saves the fallback layout without changing monitor overrides.
+  pub fn set_default_layout(&mut self, layout: Layout) {
+    self.config.layout.default = layout;
+    self.save_config_or_log_error();
+  }
+
   /// Resolves a monitor's configured layout.
   pub fn layout_for_monitor(&self, monitor_id: &str, is_primary: bool) -> Layout {
     self
@@ -544,11 +555,6 @@ mod tests {
       Self { file_manager, config }
     }
 
-    /// Sets the default layout without saving it.
-    pub fn set_default_layout(&mut self, layout: Layout) {
-      self.config.layout.default = layout;
-    }
-
     /// Adds a monitor override without saving it.
     pub fn set_monitor_layout(&mut self, id: &str, layout: Layout) {
       self.config.layout.monitor.push(MonitorLayoutConfiguration {
@@ -616,6 +622,45 @@ mod tests {
     let configuration_provider = ConfigurationProvider::default();
 
     assert_eq!(configuration_provider.layout_for_monitor("DISPLAY1", true), Layout::Spatial);
+  }
+
+  #[test]
+  fn get_default_layout_returns_configured_default() {
+    let mut configuration_provider = ConfigurationProvider::default();
+    configuration_provider.set_default_layout(Layout::Scrolling);
+
+    assert_eq!(configuration_provider.get_default_layout(), Layout::Scrolling);
+  }
+
+  #[test]
+  fn set_default_layout_persists_without_changing_monitor_overrides() {
+    let directory = create_temp_directory();
+    let path = directory.path().join(CONFIGURATION_FILE_NAME);
+    fs::write(
+      &path,
+      r#"
+        [general]
+        [layout]
+        default = "spatial"
+
+        [[layout.monitor]]
+        id = "DISPLAY1"
+        mode = "spatial"
+
+        [spatial_layout]
+        [scrolling_layout]
+        [exclusion_settings]
+      "#,
+    )
+    .expect("Failed to write config file");
+    let mut configuration_provider = ConfigurationProvider::new_test(path.clone());
+
+    configuration_provider.set_default_layout(Layout::Scrolling);
+
+    let reloaded = ConfigurationProvider::new_test(path);
+    assert_eq!(reloaded.get_default_layout(), Layout::Scrolling);
+    assert_eq!(reloaded.layout_for_monitor("DISPLAY1", false), Layout::Spatial);
+    assert_eq!(reloaded.layout_for_monitor("DISPLAY2", false), Layout::Scrolling);
   }
 
   #[test]

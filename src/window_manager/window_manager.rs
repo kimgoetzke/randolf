@@ -219,19 +219,26 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     self.scrolling.restore_off_screen(&self.windows_api, self.margin());
   }
 
-  /// Updates active scrolling strips to match the visible managed windows.
+  /// Updates active layout state to match the visible managed windows.
   pub fn reconcile_layouts(&mut self) {
-    let active_workspaces = self
-      .workspace_manager
-      .active_workspace_ids()
-      .into_iter()
+    let active_workspaces = self.workspace_manager.active_workspace_ids();
+    let scrolling_workspaces = active_workspaces
+      .iter()
+      .copied()
       .filter(|workspace| self.get_layout_for_workspace(*workspace) == Some(Layout::Scrolling))
       .collect::<Vec<_>>();
+    let spatial_workspaces = active_workspaces
+      .into_iter()
+      .filter(|workspace| self.get_layout_for_workspace(*workspace) == Some(Layout::Spatial))
+      .collect::<Vec<_>>();
     let margin = self.margin();
+    self
+      .scrolling
+      .deactivate(&self.windows_api, &self.workspace_manager, &spatial_workspaces, margin);
     self.scrolling.reconcile(
       &self.windows_api,
       &self.workspace_manager,
-      &active_workspaces,
+      &scrolling_workspaces,
       self.virtual_desktop_manager.as_ref(),
       margin,
     );

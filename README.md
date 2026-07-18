@@ -45,6 +45,7 @@ are welcome.
 - Display a tray icon that also functions as a workspace indicator and has a context menu that allows you to...
     - Print a visual representation of the perceived monitor layout to the log file
     - Customise the window margin
+    - Select the default layout (spatial or scrolling)
     - Open the folder containing the Randolf executable in File Explorer
     - Restart the application (which will reload `randolf.toml` prior to restarting) with or without admin privileges
     - Close the application which restores all hidden windows
@@ -125,8 +126,8 @@ The `[general]` section contains the general settings for the application.
 
 ### Layout settings
 
-`[layout].default` selects either `spatial` or `scrolling` for monitors without an override. Monitor overrides use
-repeated `[[layout.monitor]]` entries:
+`[layout].default` selects either `spatial` or `scrolling` for monitors without an override. It can also be changed
+using **Set default layout...** in the tray context menu. Monitor overrides use repeated `[[layout.monitor]]` entries:
 
 ```toml
 [layout]

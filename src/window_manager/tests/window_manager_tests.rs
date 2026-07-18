@@ -177,6 +177,93 @@ fn reconciliation_only_manages_scrolling_monitors() {
 }
 
 #[test]
+fn changing_default_from_spatial_to_scrolling_adopts_active_windows() {
+  MockWindowsApi::reset();
+  let directory = create_temp_directory();
+  let workspace_manager = WorkspaceManager::new_test(true, directory.path().join("workspaces.toml"));
+  let configuration_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
+  let mut manager = WindowManager {
+    configuration_provider: configuration_provider.clone(),
+    placement: Default::default(),
+    allow_moving_cursor_after_close_or_minimise: true,
+    scrolling: Default::default(),
+    spatial: Default::default(),
+    workspace_manager,
+    virtual_desktop_manager: None,
+    windows_api: MockWindowsApi,
+  };
+  assert!(manager.scrolling.get_workspace_containing(1.into()).is_none());
+
+  configuration_provider.lock().unwrap().set_default_layout(Layout::Scrolling);
+  manager.reconcile_layouts();
+
+  assert!(manager.scrolling.get_workspace_containing(1.into()).is_some());
+}
+
+#[test]
+fn changing_default_from_scrolling_to_spatial_restores_and_releases_active_windows() {
+  let (mut manager, _directory) = scrolling_manager();
+  let second = WindowHandle::new(2);
+  MockWindowsApi::add_or_update_window(
+    second,
+    "Second".to_string(),
+    Sizing::new(200, 50, 100, 100),
+    false,
+    false,
+    false,
+  );
+  MockWindowsApi::place_window(second, 1.into());
+  manager.reconcile_layouts();
+  assert!(manager.scrolling.get_workspace_containing(second).is_some());
+
+  manager
+    .configuration_provider
+    .lock()
+    .unwrap()
+    .set_default_layout(Layout::Spatial);
+  manager.reconcile_layouts();
+
+  assert!(manager.scrolling.get_workspace_containing(1.into()).is_none());
+  assert!(manager.scrolling.get_workspace_containing(second).is_none());
+  assert_eq!(
+    manager.windows_api.get_window_placement(second).unwrap(),
+    WindowPlacement::new_from_sizing(Sizing::near_maximised(Rect::new(0, 0, 1920, 1030), 20))
+  );
+}
+
+#[test]
+fn changing_default_to_spatial_keeps_overridden_scrolling_monitor_managed() {
+  let (mut manager, _directory) = scrolling_manager();
+  let secondary = WindowHandle::new(2);
+  MockWindowsApi::add_or_update_window(
+    secondary,
+    "Secondary".to_string(),
+    Sizing::new(-700, 50, 100, 100),
+    false,
+    false,
+    false,
+  );
+  MockWindowsApi::place_window(secondary, 2.into());
+  manager
+    .configuration_provider
+    .lock()
+    .unwrap()
+    .set_monitor_layout("DISPLAY2", Layout::Scrolling);
+  manager.reconcile_layouts();
+  assert!(manager.scrolling.get_workspace_containing(secondary).is_some());
+
+  manager
+    .configuration_provider
+    .lock()
+    .unwrap()
+    .set_default_layout(Layout::Spatial);
+  manager.reconcile_layouts();
+
+  assert!(manager.scrolling.get_workspace_containing(1.into()).is_none());
+  assert!(manager.scrolling.get_workspace_containing(secondary).is_some());
+}
+
+#[test]
 fn spatial_monitor_crossing_is_adopted_by_scrolling_reconciliation() {
   MockWindowsApi::reset();
   let directory = create_temp_directory();
