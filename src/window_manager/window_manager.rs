@@ -71,17 +71,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     };
     let layout = self.get_layout_for_window(window);
     self.windows_api.do_close_window(window);
-    match layout {
-      Some(Layout::Scrolling) => {
-        let margin = self.margin();
-        self
-          .scrolling
-          .remove_and_refocus(&self.windows_api, &self.workspace_manager, window, margin);
-      }
-      _ => self
-        .spatial
-        .after_close_or_minimise(&self.windows_api, window, self.allow_moving_cursor_after_close_or_minimise),
-    }
+    self.execute_post_close_or_minimise_layout_specific_logic(window, layout);
   }
 
   /// Minimises the foreground window and lets its layout choose the next focus.
@@ -91,17 +81,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     };
     let layout = self.get_layout_for_window(window);
     self.windows_api.do_minimise_window(window);
-    match layout {
-      Some(Layout::Scrolling) => {
-        let margin = self.margin();
-        self
-          .scrolling
-          .remove_and_refocus(&self.windows_api, &self.workspace_manager, window, margin);
-      }
-      _ => self
-        .spatial
-        .after_close_or_minimise(&self.windows_api, window, self.allow_moving_cursor_after_close_or_minimise),
-    }
+    self.execute_post_close_or_minimise_layout_specific_logic(window, layout);
   }
 
   /// Shows a workspace and refreshes its scrolling strip when needed.
@@ -125,35 +105,33 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
   }
 
   /// Moves the foreground window to a workspace and updates scrolling strip membership.
-  pub fn move_window_to_workspace(&mut self, id: PersistentWorkspaceId) {
+  pub fn move_window_to_workspace(&mut self, target_id: PersistentWorkspaceId) {
     let foreground = self.windows_api.get_foreground_window();
     let source = foreground.and_then(|handle| self.get_workspace_for_window(handle));
-    if source == Some(id) || self.workspace_manager.monitor_for_workspace(id).is_none() {
+    if source == Some(target_id) || self.workspace_manager.monitor_for_workspace(target_id).is_none() {
       return;
     }
     let source_layout = source.and_then(|workspace| self.get_layout_for_workspace(workspace));
-    let target_layout = self.get_layout_for_workspace(id);
-    self.workspace_manager.move_window_to_workspace(id);
+    let target_layout = self.get_layout_for_workspace(target_id);
+    self.workspace_manager.move_window_to_workspace(target_id);
 
-    if let (Some(handle), Some(source)) = (foreground, source) {
+    if let (Some(handle), Some(source_id)) = (foreground, source) {
       if source_layout == Some(Layout::Scrolling) {
-        self.scrolling.remove(source, handle);
+        self.scrolling.remove(source_id, handle);
       }
       if target_layout == Some(Layout::Scrolling) {
-        self.scrolling.insert(id, handle);
+        self.scrolling.insert(target_id, handle);
       }
       let margin = self.margin();
-      if source_layout == Some(Layout::Scrolling) && self.workspace_manager.is_workspace_active(source) {
-        self
-          .scrolling
-          .reflow(&self.windows_api, &self.workspace_manager, source, margin);
-        self
-          .scrolling
-          .focus(&self.windows_api, &self.workspace_manager, source, margin);
-      }
-      if target_layout == Some(Layout::Scrolling) && self.workspace_manager.is_workspace_active(id) {
-        self.scrolling.reflow(&self.windows_api, &self.workspace_manager, id, margin);
-        self.scrolling.focus(&self.windows_api, &self.workspace_manager, id, margin);
+      for (workspace, layout) in [(source_id, source_layout), (target_id, target_layout)] {
+        if layout == Some(Layout::Scrolling) && self.workspace_manager.is_workspace_active(workspace) {
+          self
+            .scrolling
+            .reflow(&self.windows_api, &self.workspace_manager, workspace, margin);
+          self
+            .scrolling
+            .focus(&self.windows_api, &self.workspace_manager, workspace, margin);
+        }
       }
     }
   }
@@ -257,6 +235,20 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
       self.virtual_desktop_manager.as_ref(),
       margin,
     );
+  }
+
+  fn execute_post_close_or_minimise_layout_specific_logic(&mut self, window: WindowHandle, layout: Option<Layout>) {
+    match layout {
+      Some(Layout::Scrolling) => {
+        let margin = self.margin();
+        self
+          .scrolling
+          .remove_and_refocus(&self.windows_api, &self.workspace_manager, window, margin);
+      }
+      _ => self
+        .spatial
+        .after_close_or_minimise(&self.windows_api, window, self.allow_moving_cursor_after_close_or_minimise),
+    }
   }
 
   fn get_layout_for_monitor(&self, monitor: &Monitor) -> Layout {

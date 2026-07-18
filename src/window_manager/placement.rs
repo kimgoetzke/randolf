@@ -58,10 +58,7 @@ impl Placement {
 
     let expected = Sizing::near_maximised(monitor_info.work_area, margin);
     if let Some(rect) = api.get_window_rect(*handle) {
-      let result = (rect.left - expected.x).abs() <= REGULAR_TOLERANCE_IN_PX
-        && (rect.top - expected.y).abs() <= REGULAR_TOLERANCE_IN_PX
-        && (rect.right - rect.left - expected.width).abs() <= REGULAR_TOLERANCE_IN_PX
-        && (rect.bottom - rect.top - expected.height).abs() <= REGULAR_TOLERANCE_IN_PX;
+      let result = is_sizing_within_tolerance(rect, &expected, REGULAR_TOLERANCE_IN_PX);
       log_actual_vs_expected(handle, &expected, rect);
       debug!(
         "{} {} near-maximised (tolerance: {})",
@@ -87,10 +84,7 @@ impl Placement {
   ) -> bool {
     let expected = Sizing::three_quarter_near_maximised(monitor_info.work_area, direction, margin);
     if let Some(rect) = api.get_window_rect(*handle) {
-      let result = (rect.left - expected.x).abs() <= REGULAR_TOLERANCE_IN_PX
-        && (rect.top - expected.y).abs() <= REGULAR_TOLERANCE_IN_PX
-        && (rect.right - rect.left - expected.width).abs() <= REGULAR_TOLERANCE_IN_PX
-        && (rect.bottom - rect.top - expected.height).abs() <= REGULAR_TOLERANCE_IN_PX;
+      let result = is_sizing_within_tolerance(rect, &expected, REGULAR_TOLERANCE_IN_PX);
       debug!(
         "{} {} three-quarter near-maximised in [{:?}] direction (tolerance: {})",
         handle,
@@ -162,10 +156,7 @@ impl Placement {
     if margin == 0
       && let Some(compensating_rect) = api.get_extended_frame_bounds(handle).or_else(|| api.get_window_rect(handle))
     {
-      let matches = (compensating_rect.left - sizing.x).abs() <= DWM_TOLERANCE_IN_PX
-        && (compensating_rect.top - sizing.y).abs() <= DWM_TOLERANCE_IN_PX
-        && (compensating_rect.right - compensating_rect.left - sizing.width).abs() <= DWM_TOLERANCE_IN_PX
-        && (compensating_rect.bottom - compensating_rect.top - sizing.height).abs() <= DWM_TOLERANCE_IN_PX;
+      let matches = is_sizing_within_tolerance(compensating_rect, sizing, DWM_TOLERANCE_IN_PX);
       log_actual_vs_expected(&handle, sizing, compensating_rect);
       debug!(
         "{} {} of expected size (dwm_tolerance: {})",
@@ -192,6 +183,13 @@ impl Placement {
     self.known_windows.insert(window_id, placement);
     trace!("Adding/updating previous placement for window {}", handle);
   }
+}
+
+fn is_sizing_within_tolerance(rect: Rect, expected: &Sizing, tolerance: i32) -> bool {
+  (rect.left - expected.x).abs() <= tolerance
+    && (rect.top - expected.y).abs() <= tolerance
+    && (rect.right - rect.left - expected.width).abs() <= tolerance
+    && (rect.bottom - rect.top - expected.height).abs() <= tolerance
 }
 
 fn log_actual_vs_expected(handle: &WindowHandle, sizing: &Sizing, rect: Rect) {
