@@ -32,11 +32,12 @@ use crate::utils::CONFIGURATION_PROVIDER_LOCK;
 use crate::window_drag_manager::WindowDragManager;
 use crate::window_manager::WindowManager;
 use common::Command;
-use crossbeam_channel::unbounded;
+use crossbeam_channel::{Receiver, unbounded};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use win_hotkeys::InterruptHandle;
 
 const EVENT_LOOP_SLEEP_DURATION: Duration = Duration::from_millis(20);
 const HEART_BEAT_DURATION: Duration = Duration::from_secs(5);
@@ -63,6 +64,8 @@ fn main() {
     configuration_manager.clone(),
     windows_api.clone(),
   )));
+
+  // Log loaded configuration for reference
   configuration_manager
     .lock()
     .expect(CONFIGURATION_PROVIDER_LOCK)
@@ -90,7 +93,7 @@ fn main() {
   let hkm = HotkeyManager::new_with_hotkeys(configuration_manager.clone(), workspace_ids);
   let interrupt_handle = hkm.initialise(command_sender.clone());
 
-  // Create window drag manager
+  // Create window drag manager (for mouse-based features)
   let mut window_drag_manager = WindowDragManager::new(configuration_manager.clone(), command_sender.clone());
   if let Err(e) = window_drag_manager.initialise() {
     error!("Failed to initialise window drag manager: {}", e);
@@ -104,8 +107,30 @@ fn main() {
     .get_i32(SCROLLING_RECONCILIATION_INTERVAL_IN_MS);
   let scrolling_reconciliation_interval =
     Duration::from_millis(u64::try_from(scrolling_reconciliation_interval_in_ms).unwrap_or_default());
+  run_loop(
+    configuration_manager,
+    command_receiver,
+    tray_menu_manager,
+    launcher,
+    wm,
+    interrupt_handle,
+    scrolling_reconciliation_interval,
+  );
+}
+
+fn run_loop(
+  configuration_manager: Arc<Mutex<ConfigurationProvider>>,
+  command_receiver: Receiver<Command>,
+  tray_menu_manager: Rc<RefCell<TrayMenuManager>>,
+  launcher: Rc<RefCell<ApplicationLauncher<RealWindowsApi>>>,
+  wm: Rc<RefCell<WindowManager<RealWindowsApi>>>,
+  interrupt_handle: InterruptHandle,
+  scrolling_reconciliation_interval: Duration,
+) {
+  #[cfg(debug_assertions)]
   let mut last_heartbeat = Instant::now();
-  let mut last_horizontal_layout_reconciliation = Instant::now();
+  let mut last_scrolling_layout_reconciliation = Instant::now();
+
   loop {
     api::do_process_windows_messages();
     if let Ok(command) = command_receiver.try_recv() {
@@ -156,22 +181,23 @@ fn main() {
         }
       }
     }
-    if last_horizontal_layout_reconciliation.elapsed() >= scrolling_reconciliation_interval {
-      wm.borrow_mut().reconcile_horizontal_layout();
-      last_horizontal_layout_reconciliation = Instant::now();
-    }
-    last_heartbeat = update_heart_beat(last_heartbeat);
+    run_if_due(
+      &mut last_scrolling_layout_reconciliation,
+      scrolling_reconciliation_interval,
+      || wm.borrow_mut().reconcile_horizontal_layout(),
+    );
+    #[cfg(debug_assertions)]
+    run_if_due(&mut last_heartbeat, HEART_BEAT_DURATION, || {
+      trace!("Still listening for events...");
+    });
     std::thread::sleep(EVENT_LOOP_SLEEP_DURATION);
   }
 }
 
-fn update_heart_beat(last_heartbeat: Instant) -> Instant {
-  let now = Instant::now();
-  if now.duration_since(last_heartbeat) >= HEART_BEAT_DURATION {
-    #[cfg(debug_assertions)]
-    trace!("Still listening for events...");
-    return now;
+fn run_if_due(last_run: &mut Instant, interval: Duration, task: impl FnOnce()) {
+  if last_run.elapsed() < interval {
+    return;
   }
-
-  last_heartbeat
+  task();
+  *last_run = Instant::now();
 }
