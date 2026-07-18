@@ -1,7 +1,7 @@
 use super::navigation;
 use super::placement::Placement;
-use super::scrolling::Scrolling;
-use super::spatial::Spatial;
+use super::scrolling_layout::ScrollingLayout;
+use super::spatial_layout::SpatialLayout;
 use crate::api::WindowsApi;
 use crate::common::*;
 use crate::configuration_provider::{
@@ -18,8 +18,8 @@ pub struct WindowManager<T: WindowsApi> {
   pub(super) configuration_provider: Arc<Mutex<ConfigurationProvider>>,
   pub(super) placement: Placement,
   pub(super) allow_moving_cursor_after_close_or_minimise: bool,
-  pub(super) scrolling: Scrolling,
-  pub(super) spatial: Spatial,
+  pub(super) scrolling: ScrollingLayout,
+  pub(super) spatial: SpatialLayout,
   pub(super) workspace_manager: WorkspaceManager<T>,
   pub(super) virtual_desktop_manager: Option<IVirtualDesktopManager>,
   pub(super) windows_api: T,
@@ -42,8 +42,8 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     Self {
       placement: Placement::default(),
       allow_moving_cursor_after_close_or_minimise,
-      scrolling: Scrolling::default(),
-      spatial: Spatial,
+      scrolling: ScrollingLayout::default(),
+      spatial: SpatialLayout,
       virtual_desktop_manager: Some(
         api
           .get_virtual_desktop_manager()

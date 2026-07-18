@@ -6,9 +6,9 @@ use crate::utils::{MINIMUM_WINDOW_DIMENSION, MINIMUM_WINDOW_DIMENSION_DIVISOR};
 
 /// Coordinates spatial layout behaviour.
 #[derive(Debug, Default)]
-pub(super) struct Spatial;
+pub(super) struct SpatialLayout;
 
-impl Spatial {
+impl SpatialLayout {
   /// Applies directional spatial layout movement.
   pub(super) fn move_window<T: WindowsApi>(&self, api: &T, placement: &Placement, direction: Direction, margin: i32) {
     let Some((handle, current_placement, monitor_info)) = window_and_monitor_info(api) else {

@@ -9,14 +9,14 @@ use windows::Win32::UI::Shell::IVirtualDesktopManager;
 const ANIMATION_FRAMES: u32 = 12;
 
 #[derive(Default)]
-pub(super) struct Scrolling {
+pub(super) struct ScrollingLayout {
   layout: HorizontalLayout,
   positions: HashMap<PersistentWorkspaceId, Vec<(WindowHandle, Rect)>>,
   initialised: bool,
   previous_foreground_window: Option<WindowHandle>,
 }
 
-impl Scrolling {
+impl ScrollingLayout {
   pub(super) fn workspace_containing(&self, window: WindowHandle) -> Option<PersistentWorkspaceId> {
     self.layout.workspace_containing(window)
   }

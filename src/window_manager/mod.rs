@@ -1,7 +1,7 @@
 mod navigation;
 mod placement;
-mod scrolling;
-mod spatial;
+mod scrolling_layout;
+mod spatial_layout;
 #[cfg(test)]
 mod tests;
 #[allow(clippy::module_inception)]
