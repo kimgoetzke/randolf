@@ -4,12 +4,12 @@ use crate::api::WindowsApi;
 use crate::common::{Direction, MonitorInfo, Point, Sizing, WindowHandle, WindowPlacement};
 use crate::utils::{MINIMUM_WINDOW_DIMENSION, MINIMUM_WINDOW_DIMENSION_DIVISOR};
 
-/// Coordinates spatial layout behaviour.
+/// A layout that does not manage any windows. Handles geometry-based window movement, resizing, and follow-up focus.
 #[derive(Debug, Default)]
 pub(super) struct SpatialLayout;
 
 impl SpatialLayout {
-  /// Applies directional spatial layout movement.
+  /// Places the foreground window on half a monitor or moves it to the next monitor.
   pub(super) fn move_window<T: WindowsApi>(&self, api: &T, placement: &Placement, direction: Direction, margin: i32) {
     let Some((handle, current_placement, monitor_info)) = window_and_monitor_info(api) else {
       return;
@@ -40,7 +40,7 @@ impl SpatialLayout {
     api.set_cursor_position(&cursor_target);
   }
 
-  /// Applies directional spatial layout resizing.
+  /// Steps the foreground window through the spatial sizes for a direction.
   pub(super) fn resize_window<T: WindowsApi>(&self, api: &T, placement: &Placement, direction: Direction, margin: i32) {
     let Some((handle, current_placement, monitor_info)) = window_and_monitor_info(api) else {
       return;
@@ -80,7 +80,7 @@ impl SpatialLayout {
     api.set_cursor_position(&cursor_target);
   }
 
-  /// Selects the nearest remaining window when enabled.
+  /// Focuses the nearest remaining window after a close or minimise when enabled.
   pub(super) fn after_close_or_minimise<T: WindowsApi>(&self, api: &T, window: WindowHandle, move_cursor: bool) {
     if move_cursor {
       navigation::find_and_select_closest_window(api, window);

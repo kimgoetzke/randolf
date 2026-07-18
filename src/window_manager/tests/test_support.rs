@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 impl WindowManager<MockWindowsApi> {
+  /// Builds a manager with default configuration and isolated test state.
   pub(crate) fn default(api: MockWindowsApi) -> Self {
     Self {
       configuration_provider: Arc::new(Mutex::new(ConfigurationProvider::default())),
@@ -20,6 +21,7 @@ impl WindowManager<MockWindowsApi> {
     }
   }
 
+  /// Builds a manager using configuration stored in a temporary test file.
   pub(crate) fn new_test(api: MockWindowsApi, config_path: PathBuf) -> Self {
     Self {
       configuration_provider: Arc::new(Mutex::new(ConfigurationProvider::new_test(config_path))),
@@ -34,6 +36,7 @@ impl WindowManager<MockWindowsApi> {
   }
 }
 
+/// Builds a test manager whose default layout is scrolling.
 pub(super) fn scrolling_manager() -> (WindowManager<MockWindowsApi>, tempfile::TempDir) {
   MockWindowsApi::reset();
   let directory = create_temp_directory();
@@ -53,6 +56,7 @@ pub(super) fn scrolling_manager() -> (WindowManager<MockWindowsApi>, tempfile::T
   (manager, directory)
 }
 
+/// Changes the window margin used by a test manager.
 pub(super) fn set_margin(margin: i32, manager: &mut WindowManager<MockWindowsApi>) {
   manager.configuration_provider.lock().unwrap().set_i32(WINDOW_MARGIN, margin);
 }

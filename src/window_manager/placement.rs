@@ -7,12 +7,14 @@ use windows::Win32::UI::WindowsAndMessaging::SW_MAXIMIZE;
 const REGULAR_TOLERANCE_IN_PX: i32 = 2;
 pub(super) const DWM_TOLERANCE_IN_PX: i32 = 8;
 
+/// Remembers window positions and applies Windows-aware sizing corrections.
 #[derive(Default)]
 pub(super) struct Placement {
   pub(super) known_windows: HashMap<String, WindowPlacement>,
 }
 
 impl Placement {
+  /// Near-maximises a window or restores the position saved before maximising it.
   pub(super) fn near_maximise_or_restore<T: WindowsApi>(
     &mut self,
     api: &T,
@@ -29,6 +31,7 @@ impl Placement {
     }
   }
 
+  /// Restores a window's last remembered position when one is available.
   pub(super) fn restore_previous<T: WindowsApi>(&self, api: &T, handle: WindowHandle) {
     let window_id = format!("{:?}", handle.hwnd);
     if let Some(previous_placement) = self.known_windows.get(&window_id) {
@@ -39,6 +42,7 @@ impl Placement {
     }
   }
 
+  /// Reports whether a window fills its work area apart from the configured margin.
   pub(super) fn is_near_maximised<T: WindowsApi>(
     &self,
     api: &T,
@@ -72,6 +76,7 @@ impl Placement {
     }
   }
 
+  /// Reports whether a window fills three quarters of its work area in a direction.
   pub(super) fn is_three_quarter_near_maximised<T: WindowsApi>(
     &self,
     api: &T,
@@ -103,6 +108,7 @@ impl Placement {
     }
   }
 
+  /// Expands a window to its work area while keeping the configured margin.
   pub(super) fn near_maximise<T: WindowsApi>(&self, api: &T, handle: WindowHandle, monitor_info: MonitorInfo, margin: i32) {
     info!("Near-maximising {}", handle);
 
@@ -115,6 +121,7 @@ impl Placement {
     }
   }
 
+  /// Applies a size and corrects hidden Windows borders when margins are disabled.
   pub(super) fn resize<T: WindowsApi>(&self, api: &T, handle: WindowHandle, sizing: Sizing, margin: i32) {
     api.set_window_placement_and_force_repaint(handle, WindowPlacement::new_from_sizing(sizing.clone()));
 

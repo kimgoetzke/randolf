@@ -2,6 +2,7 @@ use crate::api::WindowsApi;
 use crate::common::{Direction, Monitor, Point, Window, WindowHandle};
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
 
+/// Moves focus and the cursor to the best window or monitor in a direction.
 pub(super) fn move_cursor<T: WindowsApi>(
   api: &T,
   direction: Direction,
@@ -49,6 +50,7 @@ pub(super) fn move_cursor<T: WindowsApi>(
   }
 }
 
+/// Focuses the visible window nearest the cursor, ignoring the supplied window.
 pub(super) fn find_and_select_closest_window<T: WindowsApi>(api: &T, ignored_window: WindowHandle) {
   let cursor_position = api.get_cursor_position();
   if let Some(window) = find_closest_window(api, cursor_position, Some(ignored_window)) {
@@ -62,6 +64,7 @@ pub(super) fn find_and_select_closest_window<T: WindowsApi>(api: &T, ignored_win
   }
 }
 
+/// Finds the visible window nearest a point, preferring the smallest when distances tie.
 pub(super) fn find_closest_window<T: WindowsApi>(
   api: &T,
   cursor_position: Point,
@@ -179,6 +182,7 @@ fn move_focus_to_monitor<T: WindowsApi>(api: &T, direction: Direction, monitor: 
   );
 }
 
+/// Selects the best-aligned window in a direction, optionally cycling overlapping windows.
 pub(super) fn select_window_in_direction<'window>(
   reference_point: &Point,
   direction: Direction,

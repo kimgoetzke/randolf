@@ -173,7 +173,7 @@ fn reconciliation_only_manages_scrolling_monitors() {
     manager.windows_api.get_window_placement(secondary).unwrap(),
     WindowPlacement::new_from_sizing(original)
   );
-  assert!(manager.scrolling.workspace_containing(secondary).is_none());
+  assert!(manager.scrolling.get_workspace_containing(secondary).is_none());
 }
 
 #[test]
@@ -209,12 +209,12 @@ fn spatial_monitor_crossing_is_adopted_by_scrolling_reconciliation() {
 
   manager.move_window(Direction::Left);
 
-  assert!(manager.scrolling.workspace_containing(handle).is_none());
+  assert!(manager.scrolling.get_workspace_containing(handle).is_none());
 
   MockWindowsApi::assign_window_to_monitor(handle, 2.into());
   manager.reconcile_layouts();
 
-  assert!(manager.scrolling.workspace_containing(handle).is_some());
+  assert!(manager.scrolling.get_workspace_containing(handle).is_some());
 }
 
 #[test]
@@ -236,7 +236,7 @@ fn moving_from_scrolling_to_spatial_removes_strip_membership() {
 
   manager.move_window_to_workspace(secondary_workspace);
 
-  assert!(manager.scrolling.workspace_containing(1.into()).is_none());
+  assert!(manager.scrolling.get_workspace_containing(1.into()).is_none());
 }
 
 #[test]
@@ -275,7 +275,7 @@ fn moving_from_spatial_to_scrolling_inserts_strip_membership() {
   manager.move_window_to_workspace(primary_workspace.into());
 
   assert_eq!(
-    manager.scrolling.workspace_containing(secondary),
+    manager.scrolling.get_workspace_containing(secondary),
     Some(primary_workspace.into())
   );
 }

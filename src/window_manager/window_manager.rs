@@ -14,6 +14,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
 
+/// Routes window commands to the configured layout and coordinates workspace changes.
 pub struct WindowManager<T: WindowsApi> {
   pub(super) configuration_provider: Arc<Mutex<ConfigurationProvider>>,
   pub(super) placement: Placement,
@@ -26,6 +27,9 @@ pub struct WindowManager<T: WindowsApi> {
 }
 
 impl<T: WindowsApi + Clone> WindowManager<T> {
+  /// Creates a manager backed by the supplied configuration and Windows API.
+  ///
+  /// Panics if configuration cannot be read or Windows provides no virtual desktop manager.
   pub fn new(configuration_provider: Arc<Mutex<ConfigurationProvider>>, api: T) -> Self {
     let guard = configuration_provider.try_lock().unwrap_or_else(|err| {
       panic!(
@@ -55,11 +59,12 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     }
   }
 
-  /// Returns the unique IDs for all desktop containers across all monitors in their natural order.
+  /// Lists every permanent workspace in monitor and workspace order.
   pub fn get_ordered_permanent_workspace_ids(&mut self) -> Vec<PersistentWorkspaceId> {
     self.workspace_manager.get_ordered_permanent_workspace_ids()
   }
 
+  /// Closes the foreground window and lets its layout choose the next focus.
   pub fn close_window(&mut self) {
     let Some(window) = self.windows_api.get_foreground_window() else {
       return;
@@ -79,6 +84,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     }
   }
 
+  /// Minimises the foreground window and lets its layout choose the next focus.
   pub fn minimise_window(&mut self) {
     let Some(window) = self.windows_api.get_foreground_window() else {
       return;
@@ -98,6 +104,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     }
   }
 
+  /// Shows a workspace and refreshes its scrolling strip when needed.
   pub fn switch_workspace(&mut self, id: PersistentWorkspaceId) {
     if self.get_layout_for_workspace(id) != Some(Layout::Scrolling) {
       self.workspace_manager.switch_workspace(id);
@@ -108,7 +115,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
       .active_workspace_ids()
       .into_iter()
       .find(|workspace| workspace.monitor_id == id.monitor_id);
-    let additional_windows = source.map_or_else(Vec::new, |workspace| self.scrolling.members(workspace));
+    let additional_windows = source.map_or_else(Vec::new, |workspace| self.scrolling.get_members(workspace));
     self
       .workspace_manager
       .switch_workspace_with_additional_windows(id, &additional_windows);
@@ -117,6 +124,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     self.scrolling.focus(&self.windows_api, &self.workspace_manager, id, margin);
   }
 
+  /// Moves the foreground window to a workspace and updates scrolling strip membership.
   pub fn move_window_to_workspace(&mut self, id: PersistentWorkspaceId) {
     let foreground = self.windows_api.get_foreground_window();
     let source = foreground.and_then(|handle| self.get_workspace_for_window(handle));
@@ -150,6 +158,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     }
   }
 
+  /// Moves the foreground window according to its layout and the requested direction.
   pub fn move_window(&mut self, direction: Direction) {
     if self.get_foreground_window_layout() == Some(Layout::Scrolling) {
       if matches!(direction, Direction::Left | Direction::Right) {
@@ -165,6 +174,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
       .move_window(&self.windows_api, &self.placement, direction, self.margin());
   }
 
+  /// Resizes a spatial window. Scrolling windows remain unchanged.
   pub fn resize_window(&mut self, direction: Direction) {
     if self.get_foreground_window_layout() != Some(Layout::Scrolling) {
       self
@@ -173,6 +183,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     }
   }
 
+  /// Moves focus and the cursor using navigation rules for the current layout.
   pub fn move_cursor(&mut self, direction: Direction) {
     if matches!(direction, Direction::Left | Direction::Right) {
       let margin = self.margin();
@@ -191,7 +202,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     let windows = self.windows_api.get_all_visible_windows();
     let eligible = windows
       .iter()
-      .filter(|window| self.scrolling.navigation_eligible(window.handle))
+      .filter(|window| self.scrolling.is_navigation_eligible(window.handle))
       .collect::<Vec<_>>();
     let allow_same_center = self
       .configuration_provider
@@ -207,6 +218,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     );
   }
 
+  /// Toggles the foreground window between near-maximised and its previous position.
   pub fn near_maximise_or_restore(&mut self) {
     let Some(window) = self.windows_api.get_foreground_window() else {
       return;
@@ -223,12 +235,13 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
       .near_maximise_or_restore(&self.windows_api, window, window_placement, monitor_info, margin);
   }
 
+  /// Brings back windows hidden or moved off-screen by managed layouts.
   pub fn restore_all_managed_windows(&mut self) {
     self.workspace_manager.restore_all_managed_windows();
     self.scrolling.restore_off_screen(&self.windows_api, self.margin());
   }
 
-  /// Reconciles layout runtimes with visible windows.
+  /// Updates active scrolling strips to match the visible managed windows.
   pub fn reconcile_layouts(&mut self) {
     let active_workspaces = self
       .workspace_manager
@@ -264,7 +277,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
   fn get_workspace_for_window(&self, window: WindowHandle) -> Option<PersistentWorkspaceId> {
     self
       .scrolling
-      .workspace_containing(window)
+      .get_workspace_containing(window)
       .or_else(|| self.workspace_manager.active_workspace_for_window(window))
   }
 

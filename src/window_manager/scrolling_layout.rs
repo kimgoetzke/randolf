@@ -8,6 +8,8 @@ use windows::Win32::UI::Shell::IVirtualDesktopManager;
 
 const ANIMATION_FRAMES: u32 = 12;
 
+/// A layout that manages windows and allows scrolling. Keeps scrolling strip membership, focus, and positions across
+/// workspaces.
 #[derive(Default)]
 pub(super) struct ScrollingLayout {
   layout: HorizontalLayout,
@@ -17,29 +19,35 @@ pub(super) struct ScrollingLayout {
 }
 
 impl ScrollingLayout {
-  pub(super) fn workspace_containing(&self, window: WindowHandle) -> Option<PersistentWorkspaceId> {
+  /// Returns the scrolling workspace that owns a window.
+  pub(super) fn get_workspace_containing(&self, window: WindowHandle) -> Option<PersistentWorkspaceId> {
     self.layout.workspace_containing(window)
   }
 
-  pub(super) fn members(&self, workspace: PersistentWorkspaceId) -> Vec<WindowHandle> {
+  /// Lists a workspace's windows in strip order.
+  pub(super) fn get_members(&self, workspace: PersistentWorkspaceId) -> Vec<WindowHandle> {
     self.layout.members(workspace).to_vec()
   }
 
-  pub(super) fn navigation_eligible(&self, window: WindowHandle) -> bool {
+  /// Allows spatial navigation to use untracked windows and each strip's focused window.
+  pub(super) fn is_navigation_eligible(&self, window: WindowHandle) -> bool {
     self
       .layout
       .workspace_containing(window)
       .is_none_or(|workspace| self.layout.focused(workspace) == Some(window))
   }
 
+  /// Removes a window from a workspace's strip.
   pub(super) fn remove(&mut self, workspace: PersistentWorkspaceId, window: WindowHandle) {
     self.layout.remove(workspace, window);
   }
 
+  /// Adds a window to a workspace's strip.
   pub(super) fn insert(&mut self, workspace: PersistentWorkspaceId, window: WindowHandle) {
     self.layout.insert_before(workspace, window, None);
   }
 
+  /// Updates active strips to match the visible managed windows.
   pub(super) fn reconcile<T: WindowsApi + Clone>(
     &mut self,
     api: &T,
@@ -147,6 +155,7 @@ impl ScrollingLayout {
     self.previous_foreground_window = api.get_foreground_window();
   }
 
+  /// Places a workspace's strip windows from their current order.
   pub(super) fn reflow<T: WindowsApi + Clone>(
     &mut self,
     api: &T,
@@ -172,6 +181,7 @@ impl ScrollingLayout {
     self.positions.insert(workspace, positions);
   }
 
+  /// Focuses a workspace's chosen strip window and centres the cursor on it.
   pub(super) fn focus<T: WindowsApi + Clone>(
     &self,
     api: &T,
@@ -190,6 +200,7 @@ impl ScrollingLayout {
     api.set_cursor_position(&Point::from_center_of_sizing(&sizing));
   }
 
+  /// Handles adjacent strip focus, returning false when the foreground is not in a strip.
   pub(super) fn move_focus<T: WindowsApi + Clone>(
     &mut self,
     api: &T,
@@ -211,6 +222,7 @@ impl ScrollingLayout {
     true
   }
 
+  /// Moves the foreground window one place through its strip.
   pub(super) fn reorder<T: WindowsApi + Clone>(
     &mut self,
     api: &T,
@@ -230,6 +242,7 @@ impl ScrollingLayout {
     }
   }
 
+  /// Removes a strip window, then lays out and focuses the remaining strip.
   pub(super) fn remove_and_refocus<T: WindowsApi + Clone>(
     &mut self,
     api: &T,
@@ -245,6 +258,7 @@ impl ScrollingLayout {
     self.focus(api, workspace_manager, workspace, margin);
   }
 
+  /// Brings wholly off-screen strip windows back onto their workspace monitor.
   pub(super) fn restore_off_screen<T: WindowsApi>(&self, api: &T, margin: i32) {
     let monitors = api.get_all_monitors();
     let screen_areas = monitors
