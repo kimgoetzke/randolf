@@ -1,6 +1,6 @@
 use crate::api::WindowsApi;
 use crate::common::{Direction, PersistentWorkspaceId, Point, Rect, Sizing, Window, WindowHandle};
-use crate::horizontal_layout::HorizontalLayout;
+use crate::window_manager::horizontal_layout::HorizontalLayout;
 use crate::workspace_manager::WorkspaceManager;
 use std::collections::HashMap;
 use std::time::Duration;

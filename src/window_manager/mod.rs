@@ -1,3 +1,4 @@
+mod horizontal_layout;
 mod navigation;
 mod placement;
 mod scrolling_layout;
