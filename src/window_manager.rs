@@ -2,7 +2,7 @@ use crate::api::WindowsApi;
 use crate::common::*;
 use crate::configuration_provider::{
   ADDITIONAL_WORKSPACE_COUNT, ALLOW_MOVING_CURSOR_AFTER_OPEN_CLOSE_OR_MINIMISE, ALLOW_SELECTING_SAME_CENTER_WINDOWS,
-  ConfigurationProvider, ENABLE_HORIZONTAL_LAYOUT, WINDOW_MARGIN,
+  ConfigurationProvider, Layout, WINDOW_MARGIN,
 };
 use crate::horizontal_layout::HorizontalLayout;
 use crate::utils::{
@@ -78,7 +78,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
       return;
     };
 
-    if self.horizontal_layout_enabled() {
+    if self.layout_for_window(window) == Some(Layout::Scrolling) {
       self.windows_api.do_close_window(window);
       self.remove_horizontal_member_and_refocus(window);
       return;
@@ -91,7 +91,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
   }
 
   pub fn switch_workspace(&mut self, id: PersistentWorkspaceId) {
-    if !self.horizontal_layout_enabled() {
+    if self.layout_for_workspace(id) != Some(Layout::Scrolling) {
       self.workspace_manager.switch_workspace(id);
       return;
     }
@@ -110,25 +110,27 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
   }
 
   pub fn move_window_to_workspace(&mut self, id: PersistentWorkspaceId) {
-    if !self.horizontal_layout_enabled() {
-      self.workspace_manager.move_window_to_workspace(id);
-      return;
-    }
-
     let foreground = self.windows_api.get_foreground_window();
-    let source = foreground.and_then(|handle| self.horizontal_layout.workspace_containing(handle));
+    let source = foreground.and_then(|handle| self.workspace_for_window(handle));
     if source == Some(id) || self.workspace_manager.monitor_for_workspace(id).is_none() {
       return;
     }
+    let source_layout = source.and_then(|workspace| self.layout_for_workspace(workspace));
+    let target_layout = self.layout_for_workspace(id);
     self.workspace_manager.move_window_to_workspace(id);
+
     if let (Some(handle), Some(source)) = (foreground, source) {
-      self.horizontal_layout.remove(source, handle);
-      self.horizontal_layout.insert_before(id, handle, None);
-      if self.workspace_manager.is_workspace_active(source) {
+      if source_layout == Some(Layout::Scrolling) {
+        self.horizontal_layout.remove(source, handle);
+      }
+      if target_layout == Some(Layout::Scrolling) {
+        self.horizontal_layout.insert_before(id, handle, None);
+      }
+      if source_layout == Some(Layout::Scrolling) && self.workspace_manager.is_workspace_active(source) {
         self.reflow_horizontal_workspace(source);
         self.focus_horizontal_workspace(source);
       }
-      if self.workspace_manager.is_workspace_active(id) {
+      if target_layout == Some(Layout::Scrolling) && self.workspace_manager.is_workspace_active(id) {
         self.reflow_horizontal_workspace(id);
         self.focus_horizontal_workspace(id);
       }
@@ -136,7 +138,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
   }
 
   pub fn move_window(&mut self, direction: Direction) {
-    if self.horizontal_layout_enabled() {
+    if self.foreground_layout() == Some(Layout::Scrolling) {
       if matches!(direction, Direction::Left | Direction::Right) {
         self.reorder_horizontal_window(direction);
       }
@@ -176,7 +178,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
   }
 
   pub fn resize_window(&mut self, direction: Direction) {
-    if self.horizontal_layout_enabled() {
+    if self.foreground_layout() == Some(Layout::Scrolling) {
       return;
     }
 
@@ -220,10 +222,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
   }
 
   pub fn move_cursor(&mut self, direction: Direction) {
-    if self.horizontal_layout_enabled()
-      && matches!(direction, Direction::Left | Direction::Right)
-      && self.move_horizontal_focus(direction)
-    {
+    if matches!(direction, Direction::Left | Direction::Right) && self.move_horizontal_focus(direction) {
       return;
     }
 
@@ -277,7 +276,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
       return;
     };
 
-    if self.horizontal_layout_enabled() {
+    if self.layout_for_window(window) == Some(Layout::Scrolling) {
       self.windows_api.do_minimise_window(window);
       self.remove_horizontal_member_and_refocus(window);
       return;
@@ -291,14 +290,18 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
 
   pub fn restore_all_managed_windows(&mut self) {
     self.workspace_manager.restore_all_managed_windows();
-    if self.horizontal_layout_enabled() {
-      self.restore_off_screen_horizontal_windows();
-    }
+    self.restore_off_screen_horizontal_windows();
   }
 
   /// Reconciles visible windows with active horizontal strips.
   pub fn reconcile_horizontal_layout(&mut self) {
-    if !self.horizontal_layout_enabled() {
+    let active_workspaces = self
+      .workspace_manager
+      .active_workspace_ids()
+      .into_iter()
+      .filter(|workspace| self.layout_for_workspace(*workspace) == Some(Layout::Scrolling))
+      .collect::<Vec<_>>();
+    if active_workspaces.is_empty() {
       return;
     }
 
@@ -329,7 +332,9 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
         .workspace_containing(window.handle)
         .filter(|workspace| self.workspace_manager.is_workspace_active(*workspace))
         .or_else(|| self.workspace_manager.active_workspace_for_window(window.handle));
-      if let Some(workspace) = workspace {
+      if let Some(workspace) = workspace
+        && self.layout_for_workspace(workspace) == Some(Layout::Scrolling)
+      {
         by_workspace.entry(workspace).or_default().push(window);
       }
     }
@@ -344,7 +349,6 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
       }
     }
 
-    let active_workspaces = self.workspace_manager.active_workspace_ids();
     let mut newly_focused = None;
     if !self.horizontal_layout_initialised {
       for workspace in &active_workspaces {
@@ -406,12 +410,39 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     self.previous_foreground_window = self.windows_api.get_foreground_window();
   }
 
-  fn horizontal_layout_enabled(&self) -> bool {
+  fn layout_for_monitor(&self, monitor: &Monitor) -> Layout {
     self
       .configuration_provider
       .lock()
       .expect(CONFIGURATION_PROVIDER_LOCK)
-      .get_bool(ENABLE_HORIZONTAL_LAYOUT)
+      .layout_for_monitor(&monitor.id_to_string(), monitor.is_primary)
+  }
+
+  fn layout_for_workspace(&self, workspace: PersistentWorkspaceId) -> Option<Layout> {
+    self
+      .workspace_manager
+      .monitor_for_workspace(workspace)
+      .map(|monitor| self.layout_for_monitor(&monitor))
+  }
+
+  fn workspace_for_window(&self, window: WindowHandle) -> Option<PersistentWorkspaceId> {
+    self
+      .horizontal_layout
+      .workspace_containing(window)
+      .or_else(|| self.workspace_manager.active_workspace_for_window(window))
+  }
+
+  fn layout_for_window(&self, window: WindowHandle) -> Option<Layout> {
+    self
+      .workspace_for_window(window)
+      .and_then(|workspace| self.layout_for_workspace(workspace))
+  }
+
+  fn foreground_layout(&self) -> Option<Layout> {
+    self
+      .windows_api
+      .get_foreground_window()
+      .and_then(|window| self.layout_for_window(window))
   }
 
   fn restore_off_screen_horizontal_windows(&self) {
@@ -655,6 +686,12 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     let windows_on_current_desktop = windows
       .iter()
       .filter(|window| self.windows_api.is_window_on_current_desktop(virtual_desktop_manager, window))
+      .filter(|window| {
+        self
+          .horizontal_layout
+          .workspace_containing(window.handle)
+          .is_none_or(|workspace| self.horizontal_layout.focused(workspace) == Some(window.handle))
+      })
       .collect::<Vec<_>>();
     let allow_selecting_same_center_windows = self
       .configuration_provider
@@ -1033,8 +1070,10 @@ fn calculate_compensating_rect_if_required(rect: &Rect, sizing: &Sizing) -> Opti
 #[cfg(test)]
 mod tests {
   use crate::api::{MockWindowsApi, WindowsApi};
-  use crate::common::{Direction, MonitorHandle, Point, Rect, Sizing, Window, WindowHandle, WindowPlacement};
-  use crate::configuration_provider::{ConfigurationProvider, ENABLE_HORIZONTAL_LAYOUT};
+  use crate::common::{
+    Direction, MonitorHandle, PersistentWorkspaceId, Point, Rect, Sizing, Window, WindowHandle, WindowPlacement,
+  };
+  use crate::configuration_provider::{ConfigurationProvider, Layout};
   use crate::horizontal_layout::HorizontalLayout;
   use crate::utils::{MINIMUM_WINDOW_DIMENSION, MINIMUM_WINDOW_DIMENSION_DIVISOR, create_temp_directory};
   use crate::window_manager::{DWM_TOLERANCE_IN_PX, WindowManager, select_window_in_direction};
@@ -1080,10 +1119,7 @@ mod tests {
     let directory = create_temp_directory();
     let workspace_manager = WorkspaceManager::new_test(true, directory.path().join("workspaces.toml"));
     let configuration_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
-    configuration_provider
-      .lock()
-      .unwrap()
-      .set_bool(ENABLE_HORIZONTAL_LAYOUT, true);
+    configuration_provider.lock().unwrap().set_default_layout(Layout::Scrolling);
     let manager = WindowManager {
       configuration_provider,
       known_windows: Default::default(),
@@ -1105,6 +1141,155 @@ mod tests {
       .lock()
       .unwrap()
       .set_i32(crate::configuration_provider::WINDOW_MARGIN, margin);
+  }
+
+  #[test]
+  fn reconciliation_only_manages_scrolling_monitors() {
+    MockWindowsApi::reset();
+    let directory = create_temp_directory();
+    let workspace_manager = WorkspaceManager::new_test(true, directory.path().join("workspaces.toml"));
+    let configuration_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
+    configuration_provider
+      .lock()
+      .unwrap()
+      .set_monitor_layout("DISPLAY1", Layout::Scrolling);
+    let secondary = WindowHandle::new(2);
+    let original = Sizing::new(-700, 50, 100, 100);
+    MockWindowsApi::add_or_update_window(secondary, "Secondary".to_string(), original.clone(), false, false, false);
+    MockWindowsApi::place_window(secondary, 2.into());
+    let mut manager = WindowManager {
+      configuration_provider,
+      known_windows: Default::default(),
+      allow_moving_cursor_after_close_or_minimise: true,
+      horizontal_layout: HorizontalLayout::default(),
+      horizontal_layout_positions: HashMap::new(),
+      horizontal_layout_initialised: false,
+      previous_foreground_window: None,
+      workspace_manager,
+      virtual_desktop_manager: None,
+      windows_api: MockWindowsApi,
+    };
+
+    manager.reconcile_horizontal_layout();
+
+    assert_eq!(
+      manager.windows_api.get_window_placement(1.into()).unwrap(),
+      WindowPlacement::new_from_sizing(Sizing::new(20, 20, 1880, 990))
+    );
+    assert_eq!(
+      manager.windows_api.get_window_placement(secondary).unwrap(),
+      WindowPlacement::new_from_sizing(original)
+    );
+    assert!(manager.horizontal_layout.workspace_containing(secondary).is_none());
+  }
+
+  #[test]
+  fn mixed_layout_routes_move_by_foreground_monitor() {
+    MockWindowsApi::reset();
+    let directory = create_temp_directory();
+    let workspace_manager = WorkspaceManager::new_test(true, directory.path().join("workspaces.toml"));
+    let configuration_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
+    configuration_provider
+      .lock()
+      .unwrap()
+      .set_monitor_layout("DISPLAY1", Layout::Scrolling);
+    let secondary = WindowHandle::new(2);
+    MockWindowsApi::add_or_update_window(
+      secondary,
+      "Secondary".to_string(),
+      Sizing::new(-700, 50, 400, 300),
+      false,
+      false,
+      true,
+    );
+    MockWindowsApi::place_window(secondary, 2.into());
+    let mut manager = WindowManager {
+      configuration_provider,
+      known_windows: Default::default(),
+      allow_moving_cursor_after_close_or_minimise: true,
+      horizontal_layout: HorizontalLayout::default(),
+      horizontal_layout_positions: HashMap::new(),
+      horizontal_layout_initialised: false,
+      previous_foreground_window: None,
+      workspace_manager,
+      virtual_desktop_manager: None,
+      windows_api: MockWindowsApi,
+    };
+
+    manager.move_window(Direction::Up);
+    assert_eq!(
+      manager.windows_api.get_window_placement(secondary).unwrap(),
+      WindowPlacement::new_from_sizing(Sizing::top_half_of_screen(Rect::new(-800, 0, 0, 550), 20))
+    );
+    MockWindowsApi::set_foreground_window(1.into());
+    let primary_before = manager.windows_api.get_window_placement(1.into()).unwrap();
+    manager.move_window(Direction::Up);
+    assert_eq!(manager.windows_api.get_window_placement(1.into()).unwrap(), primary_before);
+  }
+
+  #[test]
+  fn moving_from_scrolling_to_spatial_removes_strip_membership() {
+    let (mut manager, _directory) = horizontal_manager();
+    manager
+      .configuration_provider
+      .lock()
+      .unwrap()
+      .set_monitor_layout("DISPLAY2", Layout::Spatial);
+    manager.reconcile_horizontal_layout();
+    let primary_workspace = PersistentWorkspaceId::from(*crate::workspace_manager::tests::primary_active_ws_id());
+    let secondary_workspace = manager
+      .workspace_manager
+      .active_workspace_ids()
+      .into_iter()
+      .find(|workspace| workspace.monitor_id != primary_workspace.monitor_id)
+      .unwrap();
+
+    manager.move_window_to_workspace(secondary_workspace);
+
+    assert!(manager.horizontal_layout.workspace_containing(1.into()).is_none());
+  }
+
+  #[test]
+  fn moving_from_spatial_to_scrolling_inserts_strip_membership() {
+    MockWindowsApi::reset();
+    let directory = create_temp_directory();
+    let workspace_manager = WorkspaceManager::new_test(false, directory.path().join("workspaces.toml"));
+    let configuration_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
+    configuration_provider
+      .lock()
+      .unwrap()
+      .set_monitor_layout("DISPLAY1", Layout::Scrolling);
+    let secondary = WindowHandle::new(2);
+    MockWindowsApi::add_or_update_window(
+      secondary,
+      "Secondary".to_string(),
+      Sizing::new(-700, 50, 400, 300),
+      false,
+      false,
+      true,
+    );
+    MockWindowsApi::place_window(secondary, 2.into());
+    let primary_workspace = *crate::workspace_manager::tests::primary_active_ws_id();
+    let mut manager = WindowManager {
+      configuration_provider,
+      known_windows: Default::default(),
+      allow_moving_cursor_after_close_or_minimise: true,
+      horizontal_layout: HorizontalLayout::default(),
+      horizontal_layout_positions: HashMap::new(),
+      horizontal_layout_initialised: false,
+      previous_foreground_window: None,
+      workspace_manager,
+      virtual_desktop_manager: None,
+      windows_api: MockWindowsApi,
+    };
+    manager.reconcile_horizontal_layout();
+
+    manager.move_window_to_workspace(primary_workspace.into());
+
+    assert_eq!(
+      manager.horizontal_layout.workspace_containing(secondary),
+      Some(primary_workspace.into())
+    );
   }
 
   #[test]

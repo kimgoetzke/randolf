@@ -79,13 +79,19 @@ The default configuration file looks like this:
 ```toml
 [general]
 window_margin = 20
-allow_selecting_same_center_windows = true
 force_using_admin_privileges = false
 additional_workspace_count = 2
 enable_features_using_mouse = true
 delay_in_ms_before_dragging_is_allowed = 750
 allow_moving_cursor_after_open_close_or_minimise = true
-enable_horizontal_layout = false
+
+[layout]
+default = "spatial"
+
+[spatial_layout]
+allow_selecting_same_center_windows = true
+
+[scrolling_layout]
 
 [exclusion_settings]
 window_titles = [
@@ -109,21 +115,52 @@ The `[general]` section contains the general settings for the application.
 | Key                                                | Default value | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 |----------------------------------------------------|---------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `window_margin`                                    | `20`          | The margin in pixels that is used when near-maximising or near-snapping a window. The margin is subtracted from the size of the screen (the monitors work area) when calculating the size and position of the window. Can be configured via the tray icon context menu.                                                                                                                                                                                                                                                                                                                                 |
-| `allow_selecting_same_center_windows`              | `true`        | Whether to allow selecting windows whose centre is the same as the active window's centre. When enabled, repeated navigation cycles through every window sharing that centre. The cursor cannot move away until all but one are moved or resized. When disabled, non-foreground windows sharing the active window's centre cannot be selected using this application. Can be configured via the tray icon context menu.                                                                                                                                                                                 |
 | `force_using_admin_privileges`                     | `false`       | Whether to force the application to run with admin privileges. This will restart the application with admin privileges if it is not already running with them. Without admin privileges, the application will not be able to interact at all with other applications that are running with admin privileges. If you (semi-)regularly use applications that require admin privileges, you should set this to `true` or, even better, simply start Randolf with admin privileges directly.                                                                                                                |
 | `additional_workspace_count`                       | `2`           | The number of virtual workspaces that are created on the primary monitor by Randolf. Workspaces are similar to Windows desktops but only apply to a single monitor and are much faster to switch.                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `enable_features_using_mouse`                      | `true`        | Whether to enable the features that allow moving and resizing windows using the mouse. The advantage of this feature over the native Windows approach is that you don't have to select the title bar to move or the edges of a window to resize - you can simply do it anywhere while holding the `Win` key. If you do not want to use these features, you can set this to `false`.                                                                                                                                                                                                                     |
 | `delay_in_ms_before_dragging_is_allowed`           | `750`         | Only used when `enable_features_using_mouse` is `true`. Defines the time in milliseconds for which you have to hold `Win` before the application allows you to move or resize a window. The idea here is to prevent enabling these modes when you press the `Win` key quickly for any other reason i.e. setting this to a non-zero value can prevent you from accidental dragging or resizing of windows. Lower this delay if you want mouse-based features to be more responsive, esp. if you use them frequently.                                                                                     |
 | `allow_moving_cursor_after_open_close_or_minimise` | `true`        | Whether to move the cursor automatically to after using an application launcher hotkey or the closest window after closing or minimising a window. If set to `true`, the cursor will be moved to the foreground window after using a custom application launcher hotkey or to the closest visible window after you use a Randolf hotkey to close or minimise a window. Randolf does not use Windows API callbacks (yet) which can, for example, cause the cursor to move when the window to be closed did not close immediately but opened a separate confirmation pop-up before executing the command. |
-| `enable_horizontal_layout`                         | `false`       | Enables the workspace-aware horizontal scrolling layout described below. |
 
-### Horizontal scrolling layout
+### Layout settings
 
-When `enable_horizontal_layout = true`, Randolf adopts manageable visible windows at startup, ordered left-to-right, and near-maximises them using `window_margin`. Each workspace on each monitor owns an independent ordered strip. Only the focused member occupies the monitor; other members remain one monitor width apart and may sit wholly off-screen.
+`[layout].default` selects either `spatial` or `scrolling` for monitors without an override. Monitor overrides use
+repeated `[[layout.monitor]]` entries:
 
-New foreground windows are inserted immediately before the previously active member. `Win+Left/Right` selects an adjacent member and animates the outgoing and incoming windows across the strip; inactive members remain below the focused window in Z-order. `Win+Up/Down` retains normal spatial window and monitor navigation. `Win+Shift+Left/Right` reorders the focused member. Vertical keyboard moves and all keyboard resize commands are ignored in this mode.
+```toml
+[layout]
+default = "spatial"
 
-Closing, minimising, moving between workspaces, and switching workspaces preserve strip order. Window discovery is periodic, so externally opened or closed windows may take up to 250 ms to be reconciled.
+[[layout.monitor]]
+id = "primary"
+mode = "scrolling"
+
+[[layout.monitor]]
+id = "\\\\.\\DISPLAY2"
+mode = "spatial"
+```
+
+`primary` resolves dynamically. An exact Windows device-name override takes precedence over `primary`; otherwise
+`[layout].default` applies. Workspace-level overrides are not supported.
+
+### Spatial layout
+
+| Key                                   | Default value | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+|---------------------------------------|---------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `allow_selecting_same_center_windows` | `true`        | Whether to allow selecting windows whose centre is the same as the active window's centre. When enabled, repeated navigation cycles through every window sharing that centre. The cursor cannot move away until all but one are moved or resized. When disabled, non-foreground windows sharing the active window's centre cannot be selected using this application but the cursor is free to move over the same-centre group. Can be configured via the tray icon context menu. |
+
+### Scrolling layout
+
+On a monitor configured as `scrolling`, Randolf adopts manageable visible windows at startup, ordered left-to-right,
+and near-maximises them using `window_margin`. Each workspace on that monitor owns an independent ordered strip that you
+can scroll horizontally.
+
+New foreground windows are inserted immediately before the previously active member. `Win+Left/Right` selects an
+adjacent member and animates the outgoing and incoming windows across the strip; inactive members remain below the
+focused window in Z-order. `Win+Up/Down` retains normal spatial window and monitor navigation. `Win+Shift+Left/Right`
+reorders the focused member. Vertical keyboard moves and all keyboard resize commands are ignored in this mode.
+
+Closing, minimising, moving between workspaces, and switching workspaces preserve strip order. Window discovery is
+periodic, so externally opened or closed windows may take up to 250 ms to be reconciled.
 
 ### Exclusion settings
 

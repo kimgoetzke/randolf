@@ -74,8 +74,23 @@ impl<T: Default + Serialize + DeserializeOwned> FileManager<T> {
   }
 
   pub fn load_or_create(&self) -> Result<(T, Option<String>), Box<dyn Error>> {
+    self.load_or_create_with_repair(|_| None)
+  }
+
+  /// Loads the file after applying and persisting an optional text repair.
+  pub fn load_or_create_with_repair(
+    &self,
+    repair: impl FnOnce(&str) -> Option<String>,
+  ) -> Result<(T, Option<String>), Box<dyn Error>> {
     match fs::read_to_string(&self.file_path) {
       Ok(file_content) => {
+        let file_content = if let Some(repaired) = repair(&file_content) {
+          warn!("Repairing [{}] before parsing", self.file_path.display());
+          fs::write(&self.file_path, &repaired)?;
+          repaired
+        } else {
+          file_content
+        };
         let t: T = match toml::from_str(&file_content) {
           Ok(parsed) => parsed,
           Err(err) => {
@@ -101,12 +116,6 @@ impl<T: Default + Serialize + DeserializeOwned> FileManager<T> {
         }
       }
     }
-  }
-
-  pub fn reload(&mut self) -> Result<(T, Option<String>), Box<dyn Error>> {
-    info!("Reloading [{}]", self.file_path.display());
-
-    self.load_or_create()
   }
 
   pub fn save(&self, t: &T) -> Result<(), Box<dyn Error>> {

@@ -120,6 +120,9 @@ impl<T: WindowsApi + Clone> WorkspaceManager<T> {
 
   /// Returns the active workspace containing a window's monitor.
   pub fn active_workspace_for_window(&self, handle: WindowHandle) -> Option<PersistentWorkspaceId> {
+    if self.workspaces.is_empty() {
+      return None;
+    }
     let monitor_handle = self.windows_api.get_monitor_handle_for_window_handle(handle);
     let monitor_id = self.windows_api.get_monitor_id_for_handle(monitor_handle)?;
     self
