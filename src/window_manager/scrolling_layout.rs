@@ -1,5 +1,5 @@
 use crate::api::WindowsApi;
-use crate::common::{Direction, PersistentWorkspaceId, Point, Rect, Sizing, Window, WindowHandle};
+use crate::common::{Direction, PersistentWorkspaceId, Point, Rect, Sizing, WindowHandle};
 use crate::window_manager::horizontal_layout::HorizontalLayout;
 use crate::workspace_manager::WorkspaceManager;
 use std::collections::HashMap;
@@ -7,6 +7,9 @@ use std::time::Duration;
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
 
 const ANIMATION_FRAMES: u32 = 12;
+
+/// Visible strip members grouped by workspace and ordered spatially from left to right.
+type MembersByWorkspace = HashMap<PersistentWorkspaceId, Vec<WindowHandle>>;
 
 /// A layout that manages windows and allows scrolling. Keeps scrolling strip membership, focus, and positions across
 /// workspaces.
@@ -79,7 +82,9 @@ impl ScrollingLayout {
     }
   }
 
-  /// Updates active strips to match the visible managed windows.
+  /// Synchronises active strips with visible, managed windows, then restores layout and focus.
+  ///
+  /// Reconciliation stops while an unmanaged window owns focus so pop-ups and menus keep their focus and cursor.
   pub(super) fn reconcile<T: WindowsApi + Clone>(
     &mut self,
     api: &T,
@@ -91,13 +96,48 @@ impl ScrollingLayout {
     if active_workspaces.is_empty() {
       return;
     }
+
     let foreground = api.get_foreground_window();
     if foreground.is_some_and(|handle| api.is_not_a_managed_window(&handle)) {
       return;
     }
+
     let previous_workspace = self
       .previous_foreground_window
       .and_then(|handle| self.layout.workspace_containing(handle));
+
+    // Resolve membership before changing positions: off-screen members must retain their stored workspace
+    let visible_members =
+      self.get_visible_members_by_workspace(api, workspace_manager, active_workspaces, virtual_desktop_manager);
+    self.remove_transferred_windows(&visible_members);
+    let newly_focused_workspace = self.reconcile_memberships(active_workspaces, &visible_members, foreground);
+
+    // Membership changes can alter every strip, while focus changes can require one further reflow
+    for workspace in active_workspaces {
+      self.reflow(api, workspace_manager, *workspace, margin);
+    }
+    self.reconcile_focus(
+      api,
+      workspace_manager,
+      foreground,
+      previous_workspace,
+      newly_focused_workspace,
+      margin,
+    );
+    self.previous_foreground_window = api.get_foreground_window();
+  }
+
+  /// Groups current-desktop windows by active workspace in deterministic "spatial" order.
+  ///
+  /// Existing strip membership wins over monitor detection because off-screen windows may appear to belong to another
+  /// monitor.
+  fn get_visible_members_by_workspace<T: WindowsApi + Clone>(
+    &self,
+    api: &T,
+    workspace_manager: &WorkspaceManager<T>,
+    active_workspaces: &[PersistentWorkspaceId],
+    virtual_desktop_manager: Option<&IVirtualDesktopManager>,
+  ) -> MembersByWorkspace {
     let mut windows = api
       .get_all_visible_windows()
       .into_iter()
@@ -105,7 +145,7 @@ impl ScrollingLayout {
       .collect::<Vec<_>>();
     windows.sort_by_key(|window| (window.rect.left, window.rect.top, window.handle.hwnd));
 
-    let mut by_workspace: HashMap<PersistentWorkspaceId, Vec<Window>> = HashMap::new();
+    let mut members_by_workspace: MembersByWorkspace = HashMap::new();
     for window in windows {
       let workspace = self
         .layout
@@ -115,59 +155,89 @@ impl ScrollingLayout {
       if let Some(workspace) = workspace
         && active_workspaces.contains(&workspace)
       {
-        by_workspace.entry(workspace).or_default().push(window);
+        members_by_workspace.entry(workspace).or_default().push(window.handle);
       }
     }
+    members_by_workspace
+  }
 
-    for (workspace, windows) in &by_workspace {
-      for window in windows {
-        if let Some(previous_workspace) = self.layout.workspace_containing(window.handle)
+  /// Removes members from their old strip when workspace detection assigns them to another active workspace.
+  fn remove_transferred_windows(&mut self, members_by_workspace: &MembersByWorkspace) {
+    for (workspace, members) in members_by_workspace {
+      for member in members {
+        if let Some(previous_workspace) = self.layout.workspace_containing(*member)
           && previous_workspace != *workspace
         {
-          self.layout.remove(previous_workspace, window.handle);
+          self.layout.remove(previous_workspace, *member);
         }
       }
     }
+  }
 
-    let mut newly_focused = None;
+  /// Adopts initial strips or incrementally reconciles them, returning the workspace containing the newest focus.
+  fn reconcile_memberships(
+    &mut self,
+    active_workspaces: &[PersistentWorkspaceId],
+    visible_members: &MembersByWorkspace,
+    foreground: Option<WindowHandle>,
+  ) -> Option<PersistentWorkspaceId> {
+    // The first snapshot establishes strip order; later snapshots must preserve user reordering.
     if !self.initialised {
       for workspace in active_workspaces {
-        let members = by_workspace
-          .get(workspace)
-          .map(|windows| windows.iter().map(|window| window.handle).collect())
-          .unwrap_or_default();
+        let members = visible_members.get(workspace).cloned().unwrap_or_default();
         self.layout.adopt(*workspace, members, foreground);
       }
       self.initialised = true;
-    } else {
-      for workspace in active_workspaces {
-        let visible = by_workspace
-          .get(workspace)
-          .map(|windows| windows.iter().map(|window| window.handle).collect::<Vec<_>>())
-          .unwrap_or_default();
-        self.layout.retain(*workspace, &visible);
-        let new_members = visible
-          .iter()
-          .copied()
-          .filter(|handle| self.layout.workspace_containing(*handle).is_none())
-          .collect::<Vec<_>>();
-        let desired_focus = foreground
-          .filter(|handle| new_members.contains(handle))
-          .or_else(|| new_members.last().copied());
-        for member in new_members {
-          self.layout.insert_before(*workspace, member, self.previous_foreground_window);
-        }
-        if let Some(member) = desired_focus {
-          self.layout.set_focused(*workspace, member);
-          newly_focused = Some((*workspace, member));
-        }
-      }
+      return None;
     }
 
+    let mut newly_focused = None;
     for workspace in active_workspaces {
-      self.reflow(api, workspace_manager, *workspace, margin);
+      if self.reconcile_workspace(*workspace, visible_members, foreground).is_some() {
+        newly_focused = Some(*workspace);
+      }
     }
-    if let Some((workspace, _)) = newly_focused {
+    newly_focused
+  }
+
+  /// Removes missing members, inserts newly visible members, and returns any new member selected for focus.
+  fn reconcile_workspace(
+    &mut self,
+    workspace: PersistentWorkspaceId,
+    visible_members: &MembersByWorkspace,
+    foreground: Option<WindowHandle>,
+  ) -> Option<WindowHandle> {
+    let visible: &[WindowHandle] = visible_members.get(&workspace).map_or(&[], Vec::as_slice);
+    self.layout.retain(workspace, visible);
+    let new_members = visible
+      .iter()
+      .copied()
+      .filter(|handle| self.layout.workspace_containing(*handle).is_none())
+      .collect::<Vec<_>>();
+    // Prefer a newly foregrounded window; otherwise focus the last newly detected window.
+    let desired_focus = foreground
+      .filter(|handle| new_members.contains(handle))
+      .or_else(|| new_members.last().copied());
+    for member in new_members {
+      self.layout.insert_before(workspace, member, self.previous_foreground_window);
+    }
+    if let Some(member) = desired_focus {
+      self.layout.set_focused(workspace, member);
+    }
+    desired_focus
+  }
+
+  /// Applies focus priority: new member, current foreground member, then the neighbour of a removed foreground member.
+  fn reconcile_focus<T: WindowsApi + Clone>(
+    &mut self,
+    api: &T,
+    workspace_manager: &WorkspaceManager<T>,
+    foreground: Option<WindowHandle>,
+    previous_workspace: Option<PersistentWorkspaceId>,
+    newly_focused_workspace: Option<PersistentWorkspaceId>,
+    margin: i32,
+  ) {
+    if let Some(workspace) = newly_focused_workspace {
       self.reflow(api, workspace_manager, workspace, margin);
       self.focus(api, workspace_manager, workspace, margin);
     } else if let Some(handle) = foreground
@@ -184,7 +254,6 @@ impl ScrollingLayout {
       self.reflow(api, workspace_manager, workspace, margin);
       self.focus(api, workspace_manager, workspace, margin);
     }
-    self.previous_foreground_window = api.get_foreground_window();
   }
 
   /// Places a workspace's strip windows from their current order.
