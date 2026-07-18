@@ -2,7 +2,7 @@ use crate::api::WindowsApi;
 use crate::common::*;
 use crate::configuration_provider::{
   ADDITIONAL_WORKSPACE_COUNT, ALLOW_MOVING_CURSOR_AFTER_OPEN_CLOSE_OR_MINIMISE, ALLOW_SELECTING_SAME_CENTER_WINDOWS,
-  ConfigurationProvider, Layout, WINDOW_MARGIN,
+  ConfigurationProvider, Layout, SCROLLING_ANIMATION_DURATION_IN_MS, WINDOW_MARGIN,
 };
 use crate::horizontal_layout::HorizontalLayout;
 use crate::utils::{
@@ -18,7 +18,6 @@ use windows::Win32::UI::WindowsAndMessaging::SW_MAXIMIZE;
 const REGULAR_TOLERANCE_IN_PX: i32 = 2;
 const DWM_TOLERANCE_IN_PX: i32 = 8;
 const HORIZONTAL_ANIMATION_FRAMES: u32 = 12;
-const HORIZONTAL_ANIMATION_DURATION: Duration = Duration::from_millis(120);
 
 pub struct WindowManager<T: WindowsApi> {
   configuration_provider: Arc<Mutex<ConfigurationProvider>>,
@@ -509,7 +508,13 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
       .iter()
       .map(|(handle, target)| (*handle, self.windows_api.get_window_rect(*handle).unwrap_or(*target)))
       .collect::<HashMap<_, _>>();
-    let frame_duration = HORIZONTAL_ANIMATION_DURATION / HORIZONTAL_ANIMATION_FRAMES;
+    let animation_duration_in_ms = self
+      .configuration_provider
+      .lock()
+      .expect(CONFIGURATION_PROVIDER_LOCK)
+      .get_i32(SCROLLING_ANIMATION_DURATION_IN_MS);
+    let animation_duration = Duration::from_millis(u64::try_from(animation_duration_in_ms).unwrap_or_default());
+    let frame_duration = animation_duration / HORIZONTAL_ANIMATION_FRAMES;
     for frame in 1..=HORIZONTAL_ANIMATION_FRAMES {
       let progress = f64::from(frame) / f64::from(HORIZONTAL_ANIMATION_FRAMES);
       let eased_progress = 1.0 - (1.0 - progress).powi(3);

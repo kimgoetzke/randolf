@@ -21,7 +21,9 @@ extern crate simplelog;
 
 use crate::api::{RealWindowsApi, WindowsApi};
 use crate::application_launcher::ApplicationLauncher;
-use crate::configuration_provider::{ConfigurationProvider, FORCE_USING_ADMIN_PRIVILEGES};
+use crate::configuration_provider::{
+  ConfigurationProvider, FORCE_USING_ADMIN_PRIVILEGES, SCROLLING_RECONCILIATION_INTERVAL_IN_MS,
+};
 use crate::files::FileType;
 use crate::hotkey_manager::HotkeyManager;
 use crate::log_manager::LogManager;
@@ -38,7 +40,6 @@ use std::time::{Duration, Instant};
 
 const EVENT_LOOP_SLEEP_DURATION: Duration = Duration::from_millis(20);
 const HEART_BEAT_DURATION: Duration = Duration::from_secs(5);
-const HORIZONTAL_LAYOUT_RECONCILIATION_DURATION: Duration = Duration::from_millis(250);
 
 fn main() {
   LogManager::new_initialised();
@@ -97,6 +98,12 @@ fn main() {
   }
 
   // Run event loop
+  let scrolling_reconciliation_interval_in_ms = configuration_manager
+    .lock()
+    .expect(CONFIGURATION_PROVIDER_LOCK)
+    .get_i32(SCROLLING_RECONCILIATION_INTERVAL_IN_MS);
+  let scrolling_reconciliation_interval =
+    Duration::from_millis(u64::try_from(scrolling_reconciliation_interval_in_ms).unwrap_or_default());
   let mut last_heartbeat = Instant::now();
   let mut last_horizontal_layout_reconciliation = Instant::now();
   loop {
@@ -149,7 +156,7 @@ fn main() {
         }
       }
     }
-    if last_horizontal_layout_reconciliation.elapsed() >= HORIZONTAL_LAYOUT_RECONCILIATION_DURATION {
+    if last_horizontal_layout_reconciliation.elapsed() >= scrolling_reconciliation_interval {
       wm.borrow_mut().reconcile_horizontal_layout();
       last_horizontal_layout_reconciliation = Instant::now();
     }

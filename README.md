@@ -92,6 +92,8 @@ default = "spatial"
 allow_selecting_same_center_windows = true
 
 [scrolling_layout]
+animation_duration_in_ms = 120
+reconciliation_interval_in_ms = 250
 
 [exclusion_settings]
 window_titles = [
@@ -144,23 +146,34 @@ mode = "spatial"
 
 ### Spatial layout
 
+The spatial layout is the default, non-imposing layout that you can see in most of the GIFs above.
+
 | Key                                   | Default value | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 |---------------------------------------|---------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `allow_selecting_same_center_windows` | `true`        | Whether to allow selecting windows whose centre is the same as the active window's centre. When enabled, repeated navigation cycles through every window sharing that centre. The cursor cannot move away until all but one are moved or resized. When disabled, non-foreground windows sharing the active window's centre cannot be selected using this application but the cursor is free to move over the same-centre group. Can be configured via the tray icon context menu. |
 
 ### Scrolling layout
 
-On a monitor configured as `scrolling`, Randolf adopts manageable visible windows at startup, ordered left-to-right,
-and near-maximises them using `window_margin`. Each workspace on that monitor owns an independent ordered strip that you
-can scroll horizontally.
+On a monitor configured as `scrolling`, Randolf adopts manageable (see `Exclusion settings` below) visible windows at
+startup, ordered left-to-right, and near-maximises them using `window_margin`. Each workspace on that monitor owns an
+independent ordered strip that you scroll horizontally.
 
-New foreground windows are inserted immediately before the previously active member. `Win+Left/Right` selects an
-adjacent member and animates the outgoing and incoming windows across the strip; inactive members remain below the
-focused window in Z-order. `Win+Up/Down` retains normal spatial window and monitor navigation. `Win+Shift+Left/Right`
-reorders the focused member. Vertical keyboard moves and all keyboard resize commands are ignored in this mode.
+New foreground windows are inserted immediately before the previously active member.
+
+- `Win` + `Left`/`Right` - select an adjacent member and animates the outgoing and incoming windows across the strip.
+- `Win` + `Up`/`Down` - retains normal spatial window and monitor navigation (effectively no-op unless you have a
+  multi-monitor setup with a monitor below/above).
+- `Win` + `Shift` + `Left`/`Right` - reorders the focused member. Vertical keyboard moves and all keyboard resize
+  commands are ignored in this mode.
 
 Closing, minimising, moving between workspaces, and switching workspaces preserve strip order. Window discovery is
-periodic, so externally opened or closed windows may take up to 250 ms to be reconciled.
+periodic, so externally opened, closed, or moved windows may take up to `reconciliation_interval_in_ms` milliseconds to
+be reconciled.
+
+| Key                             | Default value | Description                                                            |
+|---------------------------------|---------------|------------------------------------------------------------------------|
+| `animation_duration_in_ms`      | `120`         | Duration of horizontal scrolling transitions, in milliseconds.         |
+| `reconciliation_interval_in_ms` | `250`         | Interval between external window reconciliation runs, in milliseconds. |
 
 ### Exclusion settings
 
