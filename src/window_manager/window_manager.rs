@@ -1,7 +1,7 @@
 use super::navigation;
 use super::placement::Placement;
 use super::scrolling::Scrolling;
-use super::spatial;
+use super::spatial::Spatial;
 use crate::api::WindowsApi;
 use crate::common::*;
 use crate::configuration_provider::{
@@ -19,6 +19,7 @@ pub struct WindowManager<T: WindowsApi> {
   pub(super) placement: Placement,
   pub(super) allow_moving_cursor_after_close_or_minimise: bool,
   pub(super) scrolling: Scrolling,
+  pub(super) spatial: Spatial,
   pub(super) workspace_manager: WorkspaceManager<T>,
   pub(super) virtual_desktop_manager: Option<IVirtualDesktopManager>,
   pub(super) windows_api: T,
@@ -42,6 +43,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
       placement: Placement::default(),
       allow_moving_cursor_after_close_or_minimise,
       scrolling: Scrolling::default(),
+      spatial: Spatial,
       virtual_desktop_manager: Some(
         api
           .get_virtual_desktop_manager()
@@ -62,7 +64,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     let Some(window) = self.windows_api.get_foreground_window() else {
       return;
     };
-    let layout = self.layout_for_window(window);
+    let layout = self.get_layout_for_window(window);
     self.windows_api.do_close_window(window);
     match layout {
       Some(Layout::Scrolling) => {
@@ -71,7 +73,9 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
           .scrolling
           .remove_and_refocus(&self.windows_api, &self.workspace_manager, window, margin);
       }
-      _ => spatial::after_close_or_minimise(&self.windows_api, window, self.allow_moving_cursor_after_close_or_minimise),
+      _ => self
+        .spatial
+        .after_close_or_minimise(&self.windows_api, window, self.allow_moving_cursor_after_close_or_minimise),
     }
   }
 
@@ -79,7 +83,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     let Some(window) = self.windows_api.get_foreground_window() else {
       return;
     };
-    let layout = self.layout_for_window(window);
+    let layout = self.get_layout_for_window(window);
     self.windows_api.do_minimise_window(window);
     match layout {
       Some(Layout::Scrolling) => {
@@ -88,12 +92,14 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
           .scrolling
           .remove_and_refocus(&self.windows_api, &self.workspace_manager, window, margin);
       }
-      _ => spatial::after_close_or_minimise(&self.windows_api, window, self.allow_moving_cursor_after_close_or_minimise),
+      _ => self
+        .spatial
+        .after_close_or_minimise(&self.windows_api, window, self.allow_moving_cursor_after_close_or_minimise),
     }
   }
 
   pub fn switch_workspace(&mut self, id: PersistentWorkspaceId) {
-    if self.layout_for_workspace(id) != Some(Layout::Scrolling) {
+    if self.get_layout_for_workspace(id) != Some(Layout::Scrolling) {
       self.workspace_manager.switch_workspace(id);
       return;
     }
@@ -113,12 +119,12 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
 
   pub fn move_window_to_workspace(&mut self, id: PersistentWorkspaceId) {
     let foreground = self.windows_api.get_foreground_window();
-    let source = foreground.and_then(|handle| self.workspace_for_window(handle));
+    let source = foreground.and_then(|handle| self.get_workspace_for_window(handle));
     if source == Some(id) || self.workspace_manager.monitor_for_workspace(id).is_none() {
       return;
     }
-    let source_layout = source.and_then(|workspace| self.layout_for_workspace(workspace));
-    let target_layout = self.layout_for_workspace(id);
+    let source_layout = source.and_then(|workspace| self.get_layout_for_workspace(workspace));
+    let target_layout = self.get_layout_for_workspace(id);
     self.workspace_manager.move_window_to_workspace(id);
 
     if let (Some(handle), Some(source)) = (foreground, source) {
@@ -145,7 +151,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
   }
 
   pub fn move_window(&mut self, direction: Direction) {
-    if self.foreground_layout() == Some(Layout::Scrolling) {
+    if self.get_foreground_window_layout() == Some(Layout::Scrolling) {
       if matches!(direction, Direction::Left | Direction::Right) {
         let margin = self.margin();
         self
@@ -154,12 +160,16 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
       }
       return;
     }
-    spatial::move_window(&self.windows_api, &self.placement, direction, self.margin());
+    self
+      .spatial
+      .move_window(&self.windows_api, &self.placement, direction, self.margin());
   }
 
   pub fn resize_window(&mut self, direction: Direction) {
-    if self.foreground_layout() != Some(Layout::Scrolling) {
-      spatial::resize_window(&self.windows_api, &self.placement, direction, self.margin());
+    if self.get_foreground_window_layout() != Some(Layout::Scrolling) {
+      self
+        .spatial
+        .resize_window(&self.windows_api, &self.placement, direction, self.margin());
     }
   }
 
@@ -224,7 +234,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
       .workspace_manager
       .active_workspace_ids()
       .into_iter()
-      .filter(|workspace| self.layout_for_workspace(*workspace) == Some(Layout::Scrolling))
+      .filter(|workspace| self.get_layout_for_workspace(*workspace) == Some(Layout::Scrolling))
       .collect::<Vec<_>>();
     let margin = self.margin();
     self.scrolling.reconcile(
@@ -236,7 +246,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     );
   }
 
-  fn layout_for_monitor(&self, monitor: &Monitor) -> Layout {
+  fn get_layout_for_monitor(&self, monitor: &Monitor) -> Layout {
     self
       .configuration_provider
       .lock()
@@ -244,31 +254,31 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
       .layout_for_monitor(&monitor.id_to_string(), monitor.is_primary)
   }
 
-  fn layout_for_workspace(&self, workspace: PersistentWorkspaceId) -> Option<Layout> {
+  fn get_layout_for_workspace(&self, workspace: PersistentWorkspaceId) -> Option<Layout> {
     self
       .workspace_manager
       .monitor_for_workspace(workspace)
-      .map(|monitor| self.layout_for_monitor(&monitor))
+      .map(|monitor| self.get_layout_for_monitor(&monitor))
   }
 
-  fn workspace_for_window(&self, window: WindowHandle) -> Option<PersistentWorkspaceId> {
+  fn get_workspace_for_window(&self, window: WindowHandle) -> Option<PersistentWorkspaceId> {
     self
       .scrolling
       .workspace_containing(window)
       .or_else(|| self.workspace_manager.active_workspace_for_window(window))
   }
 
-  fn layout_for_window(&self, window: WindowHandle) -> Option<Layout> {
+  fn get_layout_for_window(&self, window: WindowHandle) -> Option<Layout> {
     self
-      .workspace_for_window(window)
-      .and_then(|workspace| self.layout_for_workspace(workspace))
+      .get_workspace_for_window(window)
+      .and_then(|workspace| self.get_layout_for_workspace(workspace))
   }
 
-  fn foreground_layout(&self) -> Option<Layout> {
+  fn get_foreground_window_layout(&self) -> Option<Layout> {
     self
       .windows_api
       .get_foreground_window()
-      .and_then(|window| self.layout_for_window(window))
+      .and_then(|window| self.get_layout_for_window(window))
   }
 
   fn margin(&self) -> i32 {
