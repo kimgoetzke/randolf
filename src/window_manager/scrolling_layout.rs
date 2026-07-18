@@ -1,6 +1,6 @@
 use crate::api::WindowsApi;
 use crate::common::{Direction, PersistentWorkspaceId, Point, Rect, Sizing, WindowHandle};
-use crate::window_manager::horizontal_layout::HorizontalLayout;
+use crate::window_manager::scrolling_strips::ScrollingStrips;
 use crate::workspace_manager::WorkspaceManager;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -15,7 +15,7 @@ type MembersByWorkspace = HashMap<PersistentWorkspaceId, Vec<WindowHandle>>;
 /// workspaces.
 #[derive(Default)]
 pub(super) struct ScrollingLayout {
-  layout: HorizontalLayout,
+  strips: ScrollingStrips,
   positions: HashMap<PersistentWorkspaceId, Vec<(WindowHandle, Rect)>>,
   initialised: bool,
   previous_foreground_window: Option<WindowHandle>,
@@ -24,30 +24,30 @@ pub(super) struct ScrollingLayout {
 impl ScrollingLayout {
   /// Returns the scrolling workspace that owns a window.
   pub(super) fn get_workspace_containing(&self, window: WindowHandle) -> Option<PersistentWorkspaceId> {
-    self.layout.workspace_containing(window)
+    self.strips.workspace_containing(window)
   }
 
   /// Lists a workspace's windows in strip order.
   pub(super) fn get_members(&self, workspace: PersistentWorkspaceId) -> Vec<WindowHandle> {
-    self.layout.members(workspace).to_vec()
+    self.strips.members(workspace).to_vec()
   }
 
   /// Allows spatial navigation to use untracked windows and each strip's focused window.
   pub(super) fn is_navigation_eligible(&self, window: WindowHandle) -> bool {
     self
-      .layout
+      .strips
       .workspace_containing(window)
-      .is_none_or(|workspace| self.layout.focused(workspace) == Some(window))
+      .is_none_or(|workspace| self.strips.focused(workspace) == Some(window))
   }
 
   /// Removes a window from a workspace's strip.
   pub(super) fn remove(&mut self, workspace: PersistentWorkspaceId, window: WindowHandle) {
-    self.layout.remove(workspace, window);
+    self.strips.remove(workspace, window);
   }
 
   /// Adds a window to a workspace's strip.
   pub(super) fn insert(&mut self, workspace: PersistentWorkspaceId, window: WindowHandle) {
-    self.layout.insert_before(workspace, window, None);
+    self.strips.insert_before(workspace, window, None);
   }
 
   /// Restores and releases active strips that no longer use Scrolling Layout.
@@ -65,7 +65,7 @@ impl ScrollingLayout {
       .map(|monitor| monitor.monitor_area)
       .collect::<Vec<_>>();
     for workspace in workspaces {
-      let members = self.layout.remove_workspace(*workspace);
+      let members = self.strips.remove_workspace(*workspace);
       self.positions.remove(workspace);
       let Some(monitor) = workspace_manager.monitor_for_workspace(*workspace) else {
         continue;
@@ -104,7 +104,7 @@ impl ScrollingLayout {
 
     let previous_workspace = self
       .previous_foreground_window
-      .and_then(|handle| self.layout.workspace_containing(handle));
+      .and_then(|handle| self.strips.workspace_containing(handle));
 
     // Resolve membership before changing positions: off-screen members must retain their stored workspace
     let visible_members =
@@ -148,7 +148,7 @@ impl ScrollingLayout {
     let mut members_by_workspace: MembersByWorkspace = HashMap::new();
     for window in windows {
       let workspace = self
-        .layout
+        .strips
         .workspace_containing(window.handle)
         .filter(|workspace| workspace_manager.is_workspace_active(*workspace))
         .or_else(|| workspace_manager.active_workspace_for_window(window.handle));
@@ -165,10 +165,10 @@ impl ScrollingLayout {
   fn remove_transferred_windows(&mut self, members_by_workspace: &MembersByWorkspace) {
     for (workspace, members) in members_by_workspace {
       for member in members {
-        if let Some(previous_workspace) = self.layout.workspace_containing(*member)
+        if let Some(previous_workspace) = self.strips.workspace_containing(*member)
           && previous_workspace != *workspace
         {
-          self.layout.remove(previous_workspace, *member);
+          self.strips.remove(previous_workspace, *member);
         }
       }
     }
@@ -185,7 +185,7 @@ impl ScrollingLayout {
     if !self.initialised {
       for workspace in active_workspaces {
         let members = visible_members.get(workspace).cloned().unwrap_or_default();
-        self.layout.adopt(*workspace, members, foreground);
+        self.strips.adopt(*workspace, members, foreground);
       }
       self.initialised = true;
       return None;
@@ -208,21 +208,21 @@ impl ScrollingLayout {
     foreground: Option<WindowHandle>,
   ) -> Option<WindowHandle> {
     let visible: &[WindowHandle] = visible_members.get(&workspace).map_or(&[], Vec::as_slice);
-    self.layout.retain(workspace, visible);
+    self.strips.retain(workspace, visible);
     let new_members = visible
       .iter()
       .copied()
-      .filter(|handle| self.layout.workspace_containing(*handle).is_none())
+      .filter(|handle| self.strips.workspace_containing(*handle).is_none())
       .collect::<Vec<_>>();
     // Prefer a newly foregrounded window; otherwise focus the last newly detected window.
     let desired_focus = foreground
       .filter(|handle| new_members.contains(handle))
       .or_else(|| new_members.last().copied());
     for member in new_members {
-      self.layout.insert_before(workspace, member, self.previous_foreground_window);
+      self.strips.insert_before(workspace, member, self.previous_foreground_window);
     }
     if let Some(member) = desired_focus {
-      self.layout.set_focused(workspace, member);
+      self.strips.set_focused(workspace, member);
     }
     desired_focus
   }
@@ -241,15 +241,15 @@ impl ScrollingLayout {
       self.reflow(api, workspace_manager, workspace, margin);
       self.focus(api, workspace_manager, workspace, margin);
     } else if let Some(handle) = foreground
-      && let Some(workspace) = self.layout.workspace_containing(handle)
+      && let Some(workspace) = self.strips.workspace_containing(handle)
     {
-      self.layout.set_focused(workspace, handle);
+      self.strips.set_focused(workspace, handle);
       self.reflow(api, workspace_manager, workspace, margin);
     } else if let Some(workspace) = previous_workspace
       && workspace_manager.is_workspace_active(workspace)
       && self
         .previous_foreground_window
-        .is_some_and(|handle| self.layout.workspace_containing(handle).is_none())
+        .is_some_and(|handle| self.strips.workspace_containing(handle).is_none())
     {
       self.reflow(api, workspace_manager, workspace, margin);
       self.focus(api, workspace_manager, workspace, margin);
@@ -268,7 +268,7 @@ impl ScrollingLayout {
       return;
     };
     let positions = self
-      .layout
+      .strips
       .placements(workspace, monitor.work_area, margin)
       .into_iter()
       .map(|(handle, sizing)| (handle, Rect::from(sizing)))
@@ -276,7 +276,7 @@ impl ScrollingLayout {
     if self.positions.get(&workspace) == Some(&positions) {
       return;
     }
-    if let Some(focused) = self.layout.focused(workspace) {
+    if let Some(focused) = self.strips.focused(workspace) {
       api.set_window_positions(&positions, focused);
     }
     self.positions.insert(workspace, positions);
@@ -290,7 +290,7 @@ impl ScrollingLayout {
     workspace: PersistentWorkspaceId,
     margin: i32,
   ) {
-    let Some(handle) = self.layout.focused(workspace) else {
+    let Some(handle) = self.strips.focused(workspace) else {
       return;
     };
     let Some(monitor) = workspace_manager.monitor_for_workspace(workspace) else {
@@ -313,10 +313,10 @@ impl ScrollingLayout {
     let Some(current) = api.get_foreground_window() else {
       return false;
     };
-    let Some(workspace) = self.layout.workspace_containing(current) else {
+    let Some(workspace) = self.strips.workspace_containing(current) else {
       return false;
     };
-    if self.layout.focus_adjacent(workspace, current, direction).is_some() {
+    if self.strips.focus_adjacent(workspace, current, direction).is_some() {
       self.animate(api, workspace_manager, workspace, current, margin, animation_duration);
       self.focus(api, workspace_manager, workspace, margin);
     }
@@ -334,10 +334,10 @@ impl ScrollingLayout {
     let Some(current) = api.get_foreground_window() else {
       return;
     };
-    let Some(workspace) = self.layout.workspace_containing(current) else {
+    let Some(workspace) = self.strips.workspace_containing(current) else {
       return;
     };
-    if self.layout.reorder(workspace, current, direction) {
+    if self.strips.reorder(workspace, current, direction) {
       self.reflow(api, workspace_manager, workspace, margin);
       self.focus(api, workspace_manager, workspace, margin);
     }
@@ -351,10 +351,10 @@ impl ScrollingLayout {
     member: WindowHandle,
     margin: i32,
   ) {
-    let Some(workspace) = self.layout.workspace_containing(member) else {
+    let Some(workspace) = self.strips.workspace_containing(member) else {
       return;
     };
-    self.layout.remove(workspace, member);
+    self.strips.remove(workspace, member);
     self.reflow(api, workspace_manager, workspace, margin);
     self.focus(api, workspace_manager, workspace, margin);
   }
@@ -372,12 +372,12 @@ impl ScrollingLayout {
       .into_iter()
       .find(|monitor| monitor.is_primary)
       .or_else(|| monitors.get_all().into_iter().next());
-    for workspace in self.layout.workspace_ids() {
+    for workspace in self.strips.workspace_ids() {
       let Some(monitor) = monitors.get_by_id(&workspace.monitor_id).or(fallback) else {
         continue;
       };
       let target = Rect::from(Sizing::near_maximised(monitor.work_area, margin));
-      for handle in self.layout.members(workspace) {
+      for handle in self.strips.members(workspace) {
         let off_screen = api
           .get_window_rect(*handle)
           .is_some_and(|rect| !screen_areas.iter().any(|area| rect.intersects(area)));
@@ -401,7 +401,7 @@ impl ScrollingLayout {
       return;
     };
     let desired = self
-      .layout
+      .strips
       .placements(workspace, monitor.work_area, margin)
       .into_iter()
       .map(|(handle, sizing)| (handle, Rect::from(sizing)))
@@ -426,7 +426,7 @@ impl ScrollingLayout {
         std::thread::sleep(frame_duration);
       }
     }
-    if let Some(focused) = self.layout.focused(workspace) {
+    if let Some(focused) = self.strips.focused(workspace) {
       api.set_window_positions(&desired, focused);
     }
     self.positions.insert(workspace, desired);

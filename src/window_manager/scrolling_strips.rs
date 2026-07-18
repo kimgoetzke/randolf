@@ -1,18 +1,21 @@
 use crate::common::{Direction, PersistentWorkspaceId, Rect, Sizing, WindowHandle};
 use std::collections::HashMap;
 
+/// Stores ordered scrolling strip membership and focus for each workspace. Must only be used by
+/// [`crate::window_manager::scrolling_layout::ScrollingLayout`].
 #[derive(Debug, Default)]
-pub(crate) struct HorizontalLayout {
-  strips: HashMap<PersistentWorkspaceId, Strip>,
+pub(crate) struct ScrollingStrips {
+  by_workspace: HashMap<PersistentWorkspaceId, Strip>,
 }
 
+/// Stores ordered members and current focus for one workspace.
 #[derive(Debug, Default)]
 struct Strip {
   members: Vec<WindowHandle>,
   focused: Option<WindowHandle>,
 }
 
-impl HorizontalLayout {
+impl ScrollingStrips {
   /// Replaces a workspace strip with ordered members.
   pub(crate) fn adopt(
     &mut self,
@@ -23,7 +26,7 @@ impl HorizontalLayout {
     let focused = focused
       .filter(|handle| members.contains(handle))
       .or_else(|| members.first().copied());
-    self.strips.insert(workspace, Strip { members, focused });
+    self.by_workspace.insert(workspace, Strip { members, focused });
   }
 
   /// Inserts a member immediately before the previous active member.
@@ -33,7 +36,7 @@ impl HorizontalLayout {
     member: WindowHandle,
     previous_active: Option<WindowHandle>,
   ) {
-    let strip = self.strips.entry(workspace).or_default();
+    let strip = self.by_workspace.entry(workspace).or_default();
     strip.members.retain(|handle| *handle != member);
     let index = previous_active
       .and_then(|handle| strip.members.iter().position(|candidate| *candidate == handle))
@@ -44,35 +47,41 @@ impl HorizontalLayout {
 
   /// Returns ordered members for a workspace.
   pub(crate) fn members(&self, workspace: PersistentWorkspaceId) -> &[WindowHandle] {
-    self.strips.get(&workspace).map_or(&[], |strip| strip.members.as_slice())
+    self
+      .by_workspace
+      .get(&workspace)
+      .map_or(&[], |strip| strip.members.as_slice())
   }
 
   /// Returns IDs for all tracked workspaces.
   pub(crate) fn workspace_ids(&self) -> impl Iterator<Item = PersistentWorkspaceId> + '_ {
-    self.strips.keys().copied()
+    self.by_workspace.keys().copied()
   }
 
   /// Removes a workspace strip and returns its members.
   pub(crate) fn remove_workspace(&mut self, workspace: PersistentWorkspaceId) -> Vec<WindowHandle> {
-    self.strips.remove(&workspace).map_or_else(Vec::new, |strip| strip.members)
+    self
+      .by_workspace
+      .remove(&workspace)
+      .map_or_else(Vec::new, |strip| strip.members)
   }
 
   /// Returns the workspace containing a member.
   pub(crate) fn workspace_containing(&self, member: WindowHandle) -> Option<PersistentWorkspaceId> {
     self
-      .strips
+      .by_workspace
       .iter()
       .find_map(|(workspace, strip)| strip.members.contains(&member).then_some(*workspace))
   }
 
   /// Returns the focused member.
   pub(crate) fn focused(&self, workspace: PersistentWorkspaceId) -> Option<WindowHandle> {
-    self.strips.get(&workspace).and_then(|strip| strip.focused)
+    self.by_workspace.get(&workspace).and_then(|strip| strip.focused)
   }
 
   /// Focuses a member when present.
   pub(crate) fn set_focused(&mut self, workspace: PersistentWorkspaceId, member: WindowHandle) -> bool {
-    let Some(strip) = self.strips.get_mut(&workspace) else {
+    let Some(strip) = self.by_workspace.get_mut(&workspace) else {
       return false;
     };
     if !strip.members.contains(&member) {
@@ -89,7 +98,7 @@ impl HorizontalLayout {
     member: WindowHandle,
     direction: Direction,
   ) -> Option<WindowHandle> {
-    let strip = self.strips.get_mut(&workspace)?;
+    let strip = self.by_workspace.get_mut(&workspace)?;
     let index = strip.members.iter().position(|candidate| *candidate == member)?;
     let target = match direction {
       Direction::Left => index.checked_sub(1),
@@ -103,7 +112,7 @@ impl HorizontalLayout {
 
   /// Swaps a member with its horizontal neighbour.
   pub(crate) fn reorder(&mut self, workspace: PersistentWorkspaceId, member: WindowHandle, direction: Direction) -> bool {
-    let Some(strip) = self.strips.get_mut(&workspace) else {
+    let Some(strip) = self.by_workspace.get_mut(&workspace) else {
       return false;
     };
     let Some(index) = strip.members.iter().position(|candidate| *candidate == member) else {
@@ -124,7 +133,7 @@ impl HorizontalLayout {
 
   /// Removes a member and selects its right neighbour, then left neighbour.
   pub(crate) fn remove(&mut self, workspace: PersistentWorkspaceId, member: WindowHandle) -> Option<WindowHandle> {
-    let strip = self.strips.get_mut(&workspace)?;
+    let strip = self.by_workspace.get_mut(&workspace)?;
     let index = strip.members.iter().position(|candidate| *candidate == member)?;
     strip.members.remove(index);
     let focused = strip
@@ -140,7 +149,7 @@ impl HorizontalLayout {
 
   /// Removes members absent from the supplied ordered set.
   pub(crate) fn retain(&mut self, workspace: PersistentWorkspaceId, valid: &[WindowHandle]) {
-    let Some(strip) = self.strips.get_mut(&workspace) else {
+    let Some(strip) = self.by_workspace.get_mut(&workspace) else {
       return;
     };
     let old_focus_index = strip
@@ -160,7 +169,7 @@ impl HorizontalLayout {
     work_area: Rect,
     margin: i32,
   ) -> Vec<(WindowHandle, Sizing)> {
-    let Some(strip) = self.strips.get(&workspace) else {
+    let Some(strip) = self.by_workspace.get(&workspace) else {
       return Vec::new();
     };
     let focused_index = strip
@@ -193,94 +202,94 @@ mod tests {
 
   #[test]
   fn adopts_windows_in_supplied_order_and_focuses_requested_member() {
-    let mut layout = HorizontalLayout::default();
+    let mut strips = ScrollingStrips::default();
     let id = workspace(1);
 
-    layout.adopt(id, vec![1.into(), 2.into(), 3.into()], Some(2.into()));
+    strips.adopt(id, vec![1.into(), 2.into(), 3.into()], Some(2.into()));
 
-    assert_eq!(layout.members(id), &[1.into(), 2.into(), 3.into()]);
-    assert_eq!(layout.focused(id), Some(2.into()));
+    assert_eq!(strips.members(id), &[1.into(), 2.into(), 3.into()]);
+    assert_eq!(strips.focused(id), Some(2.into()));
   }
 
   #[test]
   fn inserts_new_window_before_previous_active_and_focuses_it() {
-    let mut layout = HorizontalLayout::default();
+    let mut strips = ScrollingStrips::default();
     let id = workspace(1);
-    layout.adopt(id, vec![1.into(), 2.into(), 3.into()], Some(2.into()));
+    strips.adopt(id, vec![1.into(), 2.into(), 3.into()], Some(2.into()));
 
-    layout.insert_before(id, 4.into(), Some(2.into()));
+    strips.insert_before(id, 4.into(), Some(2.into()));
 
-    assert_eq!(layout.members(id), &[1.into(), 4.into(), 2.into(), 3.into()]);
-    assert_eq!(layout.focused(id), Some(4.into()));
+    assert_eq!(strips.members(id), &[1.into(), 4.into(), 2.into(), 3.into()]);
+    assert_eq!(strips.focused(id), Some(4.into()));
   }
 
   #[test]
   fn keeps_strips_independent_between_workspaces() {
-    let mut layout = HorizontalLayout::default();
+    let mut strips = ScrollingStrips::default();
     let first = workspace(1);
     let second = workspace(2);
-    layout.adopt(first, vec![1.into()], Some(1.into()));
-    layout.adopt(second, vec![2.into()], Some(2.into()));
+    strips.adopt(first, vec![1.into()], Some(1.into()));
+    strips.adopt(second, vec![2.into()], Some(2.into()));
 
-    layout.insert_before(first, 3.into(), Some(1.into()));
+    strips.insert_before(first, 3.into(), Some(1.into()));
 
-    assert_eq!(layout.members(first), &[3.into(), 1.into()]);
-    assert_eq!(layout.members(second), &[2.into()]);
+    assert_eq!(strips.members(first), &[3.into(), 1.into()]);
+    assert_eq!(strips.members(second), &[2.into()]);
   }
 
   #[test]
   fn focuses_adjacent_members_without_wrapping() {
-    let mut layout = HorizontalLayout::default();
+    let mut strips = ScrollingStrips::default();
     let id = workspace(1);
-    layout.adopt(id, vec![1.into(), 2.into(), 3.into()], Some(2.into()));
+    strips.adopt(id, vec![1.into(), 2.into(), 3.into()], Some(2.into()));
 
-    assert_eq!(layout.focus_adjacent(id, 2.into(), Direction::Right), Some(3.into()));
-    assert_eq!(layout.focus_adjacent(id, 3.into(), Direction::Right), None);
-    assert_eq!(layout.focus_adjacent(id, 3.into(), Direction::Left), Some(2.into()));
+    assert_eq!(strips.focus_adjacent(id, 2.into(), Direction::Right), Some(3.into()));
+    assert_eq!(strips.focus_adjacent(id, 3.into(), Direction::Right), None);
+    assert_eq!(strips.focus_adjacent(id, 3.into(), Direction::Left), Some(2.into()));
   }
 
   #[test]
   fn reorders_focused_member_with_adjacent_member() {
-    let mut layout = HorizontalLayout::default();
+    let mut strips = ScrollingStrips::default();
     let id = workspace(1);
-    layout.adopt(id, vec![1.into(), 2.into(), 3.into()], Some(2.into()));
+    strips.adopt(id, vec![1.into(), 2.into(), 3.into()], Some(2.into()));
 
-    assert!(layout.reorder(id, 2.into(), Direction::Right));
-    assert_eq!(layout.members(id), &[1.into(), 3.into(), 2.into()]);
-    assert_eq!(layout.focused(id), Some(2.into()));
-    assert!(!layout.reorder(id, 2.into(), Direction::Right));
+    assert!(strips.reorder(id, 2.into(), Direction::Right));
+    assert_eq!(strips.members(id), &[1.into(), 3.into(), 2.into()]);
+    assert_eq!(strips.focused(id), Some(2.into()));
+    assert!(!strips.reorder(id, 2.into(), Direction::Right));
   }
 
   #[test]
   fn removal_focuses_right_neighbour_then_left_neighbour() {
-    let mut layout = HorizontalLayout::default();
+    let mut strips = ScrollingStrips::default();
     let id = workspace(1);
-    layout.adopt(id, vec![1.into(), 2.into(), 3.into()], Some(2.into()));
+    strips.adopt(id, vec![1.into(), 2.into(), 3.into()], Some(2.into()));
 
-    assert_eq!(layout.remove(id, 2.into()), Some(3.into()));
-    assert_eq!(layout.remove(id, 3.into()), Some(1.into()));
-    assert_eq!(layout.remove(id, 1.into()), None);
+    assert_eq!(strips.remove(id, 2.into()), Some(3.into()));
+    assert_eq!(strips.remove(id, 3.into()), Some(1.into()));
+    assert_eq!(strips.remove(id, 1.into()), None);
   }
 
   #[test]
   fn reconciliation_removes_stale_members_and_preserves_order() {
-    let mut layout = HorizontalLayout::default();
+    let mut strips = ScrollingStrips::default();
     let id = workspace(1);
-    layout.adopt(id, vec![1.into(), 2.into(), 3.into()], Some(2.into()));
+    strips.adopt(id, vec![1.into(), 2.into(), 3.into()], Some(2.into()));
 
-    layout.retain(id, &[1.into(), 3.into()]);
+    strips.retain(id, &[1.into(), 3.into()]);
 
-    assert_eq!(layout.members(id), &[1.into(), 3.into()]);
-    assert_eq!(layout.focused(id), Some(3.into()));
+    assert_eq!(strips.members(id), &[1.into(), 3.into()]);
+    assert_eq!(strips.focused(id), Some(3.into()));
   }
 
   #[test]
   fn placements_translate_one_work_area_width_per_member() {
-    let mut layout = HorizontalLayout::default();
+    let mut strips = ScrollingStrips::default();
     let id = workspace(1);
-    layout.adopt(id, vec![1.into(), 2.into(), 3.into()], Some(2.into()));
+    strips.adopt(id, vec![1.into(), 2.into(), 3.into()], Some(2.into()));
 
-    let placements = layout.placements(id, Rect::new(100, 20, 1100, 720), 10);
+    let placements = strips.placements(id, Rect::new(100, 20, 1100, 720), 10);
 
     assert_eq!(placements[0], (1.into(), Sizing::new(-890, 30, 980, 680)));
     assert_eq!(placements[1], (2.into(), Sizing::new(110, 30, 980, 680)));

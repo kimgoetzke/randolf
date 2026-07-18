@@ -1,7 +1,7 @@
-mod horizontal_layout;
 mod navigation;
 mod placement;
 mod scrolling_layout;
+mod scrolling_strips;
 mod spatial_layout;
 #[cfg(test)]
 mod tests;
