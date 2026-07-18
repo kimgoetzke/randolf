@@ -88,7 +88,7 @@ fn main() {
     configuration_manager.clone(),
     windows_api.clone(),
   )));
-  wm.borrow_mut().reconcile_horizontal_layout();
+  wm.borrow_mut().reconcile_layouts();
   let workspace_ids = wm.borrow_mut().get_ordered_permanent_workspace_ids();
   let hkm = HotkeyManager::new_with_hotkeys(configuration_manager.clone(), workspace_ids);
   let interrupt_handle = hkm.initialise(command_sender.clone());
@@ -184,7 +184,7 @@ fn run_loop(
     run_if_due(
       &mut last_scrolling_layout_reconciliation,
       scrolling_reconciliation_interval,
-      || wm.borrow_mut().reconcile_horizontal_layout(),
+      || wm.borrow_mut().reconcile_layouts(),
     );
     #[cfg(debug_assertions)]
     run_if_due(&mut last_heartbeat, HEART_BEAT_DURATION, || {
