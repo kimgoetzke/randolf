@@ -37,6 +37,8 @@ pub trait WindowsApi {
   fn do_unhide_window(&self, handle: WindowHandle);
   fn do_close_window(&self, handle: WindowHandle);
   fn get_window_placement(&self, handle: WindowHandle) -> Option<WindowPlacement>;
+  /// Returns application-reported minimum tracking width and height.
+  fn get_minimum_window_dimensions(&self, handle: WindowHandle) -> Option<(i32, i32)>;
   fn set_window_placement_and_force_repaint(&self, handle: WindowHandle, placement: WindowPlacement);
   fn do_restore_window_placement(&self, handle: WindowHandle, previous_placement: WindowPlacement);
   fn get_cursor_position(&self) -> Point;

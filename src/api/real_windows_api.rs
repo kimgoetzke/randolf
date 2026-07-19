@@ -15,10 +15,10 @@ use windows::Win32::UI::Shell::{IVirtualDesktopManager, IsUserAnAdmin};
 use windows::Win32::UI::WindowsAndMessaging::{
   BeginDeferWindowPos, DeferWindowPos, DispatchMessageA, EndDeferWindowPos, EnumWindows, GetClassNameW, GetCursorPos,
   GetDesktopWindow, GetForegroundWindow, GetWindowInfo, GetWindowPlacement, GetWindowRect, GetWindowTextW,
-  GetWindowThreadProcessId, HWND_TOP, IsIconic, IsWindowVisible, MSG, PM_REMOVE, PeekMessageA, PostMessageW, SW_HIDE,
-  SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOZORDER, SWP_SHOWWINDOW, SendMessageW,
-  SetCursorPos, SetForegroundWindow, SetWindowPlacement, SetWindowPos, ShowWindow, TranslateMessage, WINDOWINFO,
-  WINDOWPLACEMENT, WM_CLOSE, WM_PAINT,
+  GetWindowThreadProcessId, HWND_TOP, IsIconic, IsWindowVisible, MINMAXINFO, MSG, PM_REMOVE, PeekMessageA, PostMessageW,
+  SW_HIDE, SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOZORDER, SWP_SHOWWINDOW,
+  SendMessageW, SetCursorPos, SetForegroundWindow, SetWindowPlacement, SetWindowPos, ShowWindow, TranslateMessage,
+  WINDOWINFO, WINDOWPLACEMENT, WM_CLOSE, WM_GETMINMAXINFO, WM_PAINT,
 };
 use windows::core::BOOL;
 use windows::core::HRESULT;
@@ -461,6 +461,25 @@ impl WindowsApi for RealWindowsApi {
     }
 
     Some(WindowPlacement::from(placement))
+  }
+
+  fn get_minimum_window_dimensions(&self, handle: WindowHandle) -> Option<(i32, i32)> {
+    let mut info = MINMAXINFO::default();
+    unsafe {
+      SendMessageW(
+        handle.as_hwnd(),
+        WM_GETMINMAXINFO,
+        None,
+        Some(LPARAM(&mut info as *mut MINMAXINFO as isize)),
+      );
+    }
+    let width = info.ptMinTrackSize.x.max(0);
+    let height = info.ptMinTrackSize.y.max(0);
+    if width == 0 && height == 0 {
+      None
+    } else {
+      Some((width, height))
+    }
   }
 
   fn set_window_placement_and_force_repaint(&self, handle: WindowHandle, placement: WindowPlacement) {

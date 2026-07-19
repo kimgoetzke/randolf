@@ -118,11 +118,13 @@ impl Placement {
   /// Applies a size and corrects hidden Windows borders when margins are disabled.
   pub(crate) fn resize<T: WindowsApi>(&self, api: &T, handle: WindowHandle, sizing: Sizing, margin: i32) {
     api.set_window_placement_and_force_repaint(handle, WindowPlacement::new_from_sizing(sizing.clone()));
+    self.correct_hidden_borders(api, handle, &sizing, margin);
+  }
 
-    // If margins are disabled, attempt a Desktop Window Manager-aware correction
+  fn correct_hidden_borders<T: WindowsApi>(&self, api: &T, handle: WindowHandle, sizing: &Sizing, margin: i32) {
     if margin == 0
       && let Some(rect) = api.get_extended_frame_bounds(handle).or_else(|| api.get_window_rect(handle))
-      && let Some(compensating_rect) = calculate_compensating_rect_if_required(&rect, &sizing)
+      && let Some(compensating_rect) = calculate_compensating_rect_if_required(&rect, sizing)
     {
       api.set_window_position(handle, compensating_rect);
     }

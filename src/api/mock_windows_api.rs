@@ -23,6 +23,7 @@ pub(crate) mod test {
     position_batches: Vec<Vec<(WindowHandle, Rect)>>,
     deferred_positioning_failures: HashSet<WindowHandle>,
     deferred_positioning_attempts: HashMap<WindowHandle, usize>,
+    window_position_minimum_dimensions: HashMap<WindowHandle, (i32, i32)>,
   }
 
   struct WindowState {
@@ -155,6 +156,16 @@ pub(crate) mod test {
       trace!("Mock windows API sets cursor position to {position}");
       MOCK_STATE.with(|state| {
         state.borrow_mut().cursor_position = position;
+      });
+    }
+
+    /// Configures the minimum dimensions enforced during window positioning.
+    pub fn set_window_position_minimum_dimensions(handle: WindowHandle, width: i32, height: i32) {
+      MOCK_STATE.with(|state| {
+        state
+          .borrow_mut()
+          .window_position_minimum_dimensions
+          .insert(handle, (width, height));
       });
     }
 
@@ -314,10 +325,15 @@ pub(crate) mod test {
       })
     }
 
-    fn set_window_position(&self, handle: WindowHandle, rect: Rect) {
+    fn set_window_position(&self, handle: WindowHandle, mut rect: Rect) {
       trace!("Mock windows API sets window position for {handle} to {rect}");
       MOCK_STATE.with(|state| {
-        if let Some(window_state) = state.borrow_mut().windows.get_mut(&handle) {
+        let mut state = state.borrow_mut();
+        if let Some((minimum_width, minimum_height)) = state.window_position_minimum_dimensions.get(&handle).copied() {
+          rect.right = rect.left + rect.width().max(minimum_width);
+          rect.bottom = rect.top + rect.height().max(minimum_height);
+        }
+        if let Some(window_state) = state.windows.get_mut(&handle) {
           window_state.window_placement = WindowPlacement::new_from_rect(rect);
           window_state.window.rect = rect;
         }
@@ -473,10 +489,21 @@ pub(crate) mod test {
       MOCK_STATE.with(|state| state.borrow().windows.get(&handle).map(|w| w.window_placement.clone()))
     }
 
-    fn set_window_placement_and_force_repaint(&self, handle: WindowHandle, placement: WindowPlacement) {
+    fn get_minimum_window_dimensions(&self, handle: WindowHandle) -> Option<(i32, i32)> {
+      trace!("Mock windows API gets minimum window dimensions for {handle}");
+      MOCK_STATE.with(|state| state.borrow().window_position_minimum_dimensions.get(&handle).copied())
+    }
+
+    fn set_window_placement_and_force_repaint(&self, handle: WindowHandle, mut placement: WindowPlacement) {
       trace!("Mock windows API sets window placement for {handle} - {placement:?}");
       MOCK_STATE.with(|state| {
-        let Some(window_state) = state.borrow_mut().windows.get_mut(&handle).map(|window_state| {
+        let mut state = state.borrow_mut();
+        if let Some((minimum_width, minimum_height)) = state.window_position_minimum_dimensions.get(&handle).copied() {
+          let rect = &mut placement.normal_position;
+          rect.right = rect.left + rect.width().max(minimum_width);
+          rect.bottom = rect.top + rect.height().max(minimum_height);
+        }
+        let Some(window_state) = state.windows.get_mut(&handle).map(|window_state| {
           window_state.window.rect = placement.normal_position;
           window_state.window.center = Point::from_center_of_rect(&placement.normal_position);
           window_state.window_placement = placement;
