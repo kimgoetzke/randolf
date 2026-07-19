@@ -153,7 +153,7 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
           .scrolling
           .reorder(&self.windows_api, &self.workspace_manager, direction, margin);
       } else {
-        self.move_scrolling_window_to_spatial_monitor(direction);
+        self.move_scrolling_window_to_monitor(direction);
       }
       return;
     }
@@ -162,16 +162,16 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
       .move_window(&self.windows_api, &self.placement, direction, self.margin());
   }
 
-  /// Moves the active window from a scrolling layout monitor to one that has a spatial layout. This method:
+  /// Transfers the active scrolling window vertically to an adjacent monitor. This method:
   /// - Gets the foreground window and its scrolling layout workspace
-  /// - Finds the adjacent monitor in the requested direction
-  /// - Confirms that monitor’s active workspace uses spatial layout
-  /// - Removes the window from its strip
+  /// - Finds the adjacent monitor, its active workspace, and its layout
+  /// - Removes the window from its source strip while retaining its [`WidthPreset`]
   /// - Updates the remaining source strip without changing focus
-  /// - Moves and near-maximises the window on the target monitor
-  /// - Centres the cursor and keeps the moved window foreground
+  /// - If target monitor has spatial layout: Near-maximises the window
+  /// - If target monitor has scrolling layout: Appends the window with its [`WidthPreset`] and updates the strip
+  /// - Centres the cursor and keeps the moved window foreground on either target
   /// - No-ops when any required window, workspace, monitor, or layout is unavailable
-  fn move_scrolling_window_to_spatial_monitor(&mut self, direction: Direction) {
+  fn move_scrolling_window_to_monitor(&mut self, direction: Direction) {
     let Some(handle) = self.windows_api.get_foreground_window() else {
       return;
     };
@@ -193,21 +193,41 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     else {
       return;
     };
-    if self.get_layout_for_workspace(target_workspace_id) != Some(Layout::Spatial) {
+    let Some(target_layout) = self.get_layout_for_workspace(target_workspace_id) else {
       return;
-    }
-    if self.scrolling.remove(source_workspace_id, handle).is_none() {
+    };
+    let Some(transferred_preset) = self.scrolling.remove(source_workspace_id, handle) else {
       return;
-    }
+    };
 
     let margin = self.margin();
     self
       .scrolling
       .reflow(&self.windows_api, &self.workspace_manager, source_workspace_id, margin);
-    self
-      .spatial
-      .move_window_to_monitor(&self.windows_api, &self.placement, handle, &target_monitor, margin);
-    self.windows_api.set_foreground_window(handle);
+    match target_layout {
+      Layout::Spatial => {
+        self
+          .spatial
+          .move_window_to_monitor(&self.windows_api, &self.placement, handle, &target_monitor, margin);
+        self.windows_api.set_foreground_window(handle);
+      }
+      Layout::Scrolling => {
+        self.scrolling.insert(
+          &self.windows_api,
+          &self.workspace_manager,
+          target_workspace_id,
+          handle,
+          Some(transferred_preset),
+          margin,
+        );
+        self
+          .scrolling
+          .reflow(&self.windows_api, &self.workspace_manager, target_workspace_id, margin);
+        self
+          .scrolling
+          .focus(&self.windows_api, &self.workspace_manager, target_workspace_id, margin);
+      }
+    }
   }
 
   /// Resizes a window on a monitor using the spatial layout. Scrolling windows remain unchanged.

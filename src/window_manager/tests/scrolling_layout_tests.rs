@@ -315,7 +315,7 @@ fn scrolling_focus_animates_batched_intermediate_positions() {
 }
 
 #[test]
-fn scrolling_layout_disables_vertical_move_and_resize() {
+fn scrolling_layout_vertical_move_no_ops_without_adjacent_monitor_and_disables_spatial_resize() {
   let (mut manager, _directory) = scrolling_manager();
   manager.reconcile_layouts();
   let initial = manager.windows_api.get_window_placement(1.into()).unwrap();

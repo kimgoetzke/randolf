@@ -10,10 +10,19 @@ use crate::workspace_manager::WorkspaceManager;
 use std::sync::{Arc, Mutex};
 
 fn vertical_mixed_layout_manager(direction: Direction, target_layout: Layout) -> (WindowManager<MockWindowsApi>, Monitor) {
+  vertical_mixed_layout_manager_with_widths(direction, target_layout, 1_000, 1_000)
+}
+
+fn vertical_mixed_layout_manager_with_widths(
+  direction: Direction,
+  target_layout: Layout,
+  source_width: i32,
+  target_width: i32,
+) -> (WindowManager<MockWindowsApi>, Monitor) {
   MockWindowsApi::reset();
   let (source_area, target_area) = match direction {
-    Direction::Up => (Rect::new(0, 1_000, 1_000, 2_000), Rect::new(0, 0, 1_000, 1_000)),
-    Direction::Down => (Rect::new(0, 0, 1_000, 1_000), Rect::new(0, 1_000, 1_000, 2_000)),
+    Direction::Up => (Rect::new(0, 1_000, source_width, 2_000), Rect::new(0, 0, target_width, 1_000)),
+    Direction::Down => (Rect::new(0, 0, source_width, 1_000), Rect::new(0, 1_000, target_width, 2_000)),
     Direction::Left | Direction::Right => panic!("vertical fixture requires Up or Down"),
   };
   let mut source_monitor = Monitor::new_test(1, source_area);
@@ -194,16 +203,163 @@ fn move_window_with_scrolling_source_reflows_without_stealing_focus_after_spatia
 }
 
 #[test]
-fn move_window_when_scrolling_vertically_move_does_not_enter_another_scrolling_monitor() {
-  let (mut manager, _target_monitor) = vertical_mixed_layout_manager(Direction::Down, Layout::Scrolling);
+fn move_window_with_scrolling_window_can_move_down_to_scrolling_monitor() {
+  let (mut manager, target_monitor) = vertical_mixed_layout_manager(Direction::Down, Layout::Scrolling);
   let handle = WindowHandle::new(1);
   let source_workspace = manager.scrolling.get_workspace_containing(handle).unwrap();
-  let before = manager.windows_api.get_window_placement(handle).unwrap();
+  let source_width = manager
+    .windows_api
+    .get_window_placement(handle)
+    .unwrap()
+    .normal_position
+    .width();
 
   manager.move_window(Direction::Down);
 
-  assert_eq!(manager.windows_api.get_window_placement(handle).unwrap(), before);
-  assert_eq!(manager.scrolling.get_workspace_containing(handle), Some(source_workspace));
+  let target_workspace = manager.scrolling.get_workspace_containing(handle).unwrap();
+  let target_placement = manager.windows_api.get_window_placement(handle).unwrap();
+  assert_ne!(target_workspace, source_workspace);
+  assert_eq!(manager.scrolling.get_members(target_workspace), vec![handle]);
+  assert_eq!(target_placement.normal_position.width(), source_width);
+  assert_eq!(target_placement.normal_position.top, target_monitor.work_area.top + 20);
+  assert_eq!(target_placement.normal_position.bottom, target_monitor.work_area.bottom - 20);
+  assert_eq!(manager.windows_api.get_foreground_window(), Some(handle));
+  assert_eq!(manager.windows_api.get_cursor_position(), target_monitor.center);
+}
+
+#[test]
+fn move_window_between_scrolling_monitors_retains_width_preset() {
+  let (mut manager, target_monitor) =
+    vertical_mixed_layout_manager_with_widths(Direction::Down, Layout::Scrolling, 1_000, 2_000);
+  let handle = WindowHandle::new(1);
+  assert_eq!(
+    manager
+      .windows_api
+      .get_window_placement(handle)
+      .unwrap()
+      .normal_position
+      .width(),
+    320
+  );
+
+  manager.move_window(Direction::Down);
+
+  let target_width = target_monitor.work_area.width() - 40;
+  assert_eq!(
+    manager
+      .windows_api
+      .get_window_placement(handle)
+      .unwrap()
+      .normal_position
+      .width(),
+    target_width / 3
+  );
+}
+
+#[test]
+fn move_window_between_scrolling_monitors_reflows_source_without_stealing_focus() {
+  let (mut manager, target_monitor) = vertical_mixed_layout_manager(Direction::Down, Layout::Scrolling);
+  let moved_handle = WindowHandle::new(1);
+  let source_workspace = manager.scrolling.get_workspace_containing(moved_handle).unwrap();
+  let source_monitor = manager.workspace_manager.monitor_for_workspace(source_workspace).unwrap();
+  let remaining_handle = WindowHandle::new(2);
+  MockWindowsApi::add_or_update_window(
+    remaining_handle,
+    "Remaining".to_string(),
+    Sizing::new(600, 100, 300, 700),
+    false,
+    false,
+    false,
+  );
+  MockWindowsApi::place_window(remaining_handle, source_monitor.handle);
+  manager.reconcile_layouts();
+  MockWindowsApi::set_foreground_window(moved_handle);
+  MockWindowsApi::set_cursor_position(source_monitor.center);
+
+  manager.move_window(Direction::Down);
+
+  let remaining_placement = manager.windows_api.get_window_placement(remaining_handle).unwrap();
+  assert_eq!(
+    Point::from_center_of_rect(&remaining_placement.normal_position),
+    source_monitor.center
+  );
+  assert_eq!(
+    manager.scrolling.get_workspace_containing(remaining_handle),
+    Some(source_workspace)
+  );
+  assert_eq!(manager.windows_api.get_foreground_window(), Some(moved_handle));
+  assert_eq!(manager.windows_api.get_cursor_position(), target_monitor.center);
+}
+
+#[test]
+fn move_window_to_scrolling_monitor_appends_to_target_strip() {
+  let (mut manager, target_monitor) = vertical_mixed_layout_manager(Direction::Down, Layout::Scrolling);
+  let moved_handle = WindowHandle::new(1);
+  for (handle, left) in [(WindowHandle::new(2), 100), (WindowHandle::new(3), 600)] {
+    MockWindowsApi::add_or_update_window(
+      handle,
+      format!("Target {}", handle.hwnd),
+      Sizing::new(left, target_monitor.work_area.top + 100, 300, 700),
+      false,
+      false,
+      false,
+    );
+    MockWindowsApi::place_window(handle, target_monitor.handle);
+  }
+  manager.reconcile_layouts();
+  MockWindowsApi::set_foreground_window(moved_handle);
+
+  manager.move_window(Direction::Down);
+
+  let target_workspace = manager.scrolling.get_workspace_containing(moved_handle).unwrap();
+  assert_eq!(
+    manager.scrolling.get_members(target_workspace),
+    vec![2.into(), 3.into(), moved_handle]
+  );
+}
+
+#[test]
+fn move_window_between_scrolling_monitors_does_not_restore_former_strip_position() {
+  let (mut manager, _target_monitor) = vertical_mixed_layout_manager(Direction::Down, Layout::Scrolling);
+  let stationary_handle = WindowHandle::new(1);
+  let source_workspace = manager.scrolling.get_workspace_containing(stationary_handle).unwrap();
+  let source_monitor = manager.workspace_manager.monitor_for_workspace(source_workspace).unwrap();
+  let moved_handle = WindowHandle::new(2);
+  MockWindowsApi::add_or_update_window(
+    moved_handle,
+    "Moved".to_string(),
+    Sizing::new(100, 100, 300, 700),
+    false,
+    false,
+    true,
+  );
+  MockWindowsApi::place_window(moved_handle, source_monitor.handle);
+  manager.reconcile_layouts();
+  assert_eq!(
+    manager.scrolling.get_members(source_workspace),
+    vec![moved_handle, stationary_handle]
+  );
+
+  manager.move_window(Direction::Down);
+  manager.move_window(Direction::Up);
+
+  assert_eq!(
+    manager.scrolling.get_members(source_workspace),
+    vec![stationary_handle, moved_handle] // Window is appended instead of restored
+  );
+}
+
+#[test]
+fn move_window_with_scrolling_window_can_move_up_to_scrolling_monitor() {
+  let (mut manager, target_monitor) = vertical_mixed_layout_manager(Direction::Up, Layout::Scrolling);
+  let handle = WindowHandle::new(1);
+
+  manager.move_window(Direction::Up);
+
+  let target_workspace = manager.scrolling.get_workspace_containing(handle).unwrap();
+  assert_eq!(target_workspace.monitor_id, target_monitor.id);
+  assert_eq!(manager.windows_api.get_foreground_window(), Some(handle));
+  assert_eq!(manager.windows_api.get_cursor_position(), target_monitor.center);
 }
 
 #[test]
@@ -512,16 +668,16 @@ fn move_window_to_workspace_when_moving_from_spatial_to_scrolling_inserts_strip_
     .lock()
     .unwrap()
     .set_monitor_layout("DISPLAY1", Layout::Scrolling);
-  let secondary = WindowHandle::new(2);
+  let secondary_handle = WindowHandle::new(2);
   MockWindowsApi::add_or_update_window(
-    secondary,
+    secondary_handle,
     "Secondary".to_string(),
     Sizing::new(-700, 50, 400, 300),
     false,
     false,
     true,
   );
-  MockWindowsApi::place_window(secondary, 2.into());
+  MockWindowsApi::place_window(secondary_handle, 2.into());
   let primary_workspace = *crate::workspace_manager::tests::primary_active_ws_id();
   let mut manager = WindowManager {
     configuration_provider,
@@ -538,7 +694,7 @@ fn move_window_to_workspace_when_moving_from_spatial_to_scrolling_inserts_strip_
   manager.move_window_to_workspace(primary_workspace.into());
 
   assert_eq!(
-    manager.scrolling.get_workspace_containing(secondary),
+    manager.scrolling.get_workspace_containing(secondary_handle),
     Some(primary_workspace.into())
   );
 }
