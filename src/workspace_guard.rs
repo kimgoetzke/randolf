@@ -1,5 +1,7 @@
 use crate::api::WindowsApi;
-use crate::common::{MonitorHandle, PersistentWorkspaceId, TransientWorkspaceId, Window, Workspace, WorkspaceAction};
+use crate::common::{
+  MonitorHandle, PersistentWorkspaceId, TransientWorkspaceId, Window, WindowHandle, Workspace, WorkspaceAction,
+};
 use crate::workspace_manager::WorkspaceManager;
 use std::collections::HashMap;
 
@@ -99,7 +101,12 @@ impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
     result
   }
 
-  pub fn switch_workspace(&mut self, target_workspace_id: PersistentWorkspaceId) {
+  /// Switches workspace while capturing supplied off-screen members.
+  pub fn switch_workspace_with_additional_windows(
+    &mut self,
+    target_workspace_id: PersistentWorkspaceId,
+    additional_windows: &[WindowHandle],
+  ) {
     if self.resolve_to_transient(target_workspace_id).is_none() {
       return;
     }
@@ -131,10 +138,18 @@ impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
       let current_windows = if let Some(target_monitor_active_workspace) =
         self.manager.workspaces.get_mut(&target_monitor_active_workspace_id)
       {
-        let current_windows = self
+        let mut current_windows = self
           .manager
           .windows_api
           .get_all_visible_windows_within_area(target_monitor_active_workspace.monitor.monitor_area);
+        let additional = self
+          .manager
+          .windows_api
+          .get_all_windows()
+          .into_iter()
+          .filter(|window| additional_windows.contains(&window.handle) && !current_windows.contains(window))
+          .collect::<Vec<_>>();
+        current_windows.extend(additional);
         let current_monitor = MonitorHandle::from(target_monitor_active_workspace.monitor_handle);
         target_monitor_active_workspace.store_and_hide_windows(
           current_windows.clone(),
@@ -278,7 +293,7 @@ impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
     for (workspace_id, workspace) in self.manager.workspaces.iter_mut() {
       if workspace_id.monitor_id != target_workspace_id.monitor_id && workspace_id.workspace != target_workspace_id.workspace
       {
-        workspace.remove_windows_if_present(&[window.clone()]);
+        workspace.remove_windows_if_present(std::slice::from_ref(&window));
       }
     }
 
@@ -392,7 +407,7 @@ impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
   }
 
   fn find_largest_visible_window_in_workspace(&mut self, target_workspace_id: &PersistentWorkspaceId) -> Option<Window> {
-    let largest_window = if let Some(new_workspace) = self.manager.workspaces.get(&target_workspace_id) {
+    if let Some(new_workspace) = self.manager.workspaces.get(target_workspace_id) {
       let visible_windows = self
         .manager
         .windows_api
@@ -408,8 +423,7 @@ impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
       windows.iter().max_by_key(|w| w.rect.area()).cloned().to_owned()
     } else {
       None
-    };
-    largest_window
+    }
   }
 
   fn log_initialised_workspaces(&mut self) {

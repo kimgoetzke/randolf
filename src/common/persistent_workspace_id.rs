@@ -79,7 +79,7 @@ impl<'de> Deserialize<'de> for PersistentWorkspaceId {
 
     let monitor_id = parts[0]
       .encode_utf16()
-      .chain(std::iter::repeat(0).take(32 - parts[0].len()))
+      .chain(std::iter::repeat_n(0, 32 - parts[0].len()))
       .collect::<Vec<u16>>()
       .try_into()
       .map_err(|_| serde::de::Error::custom("Invalid monitor_id length"))?;
@@ -107,7 +107,7 @@ mod tests {
           .as_bytes()
           .iter()
           .map(|&b| b as u16)
-          .chain(std::iter::repeat(0).take(32 - "P_DISPLAY".len()))
+          .chain(std::iter::repeat_n(0, 32 - "P_DISPLAY".len()))
           .collect::<Vec<u16>>()
           .try_into()
           .unwrap(),

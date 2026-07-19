@@ -79,7 +79,7 @@ mod tests {
           .as_bytes()
           .iter()
           .map(|&b| b as u16)
-          .chain(std::iter::repeat(0).take(32 - name.len()))
+          .chain(std::iter::repeat_n(0, 32 - name.len()))
           .collect::<Vec<u16>>()
           .try_into()
           .unwrap(),
@@ -98,7 +98,7 @@ mod tests {
           .as_bytes()
           .iter()
           .map(|&b| b as u16)
-          .chain(std::iter::repeat(0).take(32 - "DISPLAY1".len()))
+          .chain(std::iter::repeat_n(0, 32 - "DISPLAY1".len()))
           .collect::<Vec<u16>>()
           .try_into()
           .unwrap(),
@@ -117,7 +117,7 @@ mod tests {
           .as_bytes()
           .iter()
           .map(|&b| b as u16)
-          .chain(std::iter::repeat(0).take(32 - "DISPLAY2".len()))
+          .chain(std::iter::repeat_n(0, 32 - "DISPLAY2".len()))
           .collect::<Vec<u16>>()
           .try_into()
           .unwrap(),
@@ -147,7 +147,7 @@ mod tests {
         .as_bytes()
         .iter()
         .map(|&b| b as u16)
-        .chain(std::iter::repeat(0).take(32 - "\\\\.\\DISPLAY10".len()))
+        .chain(std::iter::repeat_n(0, 32 - "\\\\.\\DISPLAY10".len()))
         .collect::<Vec<u16>>()
         .try_into()
         .unwrap(),

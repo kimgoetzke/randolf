@@ -527,8 +527,23 @@ impl WindowsApiForDragging {
 
   fn finish_resizing() {
     if let Ok(mut resize_state) = get_resize_state().lock() {
-      resize_state.reset();
+      let sender = SENDER
+        .get()
+        .expect("Command sender not initialised")
+        .lock()
+        .expect("Failed to acquire command sender lock");
+      Self::send_resize_completed(&mut resize_state, &sender);
       IS_RESIZING.store(false, Ordering::Relaxed);
+    }
+  }
+
+  fn send_resize_completed(resize_state: &mut ResizeState, sender: &Sender<Command>) {
+    let resized_window = resize_state.get_window_handle().copied();
+    resize_state.reset();
+    if let Some(window) = resized_window {
+      sender
+        .send(Command::MouseResizeCompleted(window))
+        .expect("Failed to send mouse resize completion command");
     }
   }
 
@@ -582,12 +597,12 @@ impl WindowsApiForDragging {
   fn is_not_a_managed_window(handle: &HWND) -> bool {
     let mut result = false;
     let class_name = Self::get_window_class_name(handle);
-    if IGNORED_CLASS_NAMES.contains(&&**&class_name) {
+    if IGNORED_CLASS_NAMES.contains(&class_name.as_str()) {
       result = true;
     }
 
     let title = Self::get_window_title(handle);
-    if IGNORED_WINDOW_TITLES.contains(&&*title) {
+    if IGNORED_WINDOW_TITLES.contains(&title.as_str()) {
       result = true;
     }
 
@@ -634,4 +649,31 @@ fn get_drag_state() -> &'static Arc<Mutex<DragState>> {
 
 fn get_resize_state() -> &'static Arc<Mutex<ResizeState>> {
   RESIZE_STATE.get_or_init(|| Arc::new(Mutex::new(ResizeState::default())))
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crossbeam_channel::unbounded;
+
+  #[test]
+  fn completing_resize_resets_state_and_emits_resized_handle_once() {
+    let (sender, receiver) = unbounded();
+    let mut state = ResizeState::default();
+    state.set(
+      Point::new(10, 20),
+      WindowHandle::new(42),
+      Rect::new(0, 0, 100, 100),
+      ResizeMode::BottomRight,
+    );
+
+    WindowsApiForDragging::send_resize_completed(&mut state, &sender);
+
+    assert!(state.get_window_handle().is_none());
+    match receiver.try_recv() {
+      Ok(Command::MouseResizeCompleted(window)) => assert_eq!(window, WindowHandle::new(42)),
+      command => panic!("Expected mouse resize completion command, got {command:?}"),
+    }
+    assert!(receiver.try_recv().is_err());
+  }
 }

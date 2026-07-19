@@ -1,4 +1,4 @@
-use crate::common::{Direction, PersistentWorkspaceId};
+use crate::common::{Direction, PersistentWorkspaceId, WindowHandle};
 use std::fmt::Display;
 
 /// Represents commands that can be executed in the main loop of this application. Basically, these are the actions
@@ -9,7 +9,9 @@ pub enum Command {
   NearMaximiseWindow,
   MinimiseWindow,
   MoveWindow(Direction),
-  ResizeWindow(Direction),
+  ResizeSpatialWindow(Direction),
+  ResizeScrollingWindow(Direction),
+  MouseResizeCompleted(WindowHandle),
   MoveCursor(Direction),
   SwitchWorkspace(PersistentWorkspaceId),
   MoveWindowToWorkspace(PersistentWorkspaceId),
@@ -29,7 +31,9 @@ impl Display for Command {
       Command::NearMaximiseWindow => write!(f, "Near maximise window"),
       Command::MinimiseWindow => write!(f, "Minimise window"),
       Command::MoveWindow(direction) => write!(f, "Move window [{:?}]", direction),
-      Command::ResizeWindow(direction) => write!(f, "Resize window [{:?}]", direction),
+      Command::ResizeSpatialWindow(direction) => write!(f, "Resize spatial window [{:?}]", direction),
+      Command::ResizeScrollingWindow(direction) => write!(f, "Resize scrolling window [{:?}]", direction),
+      Command::MouseResizeCompleted(window) => write!(f, "Mouse resize completed [{window}]"),
       Command::MoveCursor(direction) => write!(f, "Move cursor [{:?}]", direction),
       Command::SwitchWorkspace(id) => write!(f, "Switch to workspace [{id}]"),
       Command::MoveWindowToWorkspace(id) => write!(f, "Move window to workspace [{id}]"),
