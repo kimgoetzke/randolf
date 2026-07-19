@@ -62,18 +62,69 @@ mod tests {
   use super::*;
 
   #[test]
-  fn nearest_selects_nearest_monitor_relative_width_preset() {
-    assert_eq!(WidthPreset::nearest(245, 980), WidthPreset::Quarter);
-    assert_eq!(WidthPreset::nearest(500, 980), WidthPreset::Half);
-    assert_eq!(WidthPreset::nearest(970, 980), WidthPreset::NearMaximised);
+  fn nearest_selects_each_monitor_relative_width_preset() {
+    let usable_width = 1_200;
+    let cases = [
+      (300, WidthPreset::Quarter),
+      (400, WidthPreset::Third),
+      (600, WidthPreset::Half),
+      (800, WidthPreset::TwoThirds),
+      (900, WidthPreset::ThreeQuarters),
+      (1_200, WidthPreset::NearMaximised),
+    ];
+
+    for (observed_width, expected) in cases {
+      assert_eq!(WidthPreset::nearest(observed_width, usable_width), expected);
+    }
   }
 
   #[test]
-  fn narrower_traverses_width_presets_without_wrapping() {
-    assert_eq!(WidthPreset::Quarter.narrower(), WidthPreset::Quarter);
-    assert_eq!(WidthPreset::Half.narrower(), WidthPreset::Third);
-    assert_eq!(WidthPreset::Half.wider(), WidthPreset::TwoThirds);
-    assert_eq!(WidthPreset::NearMaximised.wider(), WidthPreset::NearMaximised);
+  fn narrower_traverses_every_width_preset_without_wrapping() {
+    let cases = [
+      (WidthPreset::Quarter, WidthPreset::Quarter),
+      (WidthPreset::Third, WidthPreset::Quarter),
+      (WidthPreset::Half, WidthPreset::Third),
+      (WidthPreset::TwoThirds, WidthPreset::Half),
+      (WidthPreset::ThreeQuarters, WidthPreset::TwoThirds),
+      (WidthPreset::NearMaximised, WidthPreset::ThreeQuarters),
+    ];
+
+    for (preset, expected) in cases {
+      assert_eq!(preset.narrower(), expected);
+    }
+  }
+
+  #[test]
+  fn wider_traverses_every_width_preset_without_wrapping() {
+    let cases = [
+      (WidthPreset::Quarter, WidthPreset::Third),
+      (WidthPreset::Third, WidthPreset::Half),
+      (WidthPreset::Half, WidthPreset::TwoThirds),
+      (WidthPreset::TwoThirds, WidthPreset::ThreeQuarters),
+      (WidthPreset::ThreeQuarters, WidthPreset::NearMaximised),
+      (WidthPreset::NearMaximised, WidthPreset::NearMaximised),
+    ];
+
+    for (preset, expected) in cases {
+      assert_eq!(preset.wider(), expected);
+    }
+  }
+
+  #[test]
+  fn width_calculates_every_preset() {
+    let usable_width = 1_200;
+    let cases = [
+      (WidthPreset::Quarter, 300),
+      (WidthPreset::Third, 400),
+      (WidthPreset::Half, 600),
+      (WidthPreset::TwoThirds, 800),
+      (WidthPreset::ThreeQuarters, 900),
+      (WidthPreset::NearMaximised, 1_200),
+    ];
+
+    for (preset, expected) in cases {
+      assert_eq!(preset.width(usable_width), expected);
+    }
   }
 
   #[test]

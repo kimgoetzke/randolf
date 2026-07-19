@@ -420,7 +420,7 @@ impl ScrollingLayout {
     let preset = WidthPreset::nearest(rect.width(), usable_width(monitor.work_area, margin));
     self.strips.set_width_preset(workspace, handle, preset);
     self.strips.set_active(workspace, handle);
-    // Low-level dragging bypasses the target cache, even when the preset itself is unchanged.
+    // Low-level dragging bypasses the target cache, even when the preset itself is unchanged
     self.positions.remove(&workspace);
     self.reflow(api, workspace_manager, workspace, margin);
     self.focus(api, workspace_manager, workspace, margin);
