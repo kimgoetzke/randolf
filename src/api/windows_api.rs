@@ -18,8 +18,9 @@ pub trait WindowsApi {
   fn is_not_a_managed_window(&self, handle: &WindowHandle) -> bool;
   fn is_window_hidden(&self, handle: &WindowHandle) -> bool;
   fn set_window_position(&self, handle: WindowHandle, rect: Rect);
-  /// Moves windows atomically and orders them below the focused window.
-  fn set_window_positions(&self, positions: &[(WindowHandle, Rect)], focused: WindowHandle);
+  /// Moves windows atomically and orders them below the active/foreground window. Returns window handles of windows
+  /// that could not be positioned (i.e. failures).
+  fn set_window_positions(&self, positions: &[(WindowHandle, Rect)], active_handle: WindowHandle) -> Vec<WindowHandle>;
   /// Sets the window position on the same monitor as the given rectangle. WARNING: Does not adjust for DPI scaling.
   #[allow(dead_code)]
   fn set_window_position_with_dpi_adjustment(

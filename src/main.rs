@@ -138,7 +138,9 @@ fn run_loop(
         Command::NearMaximiseWindow => wm.borrow_mut().near_maximise_or_restore(),
         Command::MinimiseWindow => wm.borrow_mut().minimise_window(),
         Command::MoveWindow(direction) => wm.borrow_mut().move_window(direction),
-        Command::ResizeWindow(direction) => wm.borrow_mut().resize_window(direction),
+        Command::ResizeSpatialWindow(direction) => wm.borrow_mut().resize_spatial_window(direction),
+        Command::ResizeScrollingWindow(direction) => wm.borrow_mut().resize_scrolling_window(direction),
+        Command::MouseResizeCompleted(window) => wm.borrow_mut().finish_mouse_resize(window),
         Command::MoveCursor(direction) => wm.borrow_mut().move_cursor(direction),
         Command::CloseWindow => wm.borrow_mut().close_window(),
         Command::SwitchWorkspace(id) => {

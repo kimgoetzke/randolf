@@ -84,7 +84,7 @@ fn off_screen_member_keeps_its_stored_workspace_when_windows_reports_another_mon
 
   assert_eq!(
     manager.windows_api.get_window_placement(second).unwrap().normal_position.left,
-    1940
+    1215
   );
 }
 
@@ -112,6 +112,31 @@ fn scrolling_reconciliation_does_not_reset_mouse_position() {
 }
 
 #[test]
+fn scrolling_layout_skips_unpositionable_members_without_blocking_or_retrying_the_strip() {
+  let (mut manager, _directory) = scrolling_manager();
+  let blocked = WindowHandle::new(2);
+  MockWindowsApi::add_or_update_window(
+    blocked,
+    "Elevated".to_string(),
+    Sizing::new(500, 50, 100, 100),
+    false,
+    false,
+    false,
+  );
+  MockWindowsApi::place_window(blocked, 1.into());
+  MockWindowsApi::fail_deferred_positioning(blocked);
+
+  manager.reconcile_layouts();
+  manager.reconcile_layouts();
+
+  assert_eq!(MockWindowsApi::deferred_positioning_attempts(blocked), 1);
+  assert_eq!(
+    manager.windows_api.get_window_placement(1.into()).unwrap(),
+    WindowPlacement::new_from_sizing(Sizing::new(725, 20, 470, 990))
+  );
+}
+
+#[test]
 fn scrolling_layout_adopts_and_places_existing_windows() {
   let (mut manager, _directory) = scrolling_manager();
   let second = WindowHandle::new(2);
@@ -129,11 +154,11 @@ fn scrolling_layout_adopts_and_places_existing_windows() {
 
   assert_eq!(
     manager.windows_api.get_window_placement(1.into()).unwrap(),
-    WindowPlacement::new_from_sizing(Sizing::new(20, 20, 1880, 990))
+    WindowPlacement::new_from_sizing(Sizing::new(725, 20, 470, 990))
   );
   assert_eq!(
     manager.windows_api.get_window_placement(second).unwrap(),
-    WindowPlacement::new_from_sizing(Sizing::new(1940, 20, 1880, 990))
+    WindowPlacement::new_from_sizing(Sizing::new(1215, 20, 470, 990))
   );
 }
 
@@ -172,7 +197,7 @@ fn scrolling_layout_inserts_new_foreground_before_previous_foreground() {
       .unwrap()
       .normal_position
       .left,
-    20
+    725
   );
   assert_eq!(
     manager
@@ -181,11 +206,11 @@ fn scrolling_layout_inserts_new_foreground_before_previous_foreground() {
       .unwrap()
       .normal_position
       .left,
-    1940
+    1215
   );
   assert_eq!(
     manager.windows_api.get_window_placement(second).unwrap().normal_position.left,
-    3860
+    1705
   );
 }
 
@@ -214,7 +239,7 @@ fn scrolling_layout_focuses_new_window_even_before_it_becomes_foreground() {
       .unwrap()
       .normal_position
       .left,
-    20
+    725
   );
 }
 
@@ -237,13 +262,13 @@ fn scrolling_focus_scrolls_strip_and_scrolling_move_reorders_it() {
   assert_eq!(manager.windows_api.get_foreground_window(), Some(second));
   assert_eq!(
     manager.windows_api.get_window_placement(second).unwrap().normal_position.left,
-    20
+    725
   );
 
   manager.move_window(Direction::Left);
   assert_eq!(
     manager.windows_api.get_window_placement(second).unwrap().normal_position.left,
-    20
+    725
   );
   assert_eq!(
     manager
@@ -252,7 +277,7 @@ fn scrolling_focus_scrolls_strip_and_scrolling_move_reorders_it() {
       .unwrap()
       .normal_position
       .left,
-    1940
+    1215
   );
 }
 
@@ -281,11 +306,11 @@ fn scrolling_focus_animates_batched_intermediate_positions() {
     .find(|(handle, _)| *handle == second)
     .map(|(_, rect)| *rect)
     .unwrap();
-  assert!(first_incoming.left < 1940 && first_incoming.left > 20);
+  assert!(first_incoming.left < 1215 && first_incoming.left > 725);
   assert_eq!(batches.last().unwrap()[0].0, second, "Focused window should be topmost");
   assert_eq!(
     manager.windows_api.get_window_placement(second).unwrap().normal_position.left,
-    20
+    725
   );
 }
 
@@ -296,7 +321,7 @@ fn scrolling_layout_disables_vertical_move_and_resize() {
   let initial = manager.windows_api.get_window_placement(1.into()).unwrap();
 
   manager.move_window(Direction::Up);
-  manager.resize_window(Direction::Left);
+  manager.resize_spatial_window(Direction::Left);
 
   assert_eq!(manager.windows_api.get_window_placement(1.into()).unwrap(), initial);
 }
@@ -336,11 +361,11 @@ fn scrolling_workspace_switch_preserves_off_screen_strip_members() {
       .unwrap()
       .normal_position
       .left,
-    20
+    725
   );
   assert_eq!(
     manager.windows_api.get_window_placement(second).unwrap().normal_position.left,
-    1940
+    1215
   );
 }
 
@@ -414,7 +439,7 @@ fn scrolling_move_to_workspace_updates_both_strips() {
       .unwrap()
       .normal_position
       .left,
-    20
+    725
   );
 }
 
@@ -439,7 +464,7 @@ fn scrolling_reconciliation_removes_externally_closed_member() {
   assert_eq!(manager.windows_api.get_foreground_window(), Some(second));
   assert_eq!(
     manager.windows_api.get_window_placement(second).unwrap().normal_position.left,
-    20
+    725
   );
 }
 
@@ -463,6 +488,100 @@ fn scrolling_layout_removes_closed_member_and_focuses_neighbour() {
   assert_eq!(manager.windows_api.get_foreground_window(), Some(second));
   assert_eq!(
     manager.windows_api.get_window_placement(second).unwrap().normal_position.left,
-    20
+    725
+  );
+}
+
+#[test]
+fn scrolling_layout_adopts_nearest_width_preset_and_centres_focus() {
+  let (mut manager, _directory) = scrolling_manager();
+  MockWindowsApi::add_or_update_window(
+    1.into(),
+    "Test Window".to_string(),
+    Sizing::new(50, 50, 1000, 400),
+    false,
+    false,
+    true,
+  );
+
+  manager.reconcile_layouts();
+
+  assert_eq!(
+    manager.windows_api.get_window_placement(1.into()).unwrap(),
+    WindowPlacement::new_from_sizing(Sizing::new(490, 20, 940, 990))
+  );
+  assert_eq!(manager.windows_api.get_cursor_position(), Point::new(50, 50));
+}
+
+#[test]
+fn scrolling_keyboard_resize_traverses_presets_and_stops_at_boundary() {
+  let (mut manager, _directory) = scrolling_manager();
+  manager.reconcile_layouts();
+  MockWindowsApi::clear_position_batches();
+
+  manager.resize_scrolling_window(Direction::Left);
+  assert!(MockWindowsApi::position_batches().is_empty());
+
+  manager.resize_scrolling_window(Direction::Right);
+  assert_eq!(
+    manager.windows_api.get_window_placement(1.into()).unwrap(),
+    WindowPlacement::new_from_sizing(Sizing::new(647, 20, 626, 990))
+  );
+  assert_eq!(manager.windows_api.get_cursor_position(), Point::new(960, 515));
+}
+
+#[test]
+fn completed_mouse_resize_snaps_height_and_reflows_even_when_preset_is_unchanged() {
+  let (mut manager, _directory) = scrolling_manager();
+  manager.reconcile_layouts();
+  manager
+    .windows_api
+    .set_window_position(1.into(), Rect::new(100, 100, 560, 500));
+  MockWindowsApi::clear_position_batches();
+
+  manager.finish_mouse_resize(1.into());
+
+  assert!(!MockWindowsApi::position_batches().is_empty());
+  assert_eq!(
+    manager.windows_api.get_window_placement(1.into()).unwrap(),
+    WindowPlacement::new_from_sizing(Sizing::new(725, 20, 470, 990))
+  );
+}
+
+#[test]
+fn completed_mouse_resize_selects_nearest_new_preset() {
+  let (mut manager, _directory) = scrolling_manager();
+  manager.reconcile_layouts();
+  manager
+    .windows_api
+    .set_window_position(1.into(), Rect::new(100, 100, 1_000, 500));
+
+  manager.finish_mouse_resize(1.into());
+
+  assert_eq!(
+    manager.windows_api.get_window_placement(1.into()).unwrap(),
+    WindowPlacement::new_from_sizing(Sizing::new(490, 20, 940, 990))
+  );
+}
+
+#[test]
+fn scrolling_preset_follows_window_to_different_sized_scrolling_monitor() {
+  let (mut manager, _directory) = scrolling_manager();
+  manager.reconcile_layouts();
+  manager.resize_scrolling_window(Direction::Right);
+  let primary_workspace =
+    crate::common::PersistentWorkspaceId::from(*crate::workspace_manager::tests::primary_active_ws_id());
+  let secondary_workspace = manager
+    .workspace_manager
+    .active_workspace_ids()
+    .into_iter()
+    .find(|workspace| workspace.monitor_id != primary_workspace.monitor_id)
+    .unwrap();
+
+  manager.move_window_to_workspace(secondary_workspace);
+
+  assert_eq!(
+    manager.windows_api.get_window_placement(1.into()).unwrap(),
+    WindowPlacement::new_from_sizing(Sizing::new(-527, 20, 253, 510))
   );
 }

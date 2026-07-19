@@ -243,19 +243,23 @@ impl WindowsApi for RealWindowsApi {
     }
   }
 
-  fn set_window_positions(&self, positions: &[(WindowHandle, Rect)], focused: WindowHandle) {
+  fn set_window_positions(
+    &self,
+    positions: &[(WindowHandle, Rect)],
+    active_window_handle: WindowHandle,
+  ) -> Vec<WindowHandle> {
     if positions.is_empty() {
-      return;
+      return Vec::new();
     }
     let count = i32::try_from(positions.len()).unwrap_or(i32::MAX);
     let Ok(mut batch) = (unsafe { BeginDeferWindowPos(count) }) else {
       warn!("Failed to begin positioning [{count}] windows");
-      return;
+      return Vec::new();
     };
     let ordered = positions
       .iter()
-      .filter(|(handle, _)| *handle == focused)
-      .chain(positions.iter().filter(|(handle, _)| *handle != focused));
+      .filter(|(handle, _)| *handle == active_window_handle)
+      .chain(positions.iter().filter(|(handle, _)| *handle != active_window_handle));
     let mut insert_after = HWND_TOP;
     for (handle, rect) in ordered {
       match unsafe {
@@ -276,13 +280,14 @@ impl WindowsApi for RealWindowsApi {
         }
         Err(err) => {
           warn!("Failed to defer positioning for {handle}: {}", err.message());
-          return;
+          return vec![*handle];
         }
       }
     }
     if let Err(err) = unsafe { EndDeferWindowPos(batch) } {
       warn!("Failed to position windows: {}", err.message());
     }
+    Vec::new()
   }
 
   // TODO: Try fixing the method below which aims to adjust the window position based on the DPI of the source and

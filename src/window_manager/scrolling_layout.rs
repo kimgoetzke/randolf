@@ -1,15 +1,15 @@
 use crate::api::WindowsApi;
-use crate::common::{Direction, PersistentWorkspaceId, Point, Rect, Sizing, WindowHandle};
-use crate::window_manager::scrolling_strips::ScrollingStrips;
+use crate::common::{Direction, PersistentWorkspaceId, Point, Rect, Sizing, Window, WindowHandle};
+use crate::window_manager::scrolling_strips::{ScrollingStrips, WidthPreset};
 use crate::workspace_manager::WorkspaceManager;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
 
 const ANIMATION_FRAMES: u32 = 12;
 
 /// Visible strip members grouped by workspace and ordered spatially from left to right.
-type MembersByWorkspace = HashMap<PersistentWorkspaceId, Vec<WindowHandle>>;
+type MembersByWorkspace = HashMap<PersistentWorkspaceId, Vec<Window>>;
 
 /// A layout that manages windows and allows scrolling. Keeps scrolling strip membership, focus, and positions across
 /// workspaces.
@@ -19,6 +19,7 @@ pub(super) struct ScrollingLayout {
   positions: HashMap<PersistentWorkspaceId, Vec<(WindowHandle, Rect)>>,
   initialised: bool,
   previous_foreground_window: Option<WindowHandle>,
+  unpositionable: HashSet<WindowHandle>,
 }
 
 impl ScrollingLayout {
@@ -29,7 +30,7 @@ impl ScrollingLayout {
 
   /// Lists a workspace's windows in strip order.
   pub(super) fn get_members(&self, workspace: PersistentWorkspaceId) -> Vec<WindowHandle> {
-    self.strips.members(workspace).to_vec()
+    self.strips.members(workspace)
   }
 
   /// Allows spatial navigation to use untracked windows and each strip's focused window.
@@ -40,14 +41,31 @@ impl ScrollingLayout {
       .is_none_or(|workspace| self.strips.focused(workspace) == Some(window))
   }
 
-  /// Removes a window from a workspace's strip.
-  pub(super) fn remove(&mut self, workspace: PersistentWorkspaceId, window: WindowHandle) {
-    self.strips.remove(workspace, window);
+  /// Removes a window from a workspace's strip and returns its preset.
+  pub(super) fn remove(&mut self, workspace: PersistentWorkspaceId, window: WindowHandle) -> Option<WidthPreset> {
+    self.positions.remove(&workspace);
+    self.strips.remove(workspace, window)
   }
 
-  /// Adds a window to a workspace's strip.
-  pub(super) fn insert(&mut self, workspace: PersistentWorkspaceId, window: WindowHandle) {
-    self.strips.insert_before(workspace, window, None);
+  /// Adds a window to a workspace's strip, retaining a transferred preset when supplied.
+  pub(super) fn insert<T: WindowsApi + Clone>(
+    &mut self,
+    api: &T,
+    workspace_manager: &WorkspaceManager<T>,
+    workspace: PersistentWorkspaceId,
+    window: WindowHandle,
+    preset: Option<WidthPreset>,
+    margin: i32,
+  ) {
+    let Some(monitor) = workspace_manager.monitor_for_workspace(workspace) else {
+      return;
+    };
+    let preset = preset.unwrap_or_else(|| {
+      let observed_width = api.get_window_rect(window).map_or(0, |rect| rect.width());
+      WidthPreset::nearest(observed_width, usable_width(monitor.work_area, margin))
+    });
+    self.strips.insert_before(workspace, window, preset, None);
+    self.positions.remove(&workspace);
   }
 
   /// Restores and releases active strips that no longer use Scrolling Layout.
@@ -70,13 +88,12 @@ impl ScrollingLayout {
       let Some(monitor) = workspace_manager.monitor_for_workspace(*workspace) else {
         continue;
       };
-      let target = Rect::from(Sizing::near_maximised(monitor.work_area, margin));
-      for handle in members {
+      for (handle, preset) in members {
         let off_screen = api
           .get_window_rect(handle)
           .is_some_and(|rect| !screen_areas.iter().any(|area| rect.intersects(area)));
         if off_screen {
-          api.set_window_position(handle, target);
+          api.set_window_position(handle, Rect::from(assigned_sizing(monitor.work_area, margin, preset)));
         }
       }
     }
@@ -106,13 +123,19 @@ impl ScrollingLayout {
       .previous_foreground_window
       .and_then(|handle| self.strips.workspace_containing(handle));
 
-    // Resolve membership before changing positions: off-screen members must retain their stored workspace
+    // Resolve membership before changing positions: off-screen members must retain their stored workspace.
     let visible_members =
       self.get_visible_members_by_workspace(api, workspace_manager, active_workspaces, virtual_desktop_manager);
-    self.remove_transferred_windows(&visible_members);
-    let newly_focused_workspace = self.reconcile_memberships(active_workspaces, &visible_members, foreground);
+    let transferred_presets = self.remove_transferred_windows(&visible_members);
+    let newly_focused_workspace = self.reconcile_memberships(
+      workspace_manager,
+      active_workspaces,
+      &visible_members,
+      foreground,
+      &transferred_presets,
+      margin,
+    );
 
-    // Membership changes can alter every strip, while focus changes can require one further reflow
     for workspace in active_workspaces {
       self.reflow(api, workspace_manager, *workspace, margin);
     }
@@ -127,10 +150,7 @@ impl ScrollingLayout {
     self.previous_foreground_window = api.get_foreground_window();
   }
 
-  /// Groups current-desktop windows by active workspace in deterministic "spatial" order.
-  ///
-  /// Existing strip membership wins over monitor detection because off-screen windows may appear to belong to another
-  /// monitor.
+  /// Groups current-desktop windows by active workspace in deterministic spatial order.
   fn get_visible_members_by_workspace<T: WindowsApi + Clone>(
     &self,
     api: &T,
@@ -141,6 +161,7 @@ impl ScrollingLayout {
     let mut windows = api
       .get_all_visible_windows()
       .into_iter()
+      .filter(|window| !self.unpositionable.contains(&window.handle))
       .filter(|window| virtual_desktop_manager.is_none_or(|vdm| api.is_window_on_current_desktop(vdm, window)))
       .collect::<Vec<_>>();
     windows.sort_by_key(|window| (window.rect.left, window.rect.top, window.handle.hwnd));
@@ -155,36 +176,50 @@ impl ScrollingLayout {
       if let Some(workspace) = workspace
         && active_workspaces.contains(&workspace)
       {
-        members_by_workspace.entry(workspace).or_default().push(window.handle);
+        members_by_workspace.entry(workspace).or_default().push(window);
       }
     }
     members_by_workspace
   }
 
   /// Removes members from their old strip when workspace detection assigns them to another active workspace.
-  fn remove_transferred_windows(&mut self, members_by_workspace: &MembersByWorkspace) {
+  fn remove_transferred_windows(&mut self, members_by_workspace: &MembersByWorkspace) -> HashMap<WindowHandle, WidthPreset> {
+    let mut presets = HashMap::new();
     for (workspace, members) in members_by_workspace {
       for member in members {
-        if let Some(previous_workspace) = self.strips.workspace_containing(*member)
+        if let Some(previous_workspace) = self.strips.workspace_containing(member.handle)
           && previous_workspace != *workspace
+          && let Some(preset) = self.strips.remove(previous_workspace, member.handle)
         {
-          self.strips.remove(previous_workspace, *member);
+          self.positions.remove(&previous_workspace);
+          presets.insert(member.handle, preset);
         }
       }
     }
+    presets
   }
 
   /// Adopts initial strips or incrementally reconciles them, returning the workspace containing the newest focus.
-  fn reconcile_memberships(
+  fn reconcile_memberships<T: WindowsApi + Clone>(
     &mut self,
+    workspace_manager: &WorkspaceManager<T>,
     active_workspaces: &[PersistentWorkspaceId],
     visible_members: &MembersByWorkspace,
     foreground: Option<WindowHandle>,
+    transferred_presets: &HashMap<WindowHandle, WidthPreset>,
+    margin: i32,
   ) -> Option<PersistentWorkspaceId> {
-    // The first snapshot establishes strip order; later snapshots must preserve user reordering.
     if !self.initialised {
       for workspace in active_workspaces {
-        let members = visible_members.get(workspace).cloned().unwrap_or_default();
+        let usable_width = workspace_manager
+          .monitor_for_workspace(*workspace)
+          .map_or(1, |monitor| usable_width(monitor.work_area, margin));
+        let members = visible_members
+          .get(workspace)
+          .into_iter()
+          .flatten()
+          .map(|window| (window.handle, WidthPreset::nearest(window.rect.width(), usable_width)))
+          .collect();
         self.strips.adopt(*workspace, members, foreground);
       }
       self.initialised = true;
@@ -193,7 +228,17 @@ impl ScrollingLayout {
 
     let mut newly_focused = None;
     for workspace in active_workspaces {
-      if self.reconcile_workspace(*workspace, visible_members, foreground).is_some() {
+      if self
+        .reconcile_workspace(
+          workspace_manager,
+          *workspace,
+          visible_members,
+          foreground,
+          transferred_presets,
+          margin,
+        )
+        .is_some()
+      {
         newly_focused = Some(*workspace);
       }
     }
@@ -201,25 +246,36 @@ impl ScrollingLayout {
   }
 
   /// Removes missing members, inserts newly visible members, and returns any new member selected for focus.
-  fn reconcile_workspace(
+  fn reconcile_workspace<T: WindowsApi + Clone>(
     &mut self,
+    workspace_manager: &WorkspaceManager<T>,
     workspace: PersistentWorkspaceId,
     visible_members: &MembersByWorkspace,
     foreground: Option<WindowHandle>,
+    transferred_presets: &HashMap<WindowHandle, WidthPreset>,
+    margin: i32,
   ) -> Option<WindowHandle> {
-    let visible: &[WindowHandle] = visible_members.get(&workspace).map_or(&[], Vec::as_slice);
-    self.strips.retain(workspace, visible);
+    let visible = visible_members.get(&workspace).map_or(&[][..], Vec::as_slice);
+    let visible_handles = visible.iter().map(|window| window.handle).collect::<Vec<_>>();
+    self.strips.retain(workspace, &visible_handles);
     let new_members = visible
       .iter()
-      .copied()
-      .filter(|handle| self.strips.workspace_containing(*handle).is_none())
+      .filter(|window| self.strips.workspace_containing(window.handle).is_none())
       .collect::<Vec<_>>();
-    // Prefer a newly foregrounded window; otherwise focus the last newly detected window.
     let desired_focus = foreground
-      .filter(|handle| new_members.contains(handle))
-      .or_else(|| new_members.last().copied());
+      .filter(|handle| new_members.iter().any(|window| window.handle == *handle))
+      .or_else(|| new_members.last().map(|window| window.handle));
+    let usable_width = workspace_manager
+      .monitor_for_workspace(workspace)
+      .map_or(1, |monitor| usable_width(monitor.work_area, margin));
     for member in new_members {
-      self.strips.insert_before(workspace, member, self.previous_foreground_window);
+      let preset = transferred_presets
+        .get(&member.handle)
+        .copied()
+        .unwrap_or_else(|| WidthPreset::nearest(member.rect.width(), usable_width));
+      self
+        .strips
+        .insert_before(workspace, member.handle, preset, self.previous_foreground_window);
     }
     if let Some(member) = desired_focus {
       self.strips.set_focused(workspace, member);
@@ -267,22 +323,37 @@ impl ScrollingLayout {
     let Some(monitor) = workspace_manager.monitor_for_workspace(workspace) else {
       return;
     };
-    let positions = self
-      .strips
-      .placements(workspace, monitor.work_area, margin)
-      .into_iter()
-      .map(|(handle, sizing)| (handle, Rect::from(sizing)))
-      .collect::<Vec<_>>();
-    if self.positions.get(&workspace) == Some(&positions) {
+    loop {
+      let positions = self
+        .strips
+        .placements(workspace, monitor.work_area, margin)
+        .into_iter()
+        .map(|(handle, sizing)| (handle, Rect::from(sizing)))
+        .collect::<Vec<_>>();
+      if self.positions.get(&workspace) == Some(&positions) {
+        return;
+      }
+      if let Some(focused) = self.strips.focused(workspace) {
+        let failures = api.set_window_positions(&positions, focused);
+        if !failures.is_empty() {
+          self.reject_unpositionable(workspace, &failures);
+          continue;
+        }
+      }
+      self.positions.insert(workspace, positions);
       return;
     }
-    if let Some(focused) = self.strips.focused(workspace) {
-      api.set_window_positions(&positions, focused);
-    }
-    self.positions.insert(workspace, positions);
   }
 
-  /// Focuses a workspace's chosen strip window and centres the cursor on it.
+  fn reject_unpositionable(&mut self, workspace: PersistentWorkspaceId, failures: &[WindowHandle]) {
+    for handle in failures {
+      self.unpositionable.insert(*handle);
+      self.strips.remove(workspace, *handle);
+    }
+    self.positions.remove(&workspace);
+  }
+
+  /// Focuses a workspace's chosen strip window and centres the cursor on its target.
   pub(super) fn focus<T: WindowsApi + Clone>(
     &self,
     api: &T,
@@ -296,9 +367,63 @@ impl ScrollingLayout {
     let Some(monitor) = workspace_manager.monitor_for_workspace(workspace) else {
       return;
     };
-    let sizing = Sizing::near_maximised(monitor.work_area, margin);
+    let Some((_, sizing)) = self
+      .strips
+      .placements(workspace, monitor.work_area, margin)
+      .into_iter()
+      .find(|(member, _)| *member == handle)
+    else {
+      return;
+    };
     api.set_foreground_window(handle);
     api.set_cursor_position(&Point::from_center_of_sizing(&sizing));
+  }
+
+  /// Narrows or widens the focused member.
+  pub(super) fn resize_window<T: WindowsApi + Clone>(
+    &mut self,
+    api: &T,
+    workspace_manager: &WorkspaceManager<T>,
+    direction: Direction,
+    margin: i32,
+  ) {
+    let Some(handle) = api.get_foreground_window() else {
+      return;
+    };
+    let Some(workspace) = self.strips.workspace_containing(handle) else {
+      return;
+    };
+    if self.strips.resize(workspace, handle, direction) {
+      self.positions.remove(&workspace);
+      self.reflow(api, workspace_manager, workspace, margin);
+      self.focus(api, workspace_manager, workspace, margin);
+    }
+  }
+
+  /// Snaps a completed mouse resize into the strip and reflows once.
+  pub(super) fn finish_mouse_resize<T: WindowsApi + Clone>(
+    &mut self,
+    api: &T,
+    workspace_manager: &WorkspaceManager<T>,
+    handle: WindowHandle,
+    margin: i32,
+  ) {
+    let Some(workspace) = self.strips.workspace_containing(handle) else {
+      return;
+    };
+    let Some(monitor) = workspace_manager.monitor_for_workspace(workspace) else {
+      return;
+    };
+    let Some(rect) = api.get_window_rect(handle) else {
+      return;
+    };
+    let preset = WidthPreset::nearest(rect.width(), usable_width(monitor.work_area, margin));
+    self.strips.set_preset(workspace, handle, preset);
+    self.strips.set_focused(workspace, handle);
+    // Low-level dragging bypasses the target cache, even when the preset itself is unchanged.
+    self.positions.remove(&workspace);
+    self.reflow(api, workspace_manager, workspace, margin);
+    self.focus(api, workspace_manager, workspace, margin);
   }
 
   /// Handles adjacent strip focus, returning false when the foreground is not in a strip.
@@ -338,6 +463,7 @@ impl ScrollingLayout {
       return;
     };
     if self.strips.reorder(workspace, current, direction) {
+      self.positions.remove(&workspace);
       self.reflow(api, workspace_manager, workspace, margin);
       self.focus(api, workspace_manager, workspace, margin);
     }
@@ -355,11 +481,12 @@ impl ScrollingLayout {
       return;
     };
     self.strips.remove(workspace, member);
+    self.positions.remove(&workspace);
     self.reflow(api, workspace_manager, workspace, margin);
     self.focus(api, workspace_manager, workspace, margin);
   }
 
-  /// Brings wholly off-screen strip windows back onto their workspace monitor.
+  /// Brings wholly off-screen strip windows back onto their workspace monitor at their assigned widths.
   pub(super) fn restore_off_screen<T: WindowsApi>(&self, api: &T, margin: i32) {
     let monitors = api.get_all_monitors();
     let screen_areas = monitors
@@ -376,13 +503,12 @@ impl ScrollingLayout {
       let Some(monitor) = monitors.get_by_id(&workspace.monitor_id).or(fallback) else {
         continue;
       };
-      let target = Rect::from(Sizing::near_maximised(monitor.work_area, margin));
       for handle in self.strips.members(workspace) {
         let off_screen = api
-          .get_window_rect(*handle)
+          .get_window_rect(handle)
           .is_some_and(|rect| !screen_areas.iter().any(|area| rect.intersects(area)));
-        if off_screen {
-          api.set_window_position(*handle, target);
+        if off_screen && let Some(preset) = self.strips.preset(workspace, handle) {
+          api.set_window_position(handle, Rect::from(assigned_sizing(monitor.work_area, margin, preset)));
         }
       }
     }
@@ -421,16 +547,41 @@ impl ScrollingLayout {
           (*handle, interpolate_rect(start, *target, eased_progress))
         })
         .collect::<Vec<_>>();
-      api.set_window_positions(&positions, outgoing);
+      let failures = api.set_window_positions(&positions, outgoing);
+      if !failures.is_empty() {
+        self.reject_unpositionable(workspace, &failures);
+        self.reflow(api, workspace_manager, workspace, margin);
+        return;
+      }
       if frame < ANIMATION_FRAMES {
         std::thread::sleep(frame_duration);
       }
     }
     if let Some(focused) = self.strips.focused(workspace) {
-      api.set_window_positions(&desired, focused);
+      let failures = api.set_window_positions(&desired, focused);
+      if !failures.is_empty() {
+        self.reject_unpositionable(workspace, &failures);
+        self.reflow(api, workspace_manager, workspace, margin);
+        return;
+      }
     }
     self.positions.insert(workspace, desired);
   }
+}
+
+fn usable_width(work_area: Rect, margin: i32) -> i32 {
+  Sizing::near_maximised(work_area, margin).width.max(1)
+}
+
+fn assigned_sizing(work_area: Rect, margin: i32, preset: WidthPreset) -> Sizing {
+  let near_maximised = Sizing::near_maximised(work_area, margin);
+  let width = preset.width(near_maximised.width.max(1));
+  Sizing::new(
+    work_area.left.saturating_add(work_area.width().saturating_sub(width) / 2),
+    near_maximised.y,
+    width,
+    near_maximised.height,
+  )
 }
 
 fn interpolate_rect(start: Rect, target: Rect, progress: f64) -> Rect {

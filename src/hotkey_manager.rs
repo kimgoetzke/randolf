@@ -49,14 +49,18 @@ impl HotkeyManager {
     hotkey_manager.register_move_window_hotkey(Direction::Right, VKey::L);
 
     // Resize window
-    hotkey_manager.register_resize_window_hotkey(Direction::Left, VKey::Left);
-    hotkey_manager.register_resize_window_hotkey(Direction::Down, VKey::Down);
-    hotkey_manager.register_resize_window_hotkey(Direction::Up, VKey::Up);
-    hotkey_manager.register_resize_window_hotkey(Direction::Right, VKey::Right);
-    hotkey_manager.register_resize_window_hotkey(Direction::Left, VKey::H);
-    hotkey_manager.register_resize_window_hotkey(Direction::Down, VKey::J);
-    hotkey_manager.register_resize_window_hotkey(Direction::Up, VKey::K);
-    hotkey_manager.register_resize_window_hotkey(Direction::Right, VKey::L);
+    hotkey_manager.register_resize_spatial_window_hotkey(Direction::Left, VKey::Left);
+    hotkey_manager.register_resize_spatial_window_hotkey(Direction::Down, VKey::Down);
+    hotkey_manager.register_resize_spatial_window_hotkey(Direction::Up, VKey::Up);
+    hotkey_manager.register_resize_spatial_window_hotkey(Direction::Right, VKey::Right);
+    hotkey_manager.register_resize_spatial_window_hotkey(Direction::Left, VKey::H);
+    hotkey_manager.register_resize_spatial_window_hotkey(Direction::Down, VKey::J);
+    hotkey_manager.register_resize_spatial_window_hotkey(Direction::Up, VKey::K);
+    hotkey_manager.register_resize_spatial_window_hotkey(Direction::Right, VKey::L);
+
+    // Resize Scrolling Layout window, globally overriding Windows virtual-desktop switching
+    hotkey_manager.register_resize_scrolling_window_hotkey(Direction::Left, VKey::Left);
+    hotkey_manager.register_resize_scrolling_window_hotkey(Direction::Right, VKey::Right);
 
     // Other window management
     hotkey_manager.register_close_window_hotkey(VKey::Q);
@@ -225,13 +229,32 @@ impl HotkeyManager {
       .unwrap_or_else(|err| panic!("Failed to register hotkey for {:?}: {err}", Command::MoveWindow(direction)));
   }
 
-  fn register_resize_window_hotkey(&mut self, direction: Direction, key: VKey) {
+  fn register_resize_spatial_window_hotkey(&mut self, direction: Direction, key: VKey) {
     self
       .hkm
       .register_hotkey(key, &[MAIN_MOD, SECONDARY_MOD, TERTIARY_MOD], move || {
-        Command::ResizeWindow(direction)
+        Command::ResizeSpatialWindow(direction)
       })
-      .unwrap_or_else(|err| panic!("Failed to register hotkey for {:?}: {err}", Command::ResizeWindow(direction)));
+      .unwrap_or_else(|err| {
+        panic!(
+          "Failed to register hotkey for {:?}: {err}",
+          Command::ResizeSpatialWindow(direction)
+        )
+      });
+  }
+
+  fn register_resize_scrolling_window_hotkey(&mut self, direction: Direction, key: VKey) {
+    self
+      .hkm
+      .register_hotkey(key, &[MAIN_MOD, TERTIARY_MOD], move || {
+        Command::ResizeScrollingWindow(direction)
+      })
+      .unwrap_or_else(|err| {
+        panic!(
+          "Failed to register hotkey for {:?}: {err}",
+          Command::ResizeScrollingWindow(direction)
+        )
+      });
   }
 }
 

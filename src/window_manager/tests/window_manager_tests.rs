@@ -8,6 +8,25 @@ use crate::workspace_manager::WorkspaceManager;
 use std::sync::{Arc, Mutex};
 
 #[test]
+fn resize_scrolling_window_command_no_ops_for_spatial_layout() {
+  MockWindowsApi::reset();
+  let handle = WindowHandle::new(1);
+  let sizing = Sizing::new(50, 50, 400, 300);
+  MockWindowsApi::add_or_update_window(handle, "Spatial".to_string(), sizing.clone(), false, false, true);
+  MockWindowsApi::add_monitor(1.into(), Rect::new(0, 0, 1920, 1080), true);
+  MockWindowsApi::place_window(handle, 1.into());
+  let mut manager = WindowManager::default(MockWindowsApi);
+
+  manager.resize_scrolling_window(Direction::Right);
+  manager.finish_mouse_resize(handle);
+
+  assert_eq!(
+    manager.windows_api.get_window_placement(handle).unwrap(),
+    WindowPlacement::new_from_sizing(sizing)
+  );
+}
+
+#[test]
 fn mixed_layout_routes_move_by_foreground_monitor() {
   MockWindowsApi::reset();
   let directory = create_temp_directory();
@@ -167,7 +186,7 @@ fn reconciliation_only_manages_scrolling_monitors() {
 
   assert_eq!(
     manager.windows_api.get_window_placement(1.into()).unwrap(),
-    WindowPlacement::new_from_sizing(Sizing::new(20, 20, 1880, 990))
+    WindowPlacement::new_from_sizing(Sizing::new(725, 20, 470, 990))
   );
   assert_eq!(
     manager.windows_api.get_window_placement(secondary).unwrap(),
@@ -227,7 +246,7 @@ fn changing_default_from_scrolling_to_spatial_restores_and_releases_active_windo
   assert!(manager.scrolling.get_workspace_containing(second).is_none());
   assert_eq!(
     manager.windows_api.get_window_placement(second).unwrap(),
-    WindowPlacement::new_from_sizing(Sizing::near_maximised(Rect::new(0, 0, 1920, 1030), 20))
+    WindowPlacement::new_from_sizing(Sizing::new(1215, 20, 470, 990))
   );
 }
 

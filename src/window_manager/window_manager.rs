@@ -116,13 +116,22 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
     self.workspace_manager.move_window_to_workspace(target_id);
 
     if let (Some(handle), Some(source_id)) = (foreground, source) {
-      if source_layout == Some(Layout::Scrolling) {
-        self.scrolling.remove(source_id, handle);
-      }
-      if target_layout == Some(Layout::Scrolling) {
-        self.scrolling.insert(target_id, handle);
-      }
+      let transferred_preset = if source_layout == Some(Layout::Scrolling) {
+        self.scrolling.remove(source_id, handle)
+      } else {
+        None
+      };
       let margin = self.margin();
+      if target_layout == Some(Layout::Scrolling) {
+        self.scrolling.insert(
+          &self.windows_api,
+          &self.workspace_manager,
+          target_id,
+          handle,
+          transferred_preset,
+          margin,
+        );
+      }
       for (workspace, layout) in [(source_id, source_layout), (target_id, target_layout)] {
         if layout == Some(Layout::Scrolling) && self.workspace_manager.is_workspace_active(workspace) {
           self
@@ -152,13 +161,36 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
       .move_window(&self.windows_api, &self.placement, direction, self.margin());
   }
 
-  /// Resizes a spatial window. Scrolling windows remain unchanged.
-  pub fn resize_window(&mut self, direction: Direction) {
+  /// Resizes a window on a monitor using the spatial layout. Scrolling windows remain unchanged.
+  pub fn resize_spatial_window(&mut self, direction: Direction) {
     if self.get_foreground_window_layout() != Some(Layout::Scrolling) {
       self
         .spatial
         .resize_window(&self.windows_api, &self.placement, direction, self.margin());
     }
+  }
+
+  /// Narrows or widens a scrolling layout window. No-ops in spatial layout.
+  pub fn resize_scrolling_window(&mut self, direction: Direction) {
+    if self.get_foreground_window_layout() != Some(Layout::Scrolling) {
+      return;
+    }
+    let margin = self.margin();
+    self
+      .scrolling
+      .resize_window(&self.windows_api, &self.workspace_manager, direction, margin);
+  }
+
+  /// Snaps a completed mouse resize when the window belongs to scrolling layout. Expected to be called after the user
+  /// has resized a window using the mouse-based window resize features.
+  pub fn finish_mouse_resize(&mut self, window: WindowHandle) {
+    if self.get_layout_for_window(window) != Some(Layout::Scrolling) {
+      return;
+    }
+    let margin = self.margin();
+    self
+      .scrolling
+      .finish_mouse_resize(&self.windows_api, &self.workspace_manager, window, margin);
   }
 
   /// Moves focus and the cursor using navigation rules for the current layout.

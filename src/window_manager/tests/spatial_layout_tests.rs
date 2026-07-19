@@ -68,7 +68,7 @@ fn move_window_to_another_monitor() {
 }
 
 #[test]
-fn resize_window_steps_three_quarter_left_down_to_left_half_of_screen() {
+fn resize_spatial_window_steps_three_quarter_left_down_to_left_half_of_screen() {
   let monitor_handle = MonitorHandle::from(1);
   let window_handle = WindowHandle::new(1);
   let work_area = Rect::new(0, 0, 2000, 1000);
@@ -78,7 +78,7 @@ fn resize_window_steps_three_quarter_left_down_to_left_half_of_screen() {
   MockWindowsApi::place_window(window_handle, monitor_handle);
   let mut manager = WindowManager::default(MockWindowsApi);
 
-  manager.resize_window(Direction::Left);
+  manager.resize_spatial_window(Direction::Left);
 
   let actual_placement = manager.windows_api.get_window_placement(window_handle);
   let expected_sizing = Sizing::left_half_of_screen(work_area, 20);
@@ -92,7 +92,7 @@ fn resize_window_steps_three_quarter_left_down_to_left_half_of_screen() {
 }
 
 #[test]
-fn resize_window_steps_three_quarter_down_down_to_bottom_half_of_screen() {
+fn resize_spatial_window_steps_three_quarter_down_down_to_bottom_half_of_screen() {
   let monitor_handle = MonitorHandle::from(1);
   let window_handle = WindowHandle::new(1);
   let work_area = Rect::new(0, 0, 2000, 1000);
@@ -102,7 +102,7 @@ fn resize_window_steps_three_quarter_down_down_to_bottom_half_of_screen() {
   MockWindowsApi::place_window(window_handle, monitor_handle);
   let mut manager = WindowManager::default(MockWindowsApi);
 
-  manager.resize_window(Direction::Down);
+  manager.resize_spatial_window(Direction::Down);
 
   let actual_placement = manager.windows_api.get_window_placement(window_handle);
   let expected_sizing = Sizing::bottom_half_of_screen(work_area, 20);
@@ -116,7 +116,7 @@ fn resize_window_steps_three_quarter_down_down_to_bottom_half_of_screen() {
 }
 
 #[test]
-fn resize_window_three_quarter_left_halves_normally_in_down_direction() {
+fn resize_spatial_window_three_quarter_left_halves_normally_in_down_direction() {
   // A 75%-wide window (from Left resize) should NOT trigger the 3/4 rule when pressing Down
   let monitor_handle = MonitorHandle::from(1);
   let window_handle = WindowHandle::new(1);
@@ -127,7 +127,7 @@ fn resize_window_three_quarter_left_halves_normally_in_down_direction() {
   MockWindowsApi::place_window(window_handle, monitor_handle);
   let mut manager = WindowManager::default(MockWindowsApi);
 
-  manager.resize_window(Direction::Down);
+  manager.resize_spatial_window(Direction::Down);
 
   let actual_placement = manager.windows_api.get_window_placement(window_handle);
   let expected_sizing = sizing.halved(Direction::Down, 20);
@@ -141,7 +141,7 @@ fn resize_window_three_quarter_left_halves_normally_in_down_direction() {
 }
 
 #[test]
-fn resize_window_does_nothing_when_dynamic_minimum_exceeds_constant_and_result_is_below_it() {
+fn resize_spatial_window_does_nothing_when_dynamic_minimum_exceeds_constant_and_result_is_below_it() {
   // Use a screen wide enough that W/DIVISOR > MINIMUM_WINDOW_DIMENSION, so the dynamic minimum
   // takes over. Work area width = MINIMUM * DIVISOR * 2, giving dynamic_min = MINIMUM * 2.
   // The window is sized so its halved width falls between the constant and the dynamic minimum.
@@ -159,7 +159,7 @@ fn resize_window_does_nothing_when_dynamic_minimum_exceeds_constant_and_result_i
   MockWindowsApi::set_cursor_position(initial_cursor);
   let mut manager = WindowManager::default(MockWindowsApi);
 
-  manager.resize_window(Direction::Left);
+  manager.resize_spatial_window(Direction::Left);
 
   let actual_placement = manager.windows_api.get_window_placement(window_handle);
   assert!(actual_placement.is_some());
@@ -176,7 +176,7 @@ fn resize_window_does_nothing_when_dynamic_minimum_exceeds_constant_and_result_i
 }
 
 #[test]
-fn resize_window_allows_resize_when_constant_is_larger_than_quarter_screen() {
+fn resize_spatial_window_allows_resize_when_constant_is_larger_than_quarter_screen() {
   // Dynamic min = max(MINIMUM_WINDOW_DIMENSION, work_area/DIVISOR). On a 1000px-wide screen,
   // work_area/DIVISOR = 980/8 = 122 < MINIMUM_WINDOW_DIMENSION (250), so the constant wins.
   // A window whose halved width (365px) exceeds the constant should be allowed to resize.
@@ -189,7 +189,7 @@ fn resize_window_allows_resize_when_constant_is_larger_than_quarter_screen() {
   MockWindowsApi::place_window(window_handle, monitor_handle);
   let mut manager = WindowManager::default(MockWindowsApi);
 
-  manager.resize_window(Direction::Left);
+  manager.resize_spatial_window(Direction::Left);
 
   let actual_placement = manager.windows_api.get_window_placement(window_handle);
   let expected_sizing = sizing.halved(Direction::Left, 20);
@@ -207,7 +207,7 @@ fn resize_window_allows_resize_when_constant_is_larger_than_quarter_screen() {
 }
 
 #[test]
-fn resize_window_halves_left_half_of_screen_in_left_direction() {
+fn resize_spatial_window_halves_left_half_of_screen_in_left_direction() {
   // With DIVISOR=8, dynamic_min = max(MINIMUM, W/8). On a 2000px screen, dynamic_min = max(250, 250) = 250.
   // Halving left_half produces ~475px > 250 -> resize succeeds.
   let monitor_handle = MonitorHandle::from(1);
@@ -232,7 +232,7 @@ fn resize_window_halves_left_half_of_screen_in_left_direction() {
   MockWindowsApi::set_cursor_position(initial_cursor);
   let mut manager = WindowManager::default(MockWindowsApi);
 
-  manager.resize_window(Direction::Left);
+  manager.resize_spatial_window(Direction::Left);
 
   let expected = left_half.halved(Direction::Left, 20);
   let actual_placement = manager.windows_api.get_window_placement(window_handle);
@@ -250,7 +250,7 @@ fn resize_window_halves_left_half_of_screen_in_left_direction() {
 }
 
 #[test]
-fn resize_window_halves_right_half_of_screen_in_right_direction() {
+fn resize_spatial_window_halves_right_half_of_screen_in_right_direction() {
   // Mirror of the Left case: with DIVISOR=8, dynamic_min = max(250, 250) = 250.
   // Halving right_half produces ~475px > 250 -> resize succeeds.
   let monitor_handle = MonitorHandle::from(1);
@@ -275,7 +275,7 @@ fn resize_window_halves_right_half_of_screen_in_right_direction() {
   MockWindowsApi::set_cursor_position(initial_cursor);
   let mut manager = WindowManager::default(MockWindowsApi);
 
-  manager.resize_window(Direction::Right);
+  manager.resize_spatial_window(Direction::Right);
 
   let expected = right_half.halved(Direction::Right, 20);
   let actual_placement = manager.windows_api.get_window_placement(window_handle);
@@ -293,7 +293,7 @@ fn resize_window_halves_right_half_of_screen_in_right_direction() {
 }
 
 #[test]
-fn resize_window_does_nothing_when_below_minimum_dimension() {
+fn resize_spatial_window_does_nothing_when_below_minimum_dimension() {
   let monitor_handle = MonitorHandle::from(1);
   let window_handle = WindowHandle::new(1);
   let small_sizing = Sizing::new(20, 20, 200, 200);
@@ -311,7 +311,7 @@ fn resize_window_does_nothing_when_below_minimum_dimension() {
   MockWindowsApi::set_cursor_position(initial_cursor);
   let mut manager = WindowManager::default(MockWindowsApi);
 
-  manager.resize_window(Direction::Left);
+  manager.resize_spatial_window(Direction::Left);
 
   let actual_placement = manager.windows_api.get_window_placement(window_handle);
   let expected_placement = WindowPlacement::new_from_sizing(small_sizing);
@@ -329,13 +329,13 @@ fn resize_window_does_nothing_when_below_minimum_dimension() {
 }
 
 #[test]
-fn resize_window_does_nothing_when_no_foreground_window() {
+fn resize_spatial_window_does_nothing_when_no_foreground_window() {
   // No window is added or focused -> get_window_and_monitor_info returns None -> early return.
   let initial_cursor = Point::default();
   MockWindowsApi::set_cursor_position(initial_cursor);
   let mut manager = WindowManager::default(MockWindowsApi);
 
-  manager.resize_window(Direction::Left);
+  manager.resize_spatial_window(Direction::Left);
 
   assert_eq!(
     manager.windows_api.get_cursor_position(),
@@ -345,7 +345,7 @@ fn resize_window_does_nothing_when_no_foreground_window() {
 }
 
 #[test]
-fn resize_window_does_nothing_when_result_height_falls_below_constant_minimum() {
+fn resize_spatial_window_does_nothing_when_result_height_falls_below_constant_minimum() {
   // Down halved height = 300/2 - half_margin = 140 < MINIMUM_WINDOW_DIMENSION (250) -> blocked.
   // On this screen, dynamic_min_height = max(250, 980/8) = 250, so the constant is the threshold.
   let monitor_handle = MonitorHandle::from(1);
@@ -358,7 +358,7 @@ fn resize_window_does_nothing_when_result_height_falls_below_constant_minimum() 
   MockWindowsApi::set_cursor_position(initial_cursor);
   let mut manager = WindowManager::default(MockWindowsApi);
 
-  manager.resize_window(Direction::Down);
+  manager.resize_spatial_window(Direction::Down);
 
   let actual_placement = manager.windows_api.get_window_placement(window_handle);
   assert!(actual_placement.is_some());
@@ -375,7 +375,7 @@ fn resize_window_does_nothing_when_result_height_falls_below_constant_minimum() 
 }
 
 #[test]
-fn resize_window_does_nothing_when_dynamic_minimum_height_blocks_resize() {
+fn resize_spatial_window_does_nothing_when_dynamic_minimum_height_blocks_resize() {
   // Work area height = MINIMUM * DIVISOR * 2 -> dynamic_min_height = MINIMUM * 2.
   // Window height = MINIMUM * 3; halved = MINIMUM * 3 / 2 - half_margin, which is
   // > MINIMUM (constant) but < dynamic_min (MINIMUM * 2) -> blocked.
@@ -390,7 +390,7 @@ fn resize_window_does_nothing_when_dynamic_minimum_height_blocks_resize() {
   MockWindowsApi::set_cursor_position(initial_cursor);
   let mut manager = WindowManager::default(MockWindowsApi);
 
-  manager.resize_window(Direction::Down);
+  manager.resize_spatial_window(Direction::Down);
 
   let actual_placement = manager.windows_api.get_window_placement(window_handle);
   assert!(actual_placement.is_some());
@@ -407,7 +407,7 @@ fn resize_window_does_nothing_when_dynamic_minimum_height_blocks_resize() {
 }
 
 #[test]
-fn resize_window_steps_three_quarter_right_down_to_right_half_of_screen() {
+fn resize_spatial_window_steps_three_quarter_right_down_to_right_half_of_screen() {
   let monitor_handle = MonitorHandle::from(1);
   let window_handle = WindowHandle::new(1);
   let work_area = Rect::new(0, 0, 2000, 1000);
@@ -417,7 +417,7 @@ fn resize_window_steps_three_quarter_right_down_to_right_half_of_screen() {
   MockWindowsApi::place_window(window_handle, monitor_handle);
   let mut manager = WindowManager::default(MockWindowsApi);
 
-  manager.resize_window(Direction::Right);
+  manager.resize_spatial_window(Direction::Right);
 
   let expected_sizing = Sizing::right_half_of_screen(work_area, 20);
   let actual_placement = manager.windows_api.get_window_placement(window_handle);
@@ -433,7 +433,7 @@ fn resize_window_steps_three_quarter_right_down_to_right_half_of_screen() {
 }
 
 #[test]
-fn resize_window_steps_three_quarter_up_down_to_top_half_of_screen() {
+fn resize_spatial_window_steps_three_quarter_up_down_to_top_half_of_screen() {
   let monitor_handle = MonitorHandle::from(1);
   let window_handle = WindowHandle::new(1);
   let work_area = Rect::new(0, 0, 2000, 1000);
@@ -443,7 +443,7 @@ fn resize_window_steps_three_quarter_up_down_to_top_half_of_screen() {
   MockWindowsApi::place_window(window_handle, monitor_handle);
   let mut manager = WindowManager::default(MockWindowsApi);
 
-  manager.resize_window(Direction::Up);
+  manager.resize_spatial_window(Direction::Up);
 
   let expected_sizing = Sizing::top_half_of_screen(work_area, 20);
   let actual_placement = manager.windows_api.get_window_placement(window_handle);
@@ -459,7 +459,7 @@ fn resize_window_steps_three_quarter_up_down_to_top_half_of_screen() {
 }
 
 #[test]
-fn resize_window_three_quarter_left_produces_centre_when_pressing_right() {
+fn resize_spatial_window_three_quarter_left_produces_centre_when_pressing_right() {
   let monitor_handle = MonitorHandle::from(1);
   let window_handle = WindowHandle::new(1);
   let work_area = Rect::new(0, 0, 2000, 1000);
@@ -469,7 +469,7 @@ fn resize_window_three_quarter_left_produces_centre_when_pressing_right() {
   MockWindowsApi::place_window(window_handle, monitor_handle);
   let mut manager = WindowManager::default(MockWindowsApi);
 
-  manager.resize_window(Direction::Right);
+  manager.resize_spatial_window(Direction::Right);
 
   let expected_sizing = Sizing::centre_near_maximised(work_area, Direction::Right, 20);
   let actual_placement = manager.windows_api.get_window_placement(window_handle);
@@ -485,7 +485,7 @@ fn resize_window_three_quarter_left_produces_centre_when_pressing_right() {
 }
 
 #[test]
-fn resize_window_three_quarter_right_produces_centre_when_pressing_left() {
+fn resize_spatial_window_three_quarter_right_produces_centre_when_pressing_left() {
   let monitor_handle = MonitorHandle::from(1);
   let window_handle = WindowHandle::new(1);
   let work_area = Rect::new(0, 0, 2000, 1000);
@@ -495,7 +495,7 @@ fn resize_window_three_quarter_right_produces_centre_when_pressing_left() {
   MockWindowsApi::place_window(window_handle, monitor_handle);
   let mut manager = WindowManager::default(MockWindowsApi);
 
-  manager.resize_window(Direction::Left);
+  manager.resize_spatial_window(Direction::Left);
 
   let expected_sizing = Sizing::centre_near_maximised(work_area, Direction::Left, 20);
   let actual_placement = manager.windows_api.get_window_placement(window_handle);
@@ -511,7 +511,7 @@ fn resize_window_three_quarter_right_produces_centre_when_pressing_left() {
 }
 
 #[test]
-fn resize_window_three_quarter_up_produces_centre_when_pressing_down() {
+fn resize_spatial_window_three_quarter_up_produces_centre_when_pressing_down() {
   let monitor_handle = MonitorHandle::from(1);
   let window_handle = WindowHandle::new(1);
   let work_area = Rect::new(0, 0, 2000, 1000);
@@ -521,7 +521,7 @@ fn resize_window_three_quarter_up_produces_centre_when_pressing_down() {
   MockWindowsApi::place_window(window_handle, monitor_handle);
   let mut manager = WindowManager::default(MockWindowsApi);
 
-  manager.resize_window(Direction::Down);
+  manager.resize_spatial_window(Direction::Down);
 
   let expected_sizing = Sizing::centre_near_maximised(work_area, Direction::Down, 20);
   let actual_placement = manager.windows_api.get_window_placement(window_handle);
@@ -537,7 +537,7 @@ fn resize_window_three_quarter_up_produces_centre_when_pressing_down() {
 }
 
 #[test]
-fn resize_window_three_quarter_down_produces_centre_when_pressing_up() {
+fn resize_spatial_window_three_quarter_down_produces_centre_when_pressing_up() {
   let monitor_handle = MonitorHandle::from(1);
   let window_handle = WindowHandle::new(1);
   let work_area = Rect::new(0, 0, 2000, 1000);
@@ -547,7 +547,7 @@ fn resize_window_three_quarter_down_produces_centre_when_pressing_up() {
   MockWindowsApi::place_window(window_handle, monitor_handle);
   let mut manager = WindowManager::default(MockWindowsApi);
 
-  manager.resize_window(Direction::Up);
+  manager.resize_spatial_window(Direction::Up);
 
   let expected_sizing = Sizing::centre_near_maximised(work_area, Direction::Up, 20);
   let actual_placement = manager.windows_api.get_window_placement(window_handle);
@@ -562,7 +562,7 @@ fn resize_window_three_quarter_down_produces_centre_when_pressing_up() {
   );
 }
 #[test]
-fn resize_window_steps_near_maximised_down_to_three_quarter_in_direction() {
+fn resize_spatial_window_steps_near_maximised_down_to_three_quarter_in_direction() {
   let monitor_handle = MonitorHandle::from(1);
   let window_handle = WindowHandle::new(1);
   // Monitor area bottom is 20px more than work_area bottom (mock subtracts 20 for taskbar)
@@ -573,7 +573,7 @@ fn resize_window_steps_near_maximised_down_to_three_quarter_in_direction() {
   MockWindowsApi::place_window(window_handle, monitor_handle);
   let mut manager = WindowManager::default(MockWindowsApi);
 
-  manager.resize_window(Direction::Left);
+  manager.resize_spatial_window(Direction::Left);
 
   let actual_placement = manager.windows_api.get_window_placement(window_handle);
   let expected_sizing = Sizing::three_quarter_near_maximised(work_area, Direction::Left, 20);
@@ -587,7 +587,7 @@ fn resize_window_steps_near_maximised_down_to_three_quarter_in_direction() {
 }
 
 #[test]
-fn resize_window_halves_non_near_maximised_window_in_direction() {
+fn resize_spatial_window_halves_non_near_maximised_window_in_direction() {
   let monitor_handle = MonitorHandle::from(1);
   let window_handle = WindowHandle::new(1);
   // Width must be > 2 * dynamic_min (2 * W/4 = 1000) so that halved width (590) > dynamic_min (500)
@@ -597,7 +597,7 @@ fn resize_window_halves_non_near_maximised_window_in_direction() {
   MockWindowsApi::place_window(window_handle, monitor_handle);
   let mut manager = WindowManager::default(MockWindowsApi);
 
-  manager.resize_window(Direction::Left);
+  manager.resize_spatial_window(Direction::Left);
 
   let actual_placement = manager.windows_api.get_window_placement(window_handle);
   let expected_sizing = sizing.halved(Direction::Left, 20);
@@ -611,7 +611,7 @@ fn resize_window_halves_non_near_maximised_window_in_direction() {
 }
 
 #[test]
-fn resize_window_steps_near_maximised_down_to_three_quarter_down() {
+fn resize_spatial_window_steps_near_maximised_down_to_three_quarter_down() {
   let monitor_handle = MonitorHandle::from(1);
   let window_handle = WindowHandle::new(1);
   let work_area = Rect::new(0, 0, 2000, 1000);
@@ -621,7 +621,7 @@ fn resize_window_steps_near_maximised_down_to_three_quarter_down() {
   MockWindowsApi::place_window(window_handle, monitor_handle);
   let mut manager = WindowManager::default(MockWindowsApi);
 
-  manager.resize_window(Direction::Down);
+  manager.resize_spatial_window(Direction::Down);
 
   let actual_placement = manager.windows_api.get_window_placement(window_handle);
   let expected_sizing = Sizing::three_quarter_near_maximised(work_area, Direction::Down, 20);
@@ -635,7 +635,7 @@ fn resize_window_steps_near_maximised_down_to_three_quarter_down() {
 }
 
 #[test]
-fn resize_window_steps_near_maximised_down_to_three_quarter_right() {
+fn resize_spatial_window_steps_near_maximised_down_to_three_quarter_right() {
   let monitor_handle = MonitorHandle::from(1);
   let window_handle = WindowHandle::new(1);
   let work_area = Rect::new(0, 0, 2000, 1000);
@@ -645,7 +645,7 @@ fn resize_window_steps_near_maximised_down_to_three_quarter_right() {
   MockWindowsApi::place_window(window_handle, monitor_handle);
   let mut manager = WindowManager::default(MockWindowsApi);
 
-  manager.resize_window(Direction::Right);
+  manager.resize_spatial_window(Direction::Right);
 
   let expected_sizing = Sizing::three_quarter_near_maximised(work_area, Direction::Right, 20);
   let actual_placement = manager.windows_api.get_window_placement(window_handle);
@@ -661,7 +661,7 @@ fn resize_window_steps_near_maximised_down_to_three_quarter_right() {
 }
 
 #[test]
-fn resize_window_steps_near_maximised_down_to_three_quarter_up() {
+fn resize_spatial_window_steps_near_maximised_down_to_three_quarter_up() {
   let monitor_handle = MonitorHandle::from(1);
   let window_handle = WindowHandle::new(1);
   let work_area = Rect::new(0, 0, 2000, 1000);
@@ -671,7 +671,7 @@ fn resize_window_steps_near_maximised_down_to_three_quarter_up() {
   MockWindowsApi::place_window(window_handle, monitor_handle);
   let mut manager = WindowManager::default(MockWindowsApi);
 
-  manager.resize_window(Direction::Up);
+  manager.resize_spatial_window(Direction::Up);
 
   let expected_sizing = Sizing::three_quarter_near_maximised(work_area, Direction::Up, 20);
   let actual_placement = manager.windows_api.get_window_placement(window_handle);

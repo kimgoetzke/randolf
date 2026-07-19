@@ -6,7 +6,7 @@ pub(crate) mod test {
     Monitor, MonitorHandle, MonitorInfo, Monitors, Point, Rect, Sizing, Window, WindowHandle, WindowPlacement,
   };
   use std::cell::RefCell;
-  use std::collections::HashMap;
+  use std::collections::{HashMap, HashSet};
   use windows::Win32::UI::Shell::IVirtualDesktopManager;
 
   thread_local! {
@@ -21,6 +21,8 @@ pub(crate) mod test {
     monitor_windows: HashMap<MonitorHandle, Vec<WindowHandle>>,
     foreground_window: Option<WindowHandle>,
     position_batches: Vec<Vec<(WindowHandle, Rect)>>,
+    deferred_positioning_failures: HashSet<WindowHandle>,
+    deferred_positioning_attempts: HashMap<WindowHandle, usize>,
   }
 
   struct WindowState {
@@ -172,6 +174,23 @@ pub(crate) mod test {
       MOCK_STATE.with(|state| state.borrow().position_batches.clone())
     }
 
+    pub fn fail_deferred_positioning(handle: WindowHandle) {
+      MOCK_STATE.with(|state| {
+        state.borrow_mut().deferred_positioning_failures.insert(handle);
+      });
+    }
+
+    pub fn deferred_positioning_attempts(handle: WindowHandle) -> usize {
+      MOCK_STATE.with(|state| {
+        state
+          .borrow()
+          .deferred_positioning_attempts
+          .get(&handle)
+          .copied()
+          .unwrap_or_default()
+      })
+    }
+
     #[allow(dead_code)]
     pub fn reset() {
       trace!("Mock windows API resets state");
@@ -305,10 +324,20 @@ pub(crate) mod test {
       });
     }
 
-    fn set_window_positions(&self, positions: &[(WindowHandle, Rect)], focused: WindowHandle) {
+    fn set_window_positions(&self, positions: &[(WindowHandle, Rect)], focused: WindowHandle) -> Vec<WindowHandle> {
       trace!("Mock windows API atomically positions [{}] windows", positions.len());
       MOCK_STATE.with(|state| {
         let mut state = state.borrow_mut();
+        for (handle, _) in positions {
+          *state.deferred_positioning_attempts.entry(*handle).or_default() += 1;
+        }
+        let failures = positions
+          .iter()
+          .filter_map(|(handle, _)| state.deferred_positioning_failures.contains(handle).then_some(*handle))
+          .collect::<Vec<_>>();
+        if !failures.is_empty() {
+          return failures;
+        }
         let mut ordered = Vec::with_capacity(positions.len());
         if let Some(position) = positions.iter().find(|(handle, _)| *handle == focused) {
           ordered.push(*position);
@@ -322,7 +351,8 @@ pub(crate) mod test {
           }
         }
         state.position_batches.push(ordered);
-      });
+        Vec::new()
+      })
     }
 
     fn set_window_position_with_dpi_adjustment(
