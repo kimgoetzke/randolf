@@ -167,7 +167,9 @@ active member.
 - `Win` + `Left`/`Right` - selects an adjacent member and animates the outgoing and incoming windows across the strip.
 - `Win` + `Up`/`Down` - retains normal spatial window and monitor navigation (effectively no-op unless you have a
   multi-monitor setup with a monitor below/above).
-- `Win` + `Shift` + `Left`/`Right` - reorders the focused member. Vertical keyboard moves are ignored.
+- `Win` + `Shift` + `Left`/`Right` - reorders the focused member without leaving the strip.
+- `Win` + `Shift` + `Up`/`Down` - moves the focused member to an adjacent monitor, when one exists, near-maximises it
+  there, and releases it from the strip.
 - `Win` + `Ctrl` + `Left`/`Right` - narrow or widen the foreground scrolling layout window through its width presets.
 - Hold `Win` + `Right click` - select a window anywhere and resize it but, on release, snaps to the nearest width preset
   once on release.

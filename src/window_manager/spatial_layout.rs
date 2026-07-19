@@ -1,6 +1,6 @@
 use super::navigation;
 use crate::api::WindowsApi;
-use crate::common::{Direction, MonitorInfo, Placement, Point, Sizing, WindowHandle, WindowPlacement};
+use crate::common::{Direction, Monitor, MonitorInfo, Placement, Point, Sizing, WindowHandle, WindowPlacement};
 use crate::utils::{MINIMUM_WINDOW_DIMENSION, MINIMUM_WINDOW_DIMENSION_DIVISOR};
 
 /// A layout that does not manage any windows. Handles geometry-based window movement, resizing, and follow-up focus.
@@ -25,9 +25,7 @@ impl SpatialLayout {
       let current_monitor = api.get_monitor_handle_for_window_handle(handle);
       if let Some(target_monitor) = monitors.get(direction, current_monitor) {
         debug!("Moving window to [{}]", target_monitor);
-        api.set_window_position(handle, target_monitor.work_area);
-        placement.near_maximise(api, handle, MonitorInfo::from(target_monitor), margin);
-        api.set_cursor_position(&target_monitor.center);
+        self.move_window_to_monitor(api, placement, handle, target_monitor, margin);
       } else {
         debug!("No monitor found in [{:?}] direction, did not move window", direction);
       }
@@ -37,6 +35,20 @@ impl SpatialLayout {
     let cursor_target = Point::from_center_of_sizing(&sizing);
     placement.resize(api, handle, sizing, margin);
     api.set_cursor_position(&cursor_target);
+  }
+
+  /// Moves and near-maximises a window on a target monitor.
+  pub(super) fn move_window_to_monitor<T: WindowsApi>(
+    &self,
+    api: &T,
+    placement: &Placement,
+    handle: WindowHandle,
+    target: &Monitor,
+    margin: i32,
+  ) {
+    api.set_window_position(handle, target.work_area);
+    placement.near_maximise(api, handle, MonitorInfo::from(target), margin);
+    api.set_cursor_position(&target.center);
   }
 
   /// Steps the foreground window through the spatial sizes for a direction.
