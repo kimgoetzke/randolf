@@ -1,6 +1,7 @@
 use crate::api::WindowsApi;
-use crate::common::{Direction, PersistentWorkspaceId, Point, Rect, Sizing, WidthPreset, Window, WindowHandle};
-use crate::window_manager::scrolling_strips::ScrollingStrips;
+use crate::common::{
+  Direction, PersistentWorkspaceId, Point, Rect, ScrollingStrips, Sizing, WidthPreset, Window, WindowHandle,
+};
 use crate::workspace_manager::WorkspaceManager;
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
@@ -312,7 +313,14 @@ impl ScrollingLayout {
     }
   }
 
-  /// Places a workspace's strip windows from their current order.
+  /// Places a workspace's strip windows from their current order. In essence, this method:
+  /// - Calculates each strip member’s target rectangle from the strip order, active window, monitor work area,
+  ///   configured margin, and each window’s width preset
+  /// - Compares the calculated rectangles with cached positions and exits if unchanged
+  /// - Batch-positions the windows, placing the active window first in the Z-order without activating it
+  /// - Collects windows that could not be positioned, marks them as unpositionable and removes them from the strip
+  /// - Recalculates and retries after failures, allowing remaining windows to reflow around removed members
+  /// - Caches the successful final positions to avoid unnecessary future repositioning
   pub(super) fn reflow<T: WindowsApi + Clone>(
     &mut self,
     api: &T,

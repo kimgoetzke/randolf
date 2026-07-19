@@ -1,5 +1,4 @@
 use super::navigation;
-use super::placement::Placement;
 use super::scrolling_layout::ScrollingLayout;
 use super::spatial_layout::SpatialLayout;
 use crate::api::WindowsApi;

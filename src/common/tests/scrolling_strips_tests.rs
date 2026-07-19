@@ -1,5 +1,4 @@
-use crate::common::{Direction, PersistentWorkspaceId, Rect, Sizing, WidthPreset, WindowHandle};
-use crate::window_manager::scrolling_strips::ScrollingStrips;
+use crate::common::{Direction, PersistentWorkspaceId, Rect, ScrollingStrips, Sizing, WidthPreset, WindowHandle};
 
 fn workspace(number: usize) -> PersistentWorkspaceId {
   PersistentWorkspaceId::new([number as u16; 32], number, number == 1)

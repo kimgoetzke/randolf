@@ -1,9 +1,8 @@
 use super::window_manager::WindowManager;
 use crate::api::MockWindowsApi;
-use crate::configuration_provider::{ConfigurationProvider, Layout, WINDOW_MARGIN};
+use crate::configuration_provider::{ConfigurationProvider, Layout};
 use crate::utils::create_temp_directory;
 use crate::workspace_manager::WorkspaceManager;
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 impl WindowManager<MockWindowsApi> {
@@ -20,23 +19,9 @@ impl WindowManager<MockWindowsApi> {
       windows_api: api,
     }
   }
-
-  /// Builds a manager using configuration stored in a temporary test file.
-  pub(crate) fn new_test(api: MockWindowsApi, config_path: PathBuf) -> Self {
-    Self {
-      configuration_provider: Arc::new(Mutex::new(ConfigurationProvider::new_test(config_path))),
-      placement: Default::default(),
-      allow_moving_cursor_after_close_or_minimise: true,
-      scrolling: Default::default(),
-      spatial: Default::default(),
-      workspace_manager: WorkspaceManager::default(),
-      virtual_desktop_manager: None,
-      windows_api: api,
-    }
-  }
 }
 
-/// Builds a test manager whose default layout is scrolling.
+/// Builds a test [`WindowManager`] whose default layout is scrolling.
 pub(super) fn scrolling_manager() -> (WindowManager<MockWindowsApi>, tempfile::TempDir) {
   MockWindowsApi::reset();
   let directory = create_temp_directory();
@@ -54,9 +39,4 @@ pub(super) fn scrolling_manager() -> (WindowManager<MockWindowsApi>, tempfile::T
     windows_api: MockWindowsApi,
   };
   (manager, directory)
-}
-
-/// Changes the window margin used by a test manager.
-pub(super) fn set_margin(margin: i32, manager: &mut WindowManager<MockWindowsApi>) {
-  manager.configuration_provider.lock().unwrap().set_i32(WINDOW_MARGIN, margin);
 }

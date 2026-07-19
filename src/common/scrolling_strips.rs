@@ -2,7 +2,7 @@ use crate::common::{Direction, PersistentWorkspaceId, Rect, Sizing, WidthPreset,
 use std::collections::HashMap;
 
 /// Stores ordered scrolling strip membership and focus for each workspace. Must only be used by
-/// [`crate::window_manager::scrolling_layout::ScrollingLayout`].
+/// [`crate::window_manager::scrolling_layout::ScrollingLayout`] and scrolling layout related code.
 #[derive(Debug, Default)]
 pub(crate) struct ScrollingStrips {
   by_workspace: HashMap<PersistentWorkspaceId, Strip>,
