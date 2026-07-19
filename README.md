@@ -10,7 +10,8 @@
 
 # Meet Randolf
 
-Randolf is a small window management utility for Windows 11 that allows you to:
+Randolf is a small window management utility for Windows 11. Using the default layout configuration (i.e. `spatial`
+layout), it allows you to:
 
 - `Win` + `\` - near-maximise the foreground window (maximise minus margin).
 - `Win` + `Shift` + `Left`/`Up`/`Right`/`Down` or `h`/`j`/`k`/`l` - near-snap (snap minus margin) the foreground window
@@ -148,7 +149,8 @@ mode = "spatial"
 
 ### Spatial layout
 
-The spatial layout is the default, non-imposing layout that you can see in most of the GIFs above.
+The spatial layout is the default, non-imposing layout that you can see in most of the GIFs above. It allows you to
+move windows freely.
 
 | Key                                   | Default value | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 |---------------------------------------|---------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -168,8 +170,7 @@ active member.
 - `Win` + `Up`/`Down` - retains normal spatial window and monitor navigation (effectively no-op unless you have a
   multi-monitor setup with a monitor below/above).
 - `Win` + `Shift` + `Left`/`Right` - reorders the focused member without leaving the strip.
-- `Win` + `Shift` + `Up`/`Down` - moves the focused member to an adjacent monitor, when one exists, near-maximises it
-  there, and releases it from the strip.
+- `Win` + `Shift` + `Up`/`Down` - moves the focused member to an adjacent monitor, when one exists.
 - `Win` + `Ctrl` + `Left`/`Right` - narrow or widen the foreground scrolling layout window through its width presets.
 - Hold `Win` + `Right click` - select a window anywhere and resize it but, on release, snaps to the nearest width preset
   once on release.
@@ -181,10 +182,10 @@ be reconciled.
 Width presets (i.e. the size of a window in the scrolling layout) follow windows between scrolling layout monitors and
 are recalculated for the target monitor. Moving into spatial layout releases the window.
 
-| Key                             | Default value | Description                                                            |
-|---------------------------------|---------------|------------------------------------------------------------------------|
-| `animation_duration_in_ms`      | `120`         | Duration of horizontal scrolling transitions, in milliseconds.         |
-| `reconciliation_interval_in_ms` | `250`         | Interval between external window reconciliation runs, in milliseconds. |
+| Key                             | Default value | Description                                                                   |
+|---------------------------------|---------------|-------------------------------------------------------------------------------|
+| `animation_duration_in_ms`      | `120`         | Duration of horizontal scrolling transitions shifting focus, in milliseconds. |
+| `reconciliation_interval_in_ms` | `250`         | Interval between external window reconciliation runs, in milliseconds.        |
 
 ### Exclusion settings
 
@@ -250,11 +251,14 @@ Randolf was created as a simpler alternative that:
 - Does not require a paid commercial licence
 - Runs as a standalone application
 - Only includes a handful of essential window management features
-- Provides hotkeys to facilitate a clean desktop without forcing automatic tiling
+- Provides hotkeys to facilitate a clean desktop without forcing automatic tiling*
 - Served as a fun, little personal learning project
 
 If you are looking for a feature-rich window manager, I strongly recommend checking
 out [Komorebi](https://github.com/LGUG2Z/komorebi/).
+
+\* This is only true if you use the default `spatial` layout. The `scrolling` layout which was implemented much later
+does enforce window height.
 
 ## How to develop
 
