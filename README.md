@@ -15,8 +15,9 @@ Randolf is a small window management utility for Windows 11 that allows you to:
 - `Win` + `\` - near-maximise the foreground window (maximise minus margin).
 - `Win` + `Shift` + `Left`/`Up`/`Right`/`Down` or `h`/`j`/`k`/`l` - near-snap (snap minus margin) the foreground window
   to the left, top, right, or bottom of the screen or, on repeated press, move it to the next monitor in that direction.
-- `Win` + `Shift` + `Ctrl` + `Left`/`Up`/`Right`/`Down` or `h`/`j`/`k`/`l` - step-resize the foreground window in the
-  given direction.
+- `Win` + `Shift` + `Ctrl` + `Left`/`Up`/`Right`/`Down` or `h`/`j`/`k`/`l` - step-resize the foreground spatial
+  layout window in the given direction.
+- `Win` + `Ctrl` + `Left`/`Right` - narrow or widen the foreground scrolling layout window through its width presets.
 - `Win` + `Left`/`Up`/`Right`/`Down` - move the cursor to the closest window in the direction of the arrow key (and
   activate the window) or to the centre of the closest window-free monitor in that direction, if it exists.
 - `Win` + `Shift` + `q` - close the foreground window.
@@ -156,20 +157,27 @@ The spatial layout is the default, non-imposing layout that you can see in most 
 ### Scrolling layout
 
 On a monitor configured as `scrolling`, Randolf adopts manageable (see `Exclusion settings` below) visible windows at
-startup, ordered left-to-right, and near-maximises them using `window_margin`. Each workspace on that monitor owns an
+startup, ordered left-to-right. Each window's observed width snaps to the nearest of 1/4, 1/3, 1/2, 2/3, 3/4, or the
+near-maximised usable width. Height remains near-maximised at all times. Each workspace on that monitor owns an
 independent ordered strip that you scroll horizontally.
 
-New foreground windows are inserted immediately before the previously active member.
+The foreground window is centred on its monitor. New foreground windows are inserted immediately before the previously
+active member.
 
-- `Win` + `Left`/`Right` - select an adjacent member and animates the outgoing and incoming windows across the strip.
+- `Win` + `Left`/`Right` - selects an adjacent member and animates the outgoing and incoming windows across the strip.
 - `Win` + `Up`/`Down` - retains normal spatial window and monitor navigation (effectively no-op unless you have a
   multi-monitor setup with a monitor below/above).
-- `Win` + `Shift` + `Left`/`Right` - reorders the focused member. Vertical keyboard moves and all keyboard resize
-  commands are ignored in this mode.
+- `Win` + `Shift` + `Left`/`Right` - reorders the focused member. Vertical keyboard moves are ignored.
+- `Win` + `Ctrl` + `Left`/`Right` - narrow or widen the foreground scrolling layout window through its width presets.
+- Hold `Win` + `Right click` - select a window anywhere and resize it but, on release, snaps to the nearest width preset
+  once on release.
 
-Closing, minimising, moving between workspaces, and switching workspaces preserve strip order. Window discovery is
+Closing, minimising, moving between workspaces, and switching workspaces preserves strip order. Window discovery is
 periodic, so externally opened, closed, or moved windows may take up to `reconciliation_interval_in_ms` milliseconds to
 be reconciled.
+
+Width presets (i.e. the size of a window in the scrolling layout) follow windows between scrolling layout monitors and
+are recalculated for the target monitor. Moving into spatial layout releases the window.
 
 | Key                             | Default value | Description                                                            |
 |---------------------------------|---------------|------------------------------------------------------------------------|
