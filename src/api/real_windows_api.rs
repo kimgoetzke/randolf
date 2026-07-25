@@ -1,10 +1,10 @@
-use crate::api::WindowsApi;
+use crate::api::{WindowLookupError, WindowMetadata, WindowsApi};
 use crate::common::{Monitor, MonitorHandle, MonitorInfo, Monitors, Point, Rect, Window, WindowHandle, WindowPlacement};
 use crate::configuration_provider::ExclusionSettings;
 use std::ffi::c_void;
 use std::mem::MaybeUninit;
 use std::{mem, ptr};
-use windows::Win32::Foundation::{HWND, LPARAM, POINT, RECT, WPARAM};
+use windows::Win32::Foundation::{E_ACCESSDENIED, HWND, LPARAM, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
   EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITORINFO, MONITORINFOEXW,
   MonitorFromPoint, MonitorFromWindow,
@@ -14,12 +14,12 @@ use windows::Win32::UI::HiDpi::{GetDpiForMonitor, PROCESS_PER_MONITOR_DPI_AWARE,
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
 use windows::Win32::UI::Shell::{IVirtualDesktopManager, IsUserAnAdmin};
 use windows::Win32::UI::WindowsAndMessaging::{
-  BeginDeferWindowPos, DeferWindowPos, DispatchMessageA, EndDeferWindowPos, EnumWindows, GetClassNameW, GetCursorPos,
-  GetDesktopWindow, GetForegroundWindow, GetWindowInfo, GetWindowPlacement, GetWindowRect, GetWindowTextW,
-  GetWindowThreadProcessId, HWND_TOP, IsIconic, IsWindowVisible, MINMAXINFO, MSG, PM_REMOVE, PeekMessageA, PostMessageW,
-  SW_HIDE, SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOZORDER, SWP_SHOWWINDOW,
-  SendMessageW, SetCursorPos, SetForegroundWindow, SetWindowPlacement, SetWindowPos, ShowWindow, TranslateMessage,
-  WINDOWINFO, WINDOWPLACEMENT, WM_CLOSE, WM_GETMINMAXINFO, WM_PAINT,
+  BeginDeferWindowPos, DeferWindowPos, DispatchMessageA, EndDeferWindowPos, EnumWindows, GA_ROOT, GetAncestor,
+  GetClassNameW, GetCursorPos, GetDesktopWindow, GetForegroundWindow, GetWindowInfo, GetWindowPlacement, GetWindowRect,
+  GetWindowTextW, GetWindowThreadProcessId, HWND_TOP, IsIconic, IsWindow, IsWindowVisible, MINMAXINFO, MSG, PM_REMOVE,
+  PeekMessageA, PostMessageW, SW_HIDE, SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOZORDER,
+  SWP_SHOWWINDOW, SendMessageW, SetCursorPos, SetForegroundWindow, SetWindowPlacement, SetWindowPos, ShowWindow,
+  TranslateMessage, WINDOWINFO, WINDOWPLACEMENT, WM_CLOSE, WM_GETMINMAXINFO, WM_PAINT, WindowFromPoint,
 };
 use windows::core::{BOOL, HRESULT};
 
@@ -184,6 +184,47 @@ impl WindowsApi for RealWindowsApi {
     let mut class_name: [u16; 256] = [0; 256];
     let len = unsafe { GetClassNameW(handle.as_hwnd(), &mut class_name) };
     String::from_utf16_lossy(&class_name[..len as usize])
+  }
+
+  fn get_window_at_point(&self, point: Point) -> Result<WindowMetadata, WindowLookupError> {
+    let hit = unsafe { WindowFromPoint(point.as_point()) };
+    if hit.0.is_null() {
+      return Err(WindowLookupError::NoTarget);
+    }
+    let root = unsafe { GetAncestor(hit, GA_ROOT) };
+    if root.0.is_null() || !unsafe { IsWindow(Some(root)).as_bool() } {
+      return Err(WindowLookupError::Vanished);
+    }
+
+    let handle = WindowHandle::from(root);
+    let mut process_id = 0;
+    unsafe {
+      GetWindowThreadProcessId(root, Some(&mut process_id));
+    }
+    if process_id == std::process::id() {
+      return Err(WindowLookupError::OwnWindow);
+    }
+
+    let mut rect = RECT::default();
+    if let Err(err) = unsafe { GetWindowRect(root, &mut rect) } {
+      return if err.code() == E_ACCESSDENIED {
+        Err(WindowLookupError::AccessDenied)
+      } else {
+        Err(WindowLookupError::Vanished)
+      };
+    }
+    let title = self.get_window_title(&handle);
+    let class_name = self.get_window_class_name(&handle);
+    if !unsafe { IsWindow(Some(root)).as_bool() } {
+      return Err(WindowLookupError::Vanished);
+    }
+
+    Ok(WindowMetadata {
+      handle,
+      title,
+      class_name,
+      rect: Rect::from(rect),
+    })
   }
 
   fn get_window_rect(&self, handle: WindowHandle) -> Option<Rect> {

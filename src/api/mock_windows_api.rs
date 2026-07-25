@@ -1,7 +1,7 @@
 #[allow(unused_variables)]
 #[cfg(test)]
 pub(crate) mod test {
-  use crate::api::WindowsApi;
+  use crate::api::{WindowLookupError, WindowMetadata, WindowsApi};
   use crate::common::{
     Monitor, MonitorHandle, MonitorInfo, Monitors, Point, Rect, Sizing, Window, WindowHandle, WindowPlacement,
   };
@@ -25,10 +25,13 @@ pub(crate) mod test {
     deferred_positioning_failures: HashSet<WindowHandle>,
     deferred_positioning_attempts: HashMap<WindowHandle, usize>,
     window_position_minimum_dimensions: HashMap<WindowHandle, (i32, i32)>,
+    point_targets: HashMap<Point, (WindowHandle, WindowHandle)>,
+    picker_windows: HashSet<WindowHandle>,
   }
 
   struct WindowState {
     window: Window,
+    class_name: String,
     window_placement: WindowPlacement,
     is_minimised: bool,
     is_hidden: bool,
@@ -58,6 +61,18 @@ pub(crate) mod test {
       is_hidden: bool,
       is_foreground: bool,
     ) {
+      Self::add_or_update_window_with_class(handle, title, String::new(), sizing, is_minimised, is_hidden, is_foreground);
+    }
+
+    pub fn add_or_update_window_with_class(
+      handle: WindowHandle,
+      title: String,
+      class_name: String,
+      sizing: Sizing,
+      is_minimised: bool,
+      is_hidden: bool,
+      is_foreground: bool,
+    ) {
       MOCK_STATE.with(|state| {
         let mut state = state.borrow_mut();
         let window = Window::new(handle.into(), title, sizing.clone().into());
@@ -66,6 +81,7 @@ pub(crate) mod test {
           handle,
           WindowState {
             window,
+            class_name,
             window_placement,
             is_minimised,
             is_hidden,
@@ -76,6 +92,18 @@ pub(crate) mod test {
         if is_foreground {
           state.foreground_window = Some(handle);
         }
+      });
+    }
+
+    pub fn set_point_target(point: Point, hit: WindowHandle, root: WindowHandle) {
+      MOCK_STATE.with(|state| {
+        state.borrow_mut().point_targets.insert(point, (hit, root));
+      });
+    }
+
+    pub fn mark_picker_window(handle: WindowHandle) {
+      MOCK_STATE.with(|state| {
+        state.borrow_mut().picker_windows.insert(handle);
       });
     }
 
@@ -303,7 +331,34 @@ pub(crate) mod test {
 
     fn get_window_class_name(&self, handle: &WindowHandle) -> String {
       trace!("Mock windows API gets window class name for {handle}");
-      unimplemented!()
+      MOCK_STATE.with(|state| {
+        state
+          .borrow()
+          .windows
+          .get(handle)
+          .map(|window| window.class_name.clone())
+          .unwrap_or_default()
+      })
+    }
+
+    fn get_window_at_point(&self, point: Point) -> Result<WindowMetadata, WindowLookupError> {
+      MOCK_STATE.with(|state| {
+        let state = state.borrow();
+        let (_, root) = state.point_targets.get(&point).ok_or(WindowLookupError::NoTarget)?;
+        if state.picker_windows.contains(root) {
+          return Err(WindowLookupError::OwnWindow);
+        }
+        let window = state.windows.get(root).ok_or(WindowLookupError::Vanished)?;
+        if window.is_closed {
+          return Err(WindowLookupError::Vanished);
+        }
+        Ok(WindowMetadata {
+          handle: *root,
+          title: window.window.title.clone(),
+          class_name: window.class_name.clone(),
+          rect: window.window.rect,
+        })
+      })
     }
 
     fn get_window_rect(&self, handle: WindowHandle) -> Option<Rect> {
@@ -639,5 +694,94 @@ pub(crate) mod test {
       trace!("Mock windows API checks if window {} is on current desktop", window.handle);
       unimplemented!()
     }
+  }
+
+  #[test]
+  fn point_hit_returns_frozen_top_level_window_metadata() {
+    MockWindowsApi::reset();
+    let point = Point::new(40, 60);
+    let child = WindowHandle::new(41);
+    let root = WindowHandle::new(42);
+    MockWindowsApi::add_or_update_window_with_class(
+      root,
+      "Résumé — 東京".to_string(),
+      "EditorWindow".to_string(),
+      Sizing::new(10, 20, 300, 200),
+      false,
+      false,
+      false,
+    );
+    MockWindowsApi::set_point_target(point, child, root);
+
+    let metadata = MockWindowsApi::new().get_window_at_point(point).unwrap();
+
+    assert_eq!(metadata.handle, root);
+    assert_eq!(metadata.title, "Résumé — 東京");
+    assert_eq!(metadata.class_name, "EditorWindow");
+    assert_eq!(metadata.rect, Rect::new(10, 20, 310, 220));
+  }
+
+  #[test]
+  fn point_hit_rejects_the_window_picker_ui() {
+    MockWindowsApi::reset();
+    let point = Point::new(10, 10);
+    let picker = WindowHandle::new(7);
+    MockWindowsApi::add_or_update_window(
+      picker,
+      "Window Picker".to_string(),
+      Sizing::new(0, 0, 100, 100),
+      false,
+      false,
+      false,
+    );
+    MockWindowsApi::set_point_target(point, picker, picker);
+    MockWindowsApi::mark_picker_window(picker);
+
+    assert_eq!(
+      MockWindowsApi::new().get_window_at_point(point),
+      Err(WindowLookupError::OwnWindow)
+    );
+  }
+
+  #[test]
+  fn point_hit_bypasses_manageability_filter() {
+    MockWindowsApi::reset();
+    let point = Point::new(20, 20);
+    let handle = WindowHandle::new(8);
+    MockWindowsApi::add_or_update_window(
+      handle,
+      "Excluded".to_string(),
+      Sizing::new(0, 0, 100, 100),
+      false,
+      false,
+      false,
+    );
+    MockWindowsApi::mark_window_unmanageable(handle);
+    MockWindowsApi::set_point_target(point, handle, handle);
+
+    assert_eq!(MockWindowsApi::new().get_window_at_point(point).unwrap().handle, handle);
+  }
+
+  #[test]
+  fn point_without_target_returns_typed_absence() {
+    MockWindowsApi::reset();
+
+    assert_eq!(
+      MockWindowsApi::new().get_window_at_point(Point::new(-1, -1)),
+      Err(WindowLookupError::NoTarget)
+    );
+  }
+
+  #[test]
+  fn point_hit_to_missing_root_returns_vanished_error() {
+    MockWindowsApi::reset();
+    let point = Point::new(30, 30);
+    let missing = WindowHandle::new(9);
+    MockWindowsApi::set_point_target(point, missing, missing);
+
+    assert_eq!(
+      MockWindowsApi::new().get_window_at_point(point),
+      Err(WindowLookupError::Vanished)
+    );
   }
 }

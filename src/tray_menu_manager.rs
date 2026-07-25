@@ -36,6 +36,7 @@ enum Event {
   OpenRandolfExecutableFolder,
   OpenRandolfConfigFolder,
   OpenRandolfDataFolder,
+  IdentifyWindow,
 }
 
 impl TrayMenuManager {
@@ -163,20 +164,25 @@ impl TrayMenuManager {
           config.set_bool(FORCE_USING_ADMIN_PRIVILEGES, !is_enabled);
           debug!("Set [{:?}] to [{}]", Event::ToggleForceUsingAdminPrivileges, !is_enabled);
         }
+        Event::IdentifyWindow => {
+          command_sender
+            .send(Command::ToggleWindowPicker)
+            .expect("Failed to send command to toggle Window Picker");
+        }
         Event::OpenRandolfExecutableFolder => {
           command_sender
             .send(Command::OpenRandolfExecutableFolder)
-            .expect("Failed to send open randolf executable folder command");
+            .expect("Failed to send open Randolf executable folder command");
         }
         Event::OpenRandolfConfigFolder => {
           command_sender
             .send(Command::OpenRandolfConfigFolder)
-            .expect("Failed to send open randolf config folder command");
+            .expect("Failed to send open Randolf config folder command");
         }
         Event::OpenRandolfDataFolder => {
           command_sender
             .send(Command::OpenRandolfDataFolder)
-            .expect("Failed to send open randolf data folder command");
+            .expect("Failed to send open Randolf data folder command");
         }
         Event::RestartRandolf(as_admin) => {
           let mut config = unlocked_config_provider(&config_provider);
@@ -262,6 +268,7 @@ fn build_menu(config_provider: &Arc<Mutex<ConfigurationProvider>>) -> MenuBuilde
       icon: Some(Icon::from_buffer(icon_bytes, Some(32), Some(32)).unwrap()),
     })
     .separator()
+    .item("Identify window...", Event::IdentifyWindow)
     .submenu(
       "Explore debug settings",
       MenuBuilder::new().item("Print monitor layout to log file", Event::LogMonitorLayout),

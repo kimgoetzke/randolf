@@ -11,6 +11,7 @@ mod tray_menu_manager;
 mod utils;
 mod window_drag_manager;
 mod window_manager;
+mod window_picker;
 mod workspace_guard;
 mod workspace_manager;
 
@@ -30,6 +31,7 @@ use crate::tray_menu_manager::TrayMenuManager;
 use crate::utils::CONFIGURATION_PROVIDER_LOCK;
 use crate::window_drag_manager::WindowDragManager;
 use crate::window_manager::WindowManager;
+use crate::window_picker::{ResultDialogAction, WindowPicker, show_picker_error, show_result_dialog};
 use common::Command;
 use crossbeam_channel::{Receiver, unbounded};
 use std::cell::RefCell;
@@ -52,7 +54,7 @@ fn main() {
     command_sender.clone(),
   )));
 
-  // Create Windows API, application launcher, and log current configuration
+  // Create Windows API, application launcher, and window picker
   let windows_api = RealWindowsApi::new(
     configuration_manager
       .lock()
@@ -63,6 +65,7 @@ fn main() {
     configuration_manager.clone(),
     windows_api.clone(),
   )));
+  let window_picker = Rc::new(RefCell::new(WindowPicker::new(windows_api.clone(), command_sender.clone())));
 
   // Log loaded configuration for reference
   configuration_manager
@@ -110,6 +113,7 @@ fn main() {
     configuration_manager,
     command_receiver,
     tray_menu_manager,
+    window_picker,
     launcher,
     wm,
     interrupt_handle,
@@ -121,6 +125,7 @@ fn run_loop(
   configuration_manager: Arc<Mutex<ConfigurationProvider>>,
   command_receiver: Receiver<Command>,
   tray_menu_manager: Rc<RefCell<TrayMenuManager>>,
+  window_picker: Rc<RefCell<WindowPicker<RealWindowsApi>>>,
   launcher: Rc<RefCell<ApplicationLauncher<RealWindowsApi>>>,
   wm: Rc<RefCell<WindowManager<RealWindowsApi>>>,
   interrupt_handle: InterruptHandle,
@@ -149,6 +154,43 @@ fn run_loop(
         }
         Command::MoveWindowToWorkspace(id) => wm.borrow_mut().move_window_to_workspace(id),
         Command::DragWindows(is_enabled) => tray_menu_manager.borrow_mut().set_window_drag_icon(is_enabled),
+        Command::ToggleWindowPicker => match window_picker.borrow_mut().toggle() {
+          Ok(_) => (),
+          Err(err) => {
+            window_picker.borrow_mut().cancel();
+            error!("Failed to start Window Picker: {err}");
+            if let Err(dialog_err) = show_picker_error(&format!("Failed to start Window Picker: {err}")) {
+              error!("Failed to show Window Picker start error: {dialog_err}");
+            }
+          }
+        },
+        Command::WindowPickerSelected(point) => {
+          let selection = window_picker.borrow_mut().select(point);
+          match selection {
+            Ok(metadata) => match show_result_dialog(&metadata) {
+              Ok(ResultDialogAction::PickAgain) => match window_picker.borrow_mut().toggle() {
+                Ok(_) => (),
+                Err(err) => {
+                  error!("Failed to restart Window Picker: {err}");
+                  if let Err(dialog_err) = show_picker_error(&format!("Failed to restart Window Picker: {err}")) {
+                    error!("Failed to show Window Picker restart error: {dialog_err}");
+                  }
+                }
+              },
+              Ok(ResultDialogAction::Close) => {}
+              Err(err) => error!("Failed to show Window Picker result dialogue: {err}"),
+            },
+            Err(err) => {
+              error!("Window Picker selection failed: {err}");
+              if let Err(dialog_err) = show_picker_error(&err.to_string()) {
+                error!("Failed to show Window Picker selection error: {dialog_err}");
+              }
+            }
+          }
+        }
+        Command::CancelWindowPicker => {
+          window_picker.borrow_mut().cancel();
+        }
         Command::OpenApplication(path, as_admin) => launcher.borrow_mut().launch(path, None, as_admin),
         Command::OpenRandolfExecutableFolder => {
           let args = launcher.borrow_mut().get_executable_folder();
@@ -163,6 +205,7 @@ fn run_loop(
           launcher.borrow_mut().launch("explorer.exe".to_string(), Some(&args), false);
         }
         Command::RestartRandolf(as_admin) => {
+          window_picker.borrow_mut().cancel();
           wm.borrow_mut().restore_all_managed_windows();
           interrupt_handle.interrupt();
           let as_admin = configuration_manager
@@ -175,6 +218,7 @@ fn run_loop(
           std::process::exit(0);
         }
         Command::Exit => {
+          window_picker.borrow_mut().cancel();
           wm.borrow_mut().restore_all_managed_windows();
           interrupt_handle.interrupt();
           info!("Application exited cleanly");
@@ -182,6 +226,7 @@ fn run_loop(
         }
       }
     }
+    window_picker.borrow_mut().update_hover_tooltip_if_picker_active();
     run_if_due(
       &mut last_scrolling_layout_reconciliation,
       scrolling_reconciliation_interval,

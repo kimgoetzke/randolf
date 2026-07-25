@@ -1,5 +1,37 @@
 use crate::common::{MonitorHandle, MonitorInfo, Monitors, Point, Rect, Window, WindowHandle, WindowPlacement};
+use std::fmt::{Display, Formatter};
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
+
+/// Frozen identity of a visible top-level window.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WindowMetadata {
+  pub handle: WindowHandle,
+  pub title: String,
+  pub class_name: String,
+  pub rect: Rect,
+}
+
+/// Failure to identify a visible top-level window.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum WindowLookupError {
+  NoTarget,
+  Vanished,
+  OwnWindow,
+  AccessDenied,
+}
+
+impl Display for WindowLookupError {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    match self {
+      Self::NoTarget => write!(f, "No window was found at that point"),
+      Self::Vanished => write!(f, "The selected window is no longer available"),
+      Self::OwnWindow => write!(f, "Randolf's Window Picker cannot select itself"),
+      Self::AccessDenied => write!(f, "Randolf does not have permission to inspect that window"),
+    }
+  }
+}
+
+impl std::error::Error for WindowLookupError {}
 
 pub trait WindowsApi {
   fn is_running_as_admin(&self) -> bool;
@@ -13,6 +45,8 @@ pub trait WindowsApi {
   fn get_all_visible_windows_within_area(&self, rect: Rect) -> Vec<Window>;
   fn get_window_title(&self, handle: &WindowHandle) -> String;
   fn get_window_class_name(&self, handle: &WindowHandle) -> String;
+  /// Retrieve raw top-level window metadata at a screen point.
+  fn get_window_at_point(&self, point: Point) -> Result<WindowMetadata, WindowLookupError>;
   /// Returns the on-screen bounding rectangle for the given window.
   fn get_window_rect(&self, handle: WindowHandle) -> Option<Rect>;
   /// Returns the DWM extended frame bounds (includes drop shadows) when available.
