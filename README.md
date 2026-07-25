@@ -197,13 +197,8 @@ tooltips, and tray overflow pop-ups.
 
 You can add additional windows to the exclusion list by adding their title or class name to the `[exclusion_settings]`
 section. To identify those exact values, open Randolf's tray menu and select **Identify window…**. The Window Picker
-previews the window title and window class name under the pointer. Click to freeze the visible root/top-level window and
-keep its values open, or cancel with `Esc`, right-click, or **Identify window…** again. The result's **Pick another
-window** action restarts the picker.
-
-Identification does not edit `randolf.toml`, change runtime exclusions, or use the clipboard; add the displayed value to
-the configuration manually. Already-excluded windows can still be inspected. Randolf may be unable to inspect an
-elevated application unless Randolf is also running with administrator privileges.
+previews the window title and window class name under the pointer. Identification does not edit `randolf.toml`.
+Randolf may be unable to inspect an elevated application unless Randolf is also running with administrator privileges.
 
 ### Application launcher hotkeys
 
