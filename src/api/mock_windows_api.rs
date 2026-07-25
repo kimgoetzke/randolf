@@ -20,6 +20,7 @@ pub(crate) mod test {
     monitors: HashMap<MonitorHandle, MonitorState>,
     monitor_windows: HashMap<MonitorHandle, Vec<WindowHandle>>,
     foreground_window: Option<WindowHandle>,
+    pointer_interaction_active: bool,
     position_batches: Vec<Vec<(WindowHandle, Rect)>>,
     deferred_positioning_failures: HashSet<WindowHandle>,
     deferred_positioning_attempts: HashMap<WindowHandle, usize>,
@@ -159,6 +160,10 @@ pub(crate) mod test {
       });
     }
 
+    pub fn set_pointer_interaction_active(active: bool) {
+      MOCK_STATE.with(|state| state.borrow_mut().pointer_interaction_active = active);
+    }
+
     /// Configures the minimum dimensions enforced during window positioning.
     pub fn set_window_position_minimum_dimensions(handle: WindowHandle, width: i32, height: i32) {
       MOCK_STATE.with(|state| {
@@ -217,9 +222,20 @@ pub(crate) mod test {
       true
     }
 
+    fn get_raw_foreground_window(&self) -> Option<WindowHandle> {
+      trace!("Mock windows API gets raw foreground window");
+      MOCK_STATE.with(|state| state.borrow().foreground_window)
+    }
+
     fn get_foreground_window(&self) -> Option<WindowHandle> {
-      trace!("Mock windows API gets foreground window");
-      MOCK_STATE.with(|state| state.borrow_mut().foreground_window)
+      trace!("Mock windows API gets managed foreground window");
+      self
+        .get_raw_foreground_window()
+        .filter(|handle| !self.is_not_a_managed_window(handle))
+    }
+
+    fn is_pointer_interaction_active(&self) -> bool {
+      MOCK_STATE.with(|state| state.borrow().pointer_interaction_active)
     }
 
     fn set_foreground_window(&self, handle: WindowHandle) {

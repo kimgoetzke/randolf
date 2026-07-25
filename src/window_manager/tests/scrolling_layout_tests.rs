@@ -39,10 +39,21 @@ fn scrolling_reconciliation_ignores_non_manageable_windows() {
 }
 
 #[test]
-fn scrolling_reconciliation_does_not_steal_focus_or_mouse_from_unmanaged_popup() {
+fn unmanaged_raw_foreground_prevents_all_scrolling_reconciliation_effects() {
   let (mut manager, _directory) = scrolling_manager();
   manager.reconcile_layouts();
-  let tray_popup = WindowHandle::new(2);
+  let candidate = WindowHandle::new(2);
+  let candidate_sizing = Sizing::new(500, 50, 100, 100);
+  MockWindowsApi::add_or_update_window(
+    candidate,
+    "Candidate".to_string(),
+    candidate_sizing.clone(),
+    false,
+    false,
+    false,
+  );
+  MockWindowsApi::place_window(candidate, 1.into());
+  let tray_popup = WindowHandle::new(3);
   MockWindowsApi::add_or_update_window(
     tray_popup,
     "Tray popup".to_string(),
@@ -60,8 +71,119 @@ fn scrolling_reconciliation_does_not_steal_focus_or_mouse_from_unmanaged_popup()
   manager.reconcile_layouts();
 
   assert!(MockWindowsApi::position_batches().is_empty());
-  assert_eq!(manager.windows_api.get_foreground_window(), Some(tray_popup));
+  assert_eq!(
+    manager.windows_api.get_window_placement(candidate).unwrap(),
+    WindowPlacement::new_from_sizing(candidate_sizing)
+  );
+  assert_eq!(manager.windows_api.get_raw_foreground_window(), Some(tray_popup));
+  assert_eq!(manager.windows_api.get_foreground_window(), None);
   assert_eq!(manager.windows_api.get_cursor_position(), click_position);
+}
+
+#[test]
+fn active_pointer_interaction_prevents_membership_and_position_changes() {
+  let (mut manager, _directory) = scrolling_manager();
+  manager.reconcile_layouts();
+  let existing_placement = manager.windows_api.get_window_placement(1.into()).unwrap();
+  let candidate = WindowHandle::new(2);
+  let candidate_sizing = Sizing::new(500, 50, 100, 100);
+  MockWindowsApi::add_or_update_window(
+    candidate,
+    "Candidate".to_string(),
+    candidate_sizing.clone(),
+    false,
+    false,
+    false,
+  );
+  MockWindowsApi::place_window(candidate, 1.into());
+  MockWindowsApi::set_pointer_interaction_active(true);
+  MockWindowsApi::clear_position_batches();
+
+  manager.reconcile_layouts();
+
+  assert!(MockWindowsApi::position_batches().is_empty());
+  assert_eq!(
+    manager.windows_api.get_window_placement(1.into()).unwrap(),
+    existing_placement
+  );
+  assert_eq!(
+    manager.windows_api.get_window_placement(candidate).unwrap(),
+    WindowPlacement::new_from_sizing(candidate_sizing)
+  );
+}
+
+#[test]
+fn scrolling_reconciliation_resumes_after_pointer_interaction_ends() {
+  let (mut manager, _directory) = scrolling_manager();
+  manager.reconcile_layouts();
+  let candidate = WindowHandle::new(2);
+  MockWindowsApi::add_or_update_window(
+    candidate,
+    "Candidate".to_string(),
+    Sizing::new(500, 50, 100, 100),
+    false,
+    false,
+    false,
+  );
+  MockWindowsApi::place_window(candidate, 1.into());
+  MockWindowsApi::set_pointer_interaction_active(true);
+  manager.reconcile_layouts();
+
+  MockWindowsApi::set_pointer_interaction_active(false);
+  manager.reconcile_layouts();
+
+  assert_eq!(manager.windows_api.get_foreground_window(), Some(candidate));
+  assert_eq!(
+    manager
+      .windows_api
+      .get_window_placement(candidate)
+      .unwrap()
+      .normal_position
+      .left,
+    725
+  );
+}
+
+#[test]
+fn scrolling_reconciliation_resumes_after_unmanaged_foreground_clears() {
+  let (mut manager, _directory) = scrolling_manager();
+  manager.reconcile_layouts();
+  let candidate = WindowHandle::new(2);
+  MockWindowsApi::add_or_update_window(
+    candidate,
+    "Candidate".to_string(),
+    Sizing::new(500, 50, 100, 100),
+    false,
+    false,
+    false,
+  );
+  MockWindowsApi::place_window(candidate, 1.into());
+  let popup = WindowHandle::new(3);
+  MockWindowsApi::add_or_update_window(
+    popup,
+    "Popup".to_string(),
+    Sizing::new(1500, 900, 200, 100),
+    false,
+    false,
+    true,
+  );
+  MockWindowsApi::place_window(popup, 1.into());
+  MockWindowsApi::mark_window_unmanageable(popup);
+  manager.reconcile_layouts();
+
+  MockWindowsApi::set_foreground_window(candidate);
+  manager.reconcile_layouts();
+
+  assert_eq!(manager.windows_api.get_foreground_window(), Some(candidate));
+  assert_eq!(
+    manager
+      .windows_api
+      .get_window_placement(candidate)
+      .unwrap()
+      .normal_position
+      .left,
+    725
+  );
 }
 
 #[test]

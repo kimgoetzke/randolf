@@ -3,6 +3,9 @@ use windows::Win32::UI::Shell::IVirtualDesktopManager;
 
 pub trait WindowsApi {
   fn is_running_as_admin(&self) -> bool;
+  /// Returns the raw foreground window reported by Windows, including unmanaged UI.
+  fn get_raw_foreground_window(&self) -> Option<WindowHandle>;
+  /// Returns the foreground window only when it is considered "managed."
   fn get_foreground_window(&self) -> Option<WindowHandle>;
   fn set_foreground_window(&self, handle: WindowHandle);
   fn get_all_windows(&self) -> Vec<Window>;
@@ -14,6 +17,8 @@ pub trait WindowsApi {
   fn get_window_rect(&self, handle: WindowHandle) -> Option<Rect>;
   /// Returns the DWM extended frame bounds (includes drop shadows) when available.
   fn get_extended_frame_bounds(&self, handle: WindowHandle) -> Option<Rect>;
+  /// Reports whether a mouse button is currently held.
+  fn is_pointer_interaction_active(&self) -> bool;
   fn is_window_minimised(&self, handle: WindowHandle) -> bool;
   fn is_not_a_managed_window(&self, handle: &WindowHandle) -> bool;
   fn is_window_hidden(&self, handle: &WindowHandle) -> bool;

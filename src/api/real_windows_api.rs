@@ -11,6 +11,7 @@ use windows::Win32::Graphics::Gdi::{
 };
 use windows::Win32::System::Com::{CLSCTX_ALL, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx};
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, PROCESS_PER_MONITOR_DPI_AWARE, SetProcessDpiAwareness};
+use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
 use windows::Win32::UI::Shell::{IVirtualDesktopManager, IsUserAnAdmin};
 use windows::Win32::UI::WindowsAndMessaging::{
   BeginDeferWindowPos, DeferWindowPos, DispatchMessageA, EndDeferWindowPos, EnumWindows, GetClassNameW, GetCursorPos,
@@ -20,13 +21,14 @@ use windows::Win32::UI::WindowsAndMessaging::{
   SendMessageW, SetCursorPos, SetForegroundWindow, SetWindowPlacement, SetWindowPos, ShowWindow, TranslateMessage,
   WINDOWINFO, WINDOWPLACEMENT, WM_CLOSE, WM_GETMINMAXINFO, WM_PAINT,
 };
-use windows::core::BOOL;
-use windows::core::HRESULT;
+use windows::core::{BOOL, HRESULT};
 
 const TRANSIENT_WINDOW_CLASSES: &[&str] = &[
   "#32768",
   "tooltips_class32",
   "NotifyIconOverflowWindow",
+  "Microsoft.UI.Content.PopupWindowSiteBridge",
+  "SysDragImage",
   "Xaml_WindowedPopupClass",
   "TopLevelWindowForOverflowXamlIsland",
 ];
@@ -43,6 +45,31 @@ impl RealWindowsApi {
       ignored_window_titles: settings.window_titles.clone(),
       ignored_class_names: settings.window_class_names.clone(),
     }
+  }
+
+  fn get_unmanageability_reason(&self, handle: &WindowHandle) -> Option<String> {
+    let mut process_id = 0;
+    unsafe {
+      GetWindowThreadProcessId(handle.as_hwnd(), Some(&mut process_id));
+    }
+    if process_id == std::process::id() {
+      return Some("Randolf process itself".to_string());
+    }
+
+    let class_name = self.get_window_class_name(handle);
+    if is_transient_window_class(&class_name) {
+      return Some(format!("built-in transient class [{class_name}]"));
+    }
+    if self.ignored_class_names.contains(&class_name) {
+      return Some(format!("listed as ignored class [{class_name}] in configuration"));
+    }
+
+    let title = self.get_window_title(handle);
+    if self.ignored_window_titles.contains(&title) {
+      return Some(format!("listed as ignored title [{title}] in configuration"));
+    }
+
+    None
   }
 }
 
@@ -61,15 +88,15 @@ impl WindowsApi for RealWindowsApi {
     }
   }
 
+  fn get_raw_foreground_window(&self) -> Option<WindowHandle> {
+    let handle = WindowHandle::from(unsafe { GetForegroundWindow() });
+    (handle.hwnd != 0).then_some(handle)
+  }
+
   fn get_foreground_window(&self) -> Option<WindowHandle> {
-    let hwnd = unsafe { GetForegroundWindow() };
-
-    let handle = WindowHandle::from(hwnd);
-    if self.is_not_a_managed_window(&handle) {
-      return None;
-    }
-
-    Some(handle)
+    self
+      .get_raw_foreground_window()
+      .filter(|handle| !self.is_not_a_managed_window(handle))
   }
 
   fn set_foreground_window(&self, handle: WindowHandle) {
@@ -187,39 +214,22 @@ impl WindowsApi for RealWindowsApi {
     }
   }
 
+  fn is_pointer_interaction_active(&self) -> bool {
+    let (left_button, right_button) = pointer_button_state();
+    left_button || right_button
+  }
+
   fn is_window_minimised(&self, handle: WindowHandle) -> bool {
     unsafe { IsIconic(handle.as_hwnd()).as_bool() }
   }
 
   fn is_not_a_managed_window(&self, handle: &WindowHandle) -> bool {
-    let mut process_id = 0;
-    unsafe {
-      GetWindowThreadProcessId(handle.as_hwnd(), Some(&mut process_id));
+    if let Some(reason) = self.get_unmanageability_reason(handle) {
+      trace!("Excluding window {handle}: {reason}");
+      true
+    } else {
+      false
     }
-    if process_id == std::process::id() {
-      return true;
-    }
-
-    let class_name = self.get_window_class_name(handle);
-    let mut result = TRANSIENT_WINDOW_CLASSES.contains(&class_name.as_str());
-    if self.ignored_class_names.contains(&class_name) {
-      result = true;
-    }
-
-    let title = self.get_window_title(handle);
-    if self.ignored_window_titles.contains(&title) {
-      result = true;
-    }
-
-    // debug!(
-    //   "{}  {} {} being managed (class name [{}] and title [\"{}\"])",
-    //   if result { "⛔" } else { "✅" },
-    //   handle,
-    //   if result { "is NOT" } else { "is" },
-    //   class_name,
-    //   title,
-    // );
-    result
   }
 
   fn is_window_hidden(&self, handle: &WindowHandle) -> bool {
@@ -612,6 +622,19 @@ impl WindowsApi for RealWindowsApi {
   }
 }
 
+fn is_transient_window_class(class_name: &str) -> bool {
+  TRANSIENT_WINDOW_CLASSES.contains(&class_name)
+}
+
+fn pointer_button_state() -> (bool, bool) {
+  unsafe {
+    (
+      GetAsyncKeyState(VK_LBUTTON.0 as i32) < 0,
+      GetAsyncKeyState(VK_RBUTTON.0 as i32) < 0,
+    )
+  }
+}
+
 extern "system" fn enum_windows_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
   unsafe {
     let windows = &mut *(lparam.0 as *mut Vec<Window>);
@@ -726,5 +749,16 @@ pub fn do_process_windows_messages() {
       let _ = TranslateMessage(msg.as_ptr());
       DispatchMessageA(msg.as_ptr());
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::is_transient_window_class;
+
+  #[test]
+  fn is_transient_window_class_includes_shell_popup_and_drag_image_classes() {
+    assert!(is_transient_window_class("Microsoft.UI.Content.PopupWindowSiteBridge"));
+    assert!(is_transient_window_class("SysDragImage"));
   }
 }

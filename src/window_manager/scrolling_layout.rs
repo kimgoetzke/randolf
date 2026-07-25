@@ -115,10 +115,16 @@ impl ScrollingLayout {
       return;
     }
 
-    let foreground = api.get_foreground_window();
-    if foreground.is_some_and(|handle| api.is_not_a_managed_window(&handle)) {
+    if api.is_pointer_interaction_active() {
+      trace!("Skipping scrolling reconciliation during an active pointer interaction");
       return;
     }
+    let raw_foreground_handle = api.get_raw_foreground_window();
+    if raw_foreground_handle.is_some_and(|handle| api.is_not_a_managed_window(&handle)) {
+      trace!("Skipping scrolling reconciliation while unmanaged window {raw_foreground_handle:?} owns foreground");
+      return;
+    }
+    let managed_foreground_handle = api.get_foreground_window();
 
     let previous_workspace = self
       .previous_foreground_window
@@ -132,7 +138,7 @@ impl ScrollingLayout {
       workspace_manager,
       active_workspaces,
       &visible_members,
-      foreground,
+      managed_foreground_handle,
       &transferred_presets,
       margin,
     );
@@ -143,7 +149,7 @@ impl ScrollingLayout {
     self.reconcile_focus(
       api,
       workspace_manager,
-      foreground,
+      managed_foreground_handle,
       previous_workspace,
       newly_focused_workspace,
       margin,
