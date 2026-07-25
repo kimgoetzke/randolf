@@ -194,7 +194,7 @@ fn run_loop(
         }
       }
     }
-    window_picker.borrow_mut().update_hover_tooltip_if_active();
+    window_picker.borrow_mut().refresh_hover_preview();
     run_if_due(
       &mut last_scrolling_layout_reconciliation,
       scrolling_reconciliation_interval,
