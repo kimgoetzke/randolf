@@ -1,3 +1,5 @@
+mod input_capture;
+mod native_hooks;
 mod native_ui;
 #[cfg(test)]
 mod tests;
