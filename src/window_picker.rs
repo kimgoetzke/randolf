@@ -26,7 +26,6 @@ const TOOLTIP_OFFSET_X: i32 = 18;
 const TOOLTIP_OFFSET_Y: i32 = 24;
 const PICK_AGAIN_BUTTON_ID: i32 = 1001;
 const CLOSE_BUTTON_ID: i32 = 1002;
-
 static G_PICKER_SENDER: OnceLock<Sender<Command>> = OnceLock::new();
 static G_PICKER_ACTIVE: AtomicBool = AtomicBool::new(false);
 static G_LEFT_BUTTON_DOWN: AtomicBool = AtomicBool::new(false);
@@ -36,22 +35,26 @@ static G_SELECTION_X: AtomicI32 = AtomicI32::new(0);
 static G_SELECTION_Y: AtomicI32 = AtomicI32::new(0);
 static G_COMPLETION_GATE: CompletionGate = CompletionGate::new();
 
+/// Allows one outcome command per picker session.
 #[derive(Debug, Default)]
 struct CompletionGate {
   completed: AtomicBool,
 }
 
 impl CompletionGate {
+  /// Creates an incomplete gate.
   const fn new() -> Self {
     Self {
       completed: AtomicBool::new(false),
     }
   }
 
+  /// Allows the next completion attempt.
   fn reset(&self) {
     self.completed.store(false, Ordering::Release);
   }
 
+  /// Claims completion unless another attempt completed first.
   fn try_complete(&self) -> bool {
     !self.completed.swap(true, Ordering::AcqRel)
   }
@@ -59,27 +62,27 @@ impl CompletionGate {
 
 /// Window Picker lifecycle state.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum PickerStatus {
+enum PickerStatus {
   Inactive,
   Active,
 }
 
 /// Native work required by a picker transition.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum PickerAction {
+enum PickerAction {
   Activate,
   Cancel,
 }
 
 /// Tracks one non-stacking Window Picker session.
 #[derive(Debug, Default)]
-pub struct PickerSession {
+struct PickerSession {
   active: bool,
 }
 
 impl PickerSession {
   /// Toggles active mode, cancelling an existing session.
-  pub fn toggle(&mut self) -> PickerAction {
+  fn toggle(&mut self) -> PickerAction {
     self.active = !self.active;
     if self.active {
       PickerAction::Activate
@@ -89,12 +92,12 @@ impl PickerSession {
   }
 
   /// Finishes selection or cancellation.
-  pub fn finish(&mut self) {
+  fn finish(&mut self) {
     self.active = false;
   }
 
   /// Returns the current lifecycle state.
-  pub fn status(&self) -> PickerStatus {
+  fn status(&self) -> PickerStatus {
     if self.active {
       PickerStatus::Active
     } else {
@@ -105,7 +108,7 @@ impl PickerSession {
 
 /// Action selected from the frozen result dialogue.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum ResultDialogAction {
+enum ResultDialogAction {
   PickAgain,
   Close,
 }
@@ -133,8 +136,19 @@ impl<A: WindowsApi> WindowPicker<A> {
     }
   }
 
-  /// Toggles the picker and returns whether it is active.
-  pub fn toggle(&mut self) -> WindowsResult<bool> {
+  /// Handles a picker toggle command.
+  pub fn handle_toggle(&mut self) {
+    if let Err(err) = self.toggle() {
+      self.cancel();
+      error!("Failed to start Window Picker: {err}");
+      if let Err(dialog_err) = show_picker_error_dialog(&format!("Failed to start Window Picker: {err}")) {
+        error!("Failed to show Window Picker start error: {dialog_err}");
+      }
+    }
+  }
+
+  /// Transitions between active and inactive picker states.
+  fn toggle(&mut self) -> WindowsResult<bool> {
     match self.session.toggle() {
       PickerAction::Activate => {
         let tooltip = match TrackingTooltip::new() {
@@ -164,19 +178,45 @@ impl<A: WindowsApi> WindowPicker<A> {
     }
   }
 
+  /// Handles a completed picker selection.
+  pub fn handle_selection(&mut self, point: Point) {
+    let selection = self.select(point);
+    match selection {
+      Ok(metadata) => match show_result_dialog(&metadata) {
+        Ok(ResultDialogAction::PickAgain) => match self.toggle() {
+          Ok(_) => (),
+          Err(err) => {
+            error!("Failed to restart Window Picker: {err}");
+            if let Err(dialog_err) = show_picker_error_dialog(&format!("Failed to restart Window Picker: {err}")) {
+              error!("Failed to show Window Picker restart error: {dialog_err}");
+            }
+          }
+        },
+        Ok(ResultDialogAction::Close) => {}
+        Err(err) => error!("Failed to show Window Picker result dialogue: {err}"),
+      },
+      Err(err) => {
+        error!("Window Picker selection failed: {err}");
+        if let Err(dialog_err) = show_picker_error_dialog(&err.to_string()) {
+          error!("Failed to show Window Picker selection error: {dialog_err}");
+        }
+      }
+    }
+  }
+
   /// Cancels active mode and releases native resources.
   pub fn cancel(&mut self) {
     self.deactivate();
   }
 
-  /// Freezes the selected point after releasing native resources.
-  pub fn select(&mut self, point: Point) -> Result<WindowMetadata, WindowLookupError> {
+  /// Releases native resources and resolves the selected window.
+  fn select(&mut self, point: Point) -> Result<WindowMetadata, WindowLookupError> {
     self.deactivate();
     self.api.get_window_at_point(point)
   }
 
   /// Refreshes hover metadata at a bounded rate.
-  pub fn update_hover_tooltip_if_picker_active(&mut self) {
+  pub fn update_hover_tooltip_if_active(&mut self) {
     if self.session.status() != PickerStatus::Active || self.last_hover_update.elapsed() < HOVER_INTERVAL {
       return;
     }
@@ -191,6 +231,7 @@ impl<A: WindowsApi> WindowPicker<A> {
     }
   }
 
+  /// Ends the session and releases native resources.
   fn deactivate(&mut self) {
     self.session.finish();
     self.hooks = None;
@@ -199,13 +240,14 @@ impl<A: WindowsApi> WindowPicker<A> {
 }
 
 impl<A: WindowsApi> Drop for WindowPicker<A> {
+  /// Releases native picker resources.
   fn drop(&mut self) {
     self.deactivate();
   }
 }
 
-/// Shows the frozen title and class until the user chooses an action.
-pub fn show_result_dialog(metadata: &WindowMetadata) -> WindowsResult<ResultDialogAction> {
+/// Shows selected window metadata and returns the requested follow-up action.
+fn show_result_dialog(metadata: &WindowMetadata) -> WindowsResult<ResultDialogAction> {
   let title = wide("Randolf Window Picker");
   let instruction = wide("Selected top-level window");
   let content = wide(&result_content(metadata));
@@ -239,8 +281,8 @@ pub fn show_result_dialog(metadata: &WindowMetadata) -> WindowsResult<ResultDial
   Ok(dialog_action(selected_button))
 }
 
-/// Shows an explicit selection failure.
-pub fn show_picker_error(message: &str) -> WindowsResult<()> {
+/// Shows a picker error in a native task dialogue.
+fn show_picker_error_dialog(message: &str) -> WindowsResult<()> {
   let message = wide(message);
   let mut selected_button = 0;
   unsafe {
@@ -257,6 +299,7 @@ pub fn show_picker_error(message: &str) -> WindowsResult<()> {
   }
 }
 
+/// Maps a native dialogue button to a picker action.
 fn dialog_action(button_id: i32) -> ResultDialogAction {
   if button_id == PICK_AGAIN_BUTTON_ID {
     ResultDialogAction::PickAgain
@@ -265,6 +308,7 @@ fn dialog_action(button_id: i32) -> ResultDialogAction {
   }
 }
 
+/// Formats selected window metadata for the result dialogue.
 fn result_content(metadata: &WindowMetadata) -> String {
   format!(
     "Window title:\n{}\n\nWindow class name:\n{}",
@@ -273,6 +317,7 @@ fn result_content(metadata: &WindowMetadata) -> String {
   )
 }
 
+/// Formats selected window metadata for the tracking tooltip.
 fn hover_text(metadata: &WindowMetadata) -> String {
   format!(
     "Window title: {}\nWindow class name: {}\nClick to select · Esc/right-click cancels",
@@ -281,16 +326,19 @@ fn hover_text(metadata: &WindowMetadata) -> String {
   )
 }
 
+/// Replaces an empty metadata value with an explicit placeholder.
 fn display_value(value: &str) -> &str {
   if value.is_empty() { "(empty)" } else { value }
 }
 
+/// Owns installed low-level mouse and keyboard hooks.
 struct NativePickerHooks {
   mouse: HHOOK,
   keyboard: HHOOK,
 }
 
 impl NativePickerHooks {
+  /// Installs native hooks and enables picker callbacks.
   fn install(command_sender: Sender<Command>) -> WindowsResult<Self> {
     let _ = G_PICKER_SENDER.set(command_sender);
     let module = unsafe { GetModuleHandleW(None)? };
@@ -312,6 +360,7 @@ impl NativePickerHooks {
 }
 
 impl Drop for NativePickerHooks {
+  /// Disables callbacks and removes native hooks.
   fn drop(&mut self) {
     G_PICKER_ACTIVE.store(false, Ordering::Release);
     G_LEFT_BUTTON_DOWN.store(false, Ordering::Relaxed);
@@ -329,6 +378,7 @@ impl Drop for NativePickerHooks {
   }
 }
 
+/// Suppresses picker mouse input and emits one completion command.
 extern "system" fn mouse_callback(code: i32, message: WPARAM, data: LPARAM) -> LRESULT {
   if code != HC_ACTION as i32 || !G_PICKER_ACTIVE.load(Ordering::Acquire) {
     return unsafe { CallNextHookEx(None, code, message, data) };
@@ -367,6 +417,7 @@ extern "system" fn mouse_callback(code: i32, message: WPARAM, data: LPARAM) -> L
   }
 }
 
+/// Suppresses Escape input and emits a cancellation command.
 extern "system" fn keyboard_callback(code: i32, message: WPARAM, data: LPARAM) -> LRESULT {
   if code != HC_ACTION as i32 || !G_PICKER_ACTIVE.load(Ordering::Acquire) {
     return unsafe { CallNextHookEx(None, code, message, data) };
@@ -389,6 +440,7 @@ extern "system" fn keyboard_callback(code: i32, message: WPARAM, data: LPARAM) -
   }
 }
 
+/// Reports whether picker hooks should pass through input at a point.
 fn is_picker_passthrough_point(point: POINT) -> bool {
   let hit = unsafe { WindowFromPoint(point) };
   if hit.0.is_null() {
@@ -401,10 +453,12 @@ fn is_picker_passthrough_point(point: POINT) -> bool {
   is_picker_passthrough_class(&String::from_utf16_lossy(&class_name[..length as usize]))
 }
 
+/// Reports whether a native window class receives picker input.
 fn is_picker_passthrough_class(class_name: &str) -> bool {
   matches!(class_name, "Shell_TrayWnd" | "Shell_SecondaryTrayWnd" | "#32768")
 }
 
+/// Sends the first completion command emitted by the active hooks.
 fn complete_hook(command: Command) {
   if !G_COMPLETION_GATE.try_complete() {
     return;
@@ -416,6 +470,7 @@ fn complete_hook(command: Command) {
   }
 }
 
+/// Owns a tracking tooltip and its backing UTF-16 text.
 struct TrackingTooltip {
   window: HWND,
   tool: TTTOOLINFOW,
@@ -423,6 +478,7 @@ struct TrackingTooltip {
 }
 
 impl TrackingTooltip {
+  /// Creates an inactive topmost tracking tooltip.
   fn new() -> WindowsResult<Self> {
     unsafe {
       InitCommonControls();
@@ -466,6 +522,7 @@ impl TrackingTooltip {
     Ok(Self { window, tool, text })
   }
 
+  /// Updates and displays the tooltip beside a screen point.
   fn update(&mut self, point: Point, text: &str) {
     self.text = wide(text);
     self.tool.lpszText = PWSTR(self.text.as_mut_ptr());
@@ -496,6 +553,7 @@ impl TrackingTooltip {
 }
 
 impl Drop for TrackingTooltip {
+  /// Hides and destroys the native tooltip.
   fn drop(&mut self) {
     unsafe {
       SendMessageW(
@@ -511,6 +569,7 @@ impl Drop for TrackingTooltip {
   }
 }
 
+/// Encodes text as a null-terminated UTF-16 string.
 fn wide(value: &str) -> Vec<u16> {
   value.encode_utf16().chain(std::iter::once(0)).collect()
 }
@@ -520,21 +579,18 @@ mod tests {
   use super::*;
 
   #[test]
-  fn repeated_activation_cancels_instead_of_stacking_picker_sessions() {
+  fn toggle_repeated_activation_cancels_instead_of_stacking_picker_sessions() {
     let mut session = PickerSession::default();
-
     assert_eq!(session.toggle(), PickerAction::Activate);
     assert_eq!(session.toggle(), PickerAction::Cancel);
     assert_eq!(session.status(), PickerStatus::Inactive);
   }
 
   #[test]
-  fn selection_finishes_the_active_picker_session() {
+  fn finish_finishes_the_active_picker_session() {
     let mut session = PickerSession::default();
     session.toggle();
-
     session.finish();
-
     assert_eq!(session.status(), PickerStatus::Inactive);
   }
 
@@ -554,14 +610,14 @@ mod tests {
   }
 
   #[test]
-  fn result_dialog_maps_custom_actions_and_window_close() {
+  fn dialog_action_maps_custom_actions_and_window_close() {
     assert_eq!(dialog_action(PICK_AGAIN_BUTTON_ID), ResultDialogAction::PickAgain);
     assert_eq!(dialog_action(CLOSE_BUTTON_ID), ResultDialogAction::Close);
     assert_eq!(dialog_action(2), ResultDialogAction::Close);
   }
 
   #[test]
-  fn tray_and_native_menu_clicks_pass_through_picker_hooks() {
+  fn is_picker_passthrough_class_handles_tray_and_native_menu_clicks() {
     assert!(is_picker_passthrough_class("Shell_TrayWnd"));
     assert!(is_picker_passthrough_class("Shell_SecondaryTrayWnd"));
     assert!(is_picker_passthrough_class("#32768"));
@@ -569,9 +625,8 @@ mod tests {
   }
 
   #[test]
-  fn hook_completion_gate_allows_only_one_outcome() {
+  fn completion_gate_allows_only_one_outcome() {
     let gate = CompletionGate::default();
-
     assert!(gate.try_complete());
     assert!(!gate.try_complete());
     gate.reset();

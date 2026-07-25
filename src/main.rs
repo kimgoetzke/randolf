@@ -31,7 +31,7 @@ use crate::tray_menu_manager::TrayMenuManager;
 use crate::utils::CONFIGURATION_PROVIDER_LOCK;
 use crate::window_drag_manager::WindowDragManager;
 use crate::window_manager::WindowManager;
-use crate::window_picker::{ResultDialogAction, WindowPicker, show_picker_error, show_result_dialog};
+use crate::window_picker::WindowPicker;
 use common::Command;
 use crossbeam_channel::{Receiver, unbounded};
 use std::cell::RefCell;
@@ -154,40 +154,8 @@ fn run_loop(
         }
         Command::MoveWindowToWorkspace(id) => wm.borrow_mut().move_window_to_workspace(id),
         Command::DragWindows(is_enabled) => tray_menu_manager.borrow_mut().set_window_drag_icon(is_enabled),
-        Command::ToggleWindowPicker => match window_picker.borrow_mut().toggle() {
-          Ok(_) => (),
-          Err(err) => {
-            window_picker.borrow_mut().cancel();
-            error!("Failed to start Window Picker: {err}");
-            if let Err(dialog_err) = show_picker_error(&format!("Failed to start Window Picker: {err}")) {
-              error!("Failed to show Window Picker start error: {dialog_err}");
-            }
-          }
-        },
-        Command::WindowPickerSelected(point) => {
-          let selection = window_picker.borrow_mut().select(point);
-          match selection {
-            Ok(metadata) => match show_result_dialog(&metadata) {
-              Ok(ResultDialogAction::PickAgain) => match window_picker.borrow_mut().toggle() {
-                Ok(_) => (),
-                Err(err) => {
-                  error!("Failed to restart Window Picker: {err}");
-                  if let Err(dialog_err) = show_picker_error(&format!("Failed to restart Window Picker: {err}")) {
-                    error!("Failed to show Window Picker restart error: {dialog_err}");
-                  }
-                }
-              },
-              Ok(ResultDialogAction::Close) => {}
-              Err(err) => error!("Failed to show Window Picker result dialogue: {err}"),
-            },
-            Err(err) => {
-              error!("Window Picker selection failed: {err}");
-              if let Err(dialog_err) = show_picker_error(&err.to_string()) {
-                error!("Failed to show Window Picker selection error: {dialog_err}");
-              }
-            }
-          }
-        }
+        Command::ToggleWindowPicker => window_picker.borrow_mut().handle_toggle(),
+        Command::WindowPickerSelected(point) => window_picker.borrow_mut().handle_selection(point),
         Command::CancelWindowPicker => {
           window_picker.borrow_mut().cancel();
         }
@@ -226,7 +194,7 @@ fn run_loop(
         }
       }
     }
-    window_picker.borrow_mut().update_hover_tooltip_if_picker_active();
+    window_picker.borrow_mut().update_hover_tooltip_if_active();
     run_if_due(
       &mut last_scrolling_layout_reconciliation,
       scrolling_reconciliation_interval,
