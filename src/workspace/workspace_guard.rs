@@ -29,6 +29,7 @@ impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
     Self { manager, id_map }
   }
 
+  /// Give it a [`PersistentWorkspaceId`] and you'll get the mapped [`TransientWorkspaceId`] back, if there is one.
   pub fn resolve_to_transient(&self, persistent_id: PersistentWorkspaceId) -> Option<TransientWorkspaceId> {
     if let Some(value) = self.id_map.get(&persistent_id).copied() {
       Some(value)
