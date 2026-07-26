@@ -1,5 +1,4 @@
-use super::native_ui::NativePickerUi;
-use crate::api::{WindowLookupError, WindowMetadata, WindowsApi};
+use crate::api::{NativePickerUi, WindowLookupError, WindowMetadata, WindowsApi};
 use crate::common::{Command, Point};
 use crossbeam_channel::Sender;
 use std::time::{Duration, Instant};
@@ -9,18 +8,18 @@ pub(super) const HOVER_INTERVAL: Duration = Duration::from_millis(75);
 
 /// User choice from the dialogue showing the selected window's metadata.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub(super) enum SelectionDialogChoice {
+pub(crate) enum SelectionDialogChoice {
   PickAgain,
   Close,
 }
 
 /// Displays session UI without exposing native Win32 resources to picker orchestration.
-pub(super) trait PickerSessionUi {
+pub(crate) trait PickerSessionUi {
   fn show_hover_preview(&mut self, point: Point, text: &str);
 }
 
 /// Creates picker UI sessions and presents blocking dialogues.
-pub(super) trait PickerUi {
+pub(crate) trait PickerUi {
   fn start_session(&mut self, command_sender: Sender<Command>) -> WindowsResult<Box<dyn PickerSessionUi>>;
   fn show_selection(&mut self, metadata: &WindowMetadata) -> WindowsResult<SelectionDialogChoice>;
   fn show_error(&mut self, message: &str) -> WindowsResult<()>;
@@ -178,7 +177,7 @@ impl<Api: WindowsApi> WindowPicker<Api> {
 }
 
 /// Formats selected window metadata for the result dialogue.
-pub(super) fn selection_dialog_content(metadata: &WindowMetadata) -> String {
+pub(crate) fn selection_dialog_content(metadata: &WindowMetadata) -> String {
   format!(
     "Window title:\n{}\n\nWindow class name:\n{}",
     display_value(&metadata.title),

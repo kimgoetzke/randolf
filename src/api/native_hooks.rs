@@ -1,5 +1,5 @@
-use super::input_capture::{G_INPUT_CAPTURE, InputDisposition, InputEvent};
 use crate::common::Point;
+use crate::window_picker::{G_INPUT_CAPTURE, InputDisposition, InputEvent};
 use windows::Win32::Foundation::{HINSTANCE, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Input::KeyboardAndMouse::VK_ESCAPE;
@@ -11,14 +11,14 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use windows::core::Result as WindowsResult;
 
 /// Adapts native callbacks and hook ownership to the input-capture Seam.
-pub(super) struct NativeHooks {
+pub(crate) struct NativeHooks {
   mouse_hook: HHOOK,
   keyboard_hook: HHOOK,
 }
 
 impl NativeHooks {
   /// Installs both hooks, rolling back partial installation.
-  pub(super) fn install() -> WindowsResult<Self> {
+  pub(crate) fn install() -> WindowsResult<Self> {
     let module = unsafe { GetModuleHandleW(None)? };
     let instance = HINSTANCE(module.0);
     let keyboard_hook = unsafe { SetWindowsHookExW(WH_KEYBOARD_LL, Some(picker_keyboard_hook), Some(instance), 0)? };

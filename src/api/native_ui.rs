@@ -1,7 +1,6 @@
-use super::input_capture::NativeInputSession;
-use super::window_picker::{PickerSessionUi, PickerUi, SelectionDialogChoice, selection_dialog_content};
-use crate::api::WindowMetadata;
+use super::WindowMetadata;
 use crate::common::{Command, Point};
+use crate::window_picker::{NativeInputSession, PickerSessionUi, PickerUi, SelectionDialogChoice, selection_dialog_content};
 use crossbeam_channel::Sender;
 use windows::Win32::Foundation::{E_FAIL, GlobalFree, HANDLE, HWND, LPARAM, S_FALSE, S_OK, WPARAM};
 use windows::Win32::System::DataExchange::{CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData};
@@ -21,12 +20,12 @@ use windows::core::{Error as WindowsError, PCWSTR, PWSTR, Result as WindowsResul
 
 const TOOLTIP_OFFSET_X: i32 = 18;
 const TOOLTIP_OFFSET_Y: i32 = 24;
-pub(super) const PICK_AGAIN_BUTTON_ID: i32 = 1001;
-pub(super) const CLOSE_BUTTON_ID: i32 = 1002;
-pub(super) const COPY_TITLE_BUTTON_ID: i32 = 1003;
-pub(super) const COPY_CLASS_BUTTON_ID: i32 = 1004;
+const PICK_AGAIN_BUTTON_ID: i32 = 1001;
+const CLOSE_BUTTON_ID: i32 = 1002;
+const COPY_TITLE_BUTTON_ID: i32 = 1003;
+const COPY_CLASS_BUTTON_ID: i32 = 1004;
 /// Adapts the picker UI seam to Win32 hooks, tooltips, and task dialogues.
-pub(super) struct NativePickerUi;
+pub(crate) struct NativePickerUi;
 
 impl PickerUi for NativePickerUi {
   fn start_session(&mut self, command_sender: Sender<Command>) -> WindowsResult<Box<dyn PickerSessionUi>> {
@@ -190,7 +189,7 @@ fn show_picker_error_dialog(message: &str) -> WindowsResult<()> {
 }
 
 /// Runs an in-dialogue copy action and keeps the dialogue open.
-pub(super) fn handle_selection_dialog_button(
+fn handle_selection_dialog_button(
   button_id: i32,
   metadata: &WindowMetadata,
   copy_text: impl FnOnce(&str) -> WindowsResult<()>,
@@ -207,7 +206,7 @@ pub(super) fn handle_selection_dialog_button(
 }
 
 /// Maps a native dialogue button to a picker action.
-pub(super) fn selection_dialog_choice(button_id: i32) -> SelectionDialogChoice {
+fn selection_dialog_choice(button_id: i32) -> SelectionDialogChoice {
   if button_id == PICK_AGAIN_BUTTON_ID {
     SelectionDialogChoice::PickAgain
   } else {
@@ -328,6 +327,72 @@ impl Drop for TrackingTooltip {
 }
 
 /// Encodes text as a null-terminated UTF-16 string.
-pub(super) fn null_terminated_utf16(value: &str) -> Vec<u16> {
+fn null_terminated_utf16(value: &str) -> Vec<u16> {
   value.encode_utf16().chain(std::iter::once(0)).collect()
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::common::{Rect, WindowHandle};
+  use windows::Win32::Foundation::{S_FALSE, S_OK};
+
+  fn metadata() -> WindowMetadata {
+    WindowMetadata {
+      handle: WindowHandle::new(42),
+      title: "Document — 東京".to_string(),
+      class_name: "EditorWindow".to_string(),
+      rect: Rect::default(),
+    }
+  }
+
+  #[test]
+  fn selection_dialog_choice_maps_custom_actions_and_window_close() {
+    assert_eq!(
+      selection_dialog_choice(PICK_AGAIN_BUTTON_ID),
+      SelectionDialogChoice::PickAgain
+    );
+    assert_eq!(selection_dialog_choice(CLOSE_BUTTON_ID), SelectionDialogChoice::Close);
+    assert_eq!(selection_dialog_choice(2), SelectionDialogChoice::Close);
+  }
+
+  #[test]
+  fn handle_selection_dialog_button_writes_the_exact_title_and_keeps_the_dialogue_open_when_copying_title() {
+    let mut copied_text = None;
+
+    let result = handle_selection_dialog_button(COPY_TITLE_BUTTON_ID, &metadata(), |text| {
+      copied_text = Some(text.to_string());
+      Ok(())
+    });
+
+    assert_eq!(result, S_FALSE);
+    assert_eq!(copied_text.as_deref(), Some("Document — 東京"));
+  }
+
+  #[test]
+  fn handle_selection_dialog_button_writes_the_exact_class_and_keeps_the_dialogue_open_when_copying_class() {
+    let mut copied_text = None;
+
+    let result = handle_selection_dialog_button(COPY_CLASS_BUTTON_ID, &metadata(), |text| {
+      copied_text = Some(text.to_string());
+      Ok(())
+    });
+
+    assert_eq!(result, S_FALSE);
+    assert_eq!(copied_text.as_deref(), Some("EditorWindow"));
+  }
+
+  #[test]
+  fn handle_selection_dialog_button_closes_without_touching_the_clipboard_when_not_copying() {
+    let result = handle_selection_dialog_button(CLOSE_BUTTON_ID, &metadata(), |_| {
+      panic!("non-copy actions must not write to the clipboard")
+    });
+
+    assert_eq!(result, S_OK);
+  }
+
+  #[test]
+  fn utf16_encoder_appends_one_null_terminator() {
+    assert_eq!(null_terminated_utf16("A"), vec![65, 0]);
+  }
 }

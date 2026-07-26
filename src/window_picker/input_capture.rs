@@ -1,4 +1,4 @@
-use super::native_hooks::NativeHooks;
+use crate::api::NativeHooks;
 use crate::common::{Command, Point};
 use crossbeam_channel::Sender;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
@@ -7,7 +7,7 @@ use windows::Win32::Foundation::E_FAIL;
 use windows::core::{Error as WindowsError, Result as WindowsResult};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub(super) enum InputEvent {
+pub(crate) enum InputEvent {
   LeftPressed(Point),
   LeftReleased,
   RightPressed,
@@ -18,7 +18,7 @@ pub(super) enum InputEvent {
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub(super) enum InputDisposition {
+pub(crate) enum InputDisposition {
   PassThrough,
   Suppress,
 }
@@ -30,7 +30,7 @@ enum CaptureStartError {
 }
 
 /// Routes process-wide callbacks to the single active session.
-pub(super) struct CaptureEndpoint {
+pub(crate) struct CaptureEndpoint {
   command_sender: OnceLock<Sender<Command>>,
   active_session: RwLock<Option<Arc<CaptureSession>>>,
 }
@@ -60,7 +60,7 @@ impl CaptureEndpoint {
     Ok(ActiveCapture { endpoint: self, session })
   }
 
-  pub(super) fn active_ingress(&self) -> Option<CaptureIngress> {
+  pub(crate) fn active_ingress(&self) -> Option<CaptureIngress> {
     let session = self
       .active_session
       .read()
@@ -111,12 +111,12 @@ impl Drop for ActiveCapture<'_> {
 
 /// Provides the event Seam shared by native callbacks and synthetic tests.
 #[derive(Clone)]
-pub(super) struct CaptureIngress {
+pub(crate) struct CaptureIngress {
   session: Arc<CaptureSession>,
 }
 
 impl CaptureIngress {
-  pub(super) fn dispatch(&self, event: InputEvent) -> InputDisposition {
+  pub(crate) fn dispatch(&self, event: InputEvent) -> InputDisposition {
     self.session.dispatch(event)
   }
 }
@@ -206,17 +206,17 @@ impl CaptureSession {
   }
 }
 
-pub(super) static G_INPUT_CAPTURE: CaptureEndpoint = CaptureEndpoint::new();
+pub(crate) static G_INPUT_CAPTURE: CaptureEndpoint = CaptureEndpoint::new();
 
 /// Exposes the native input-capture Module's drop-owned Interface.
-pub(super) struct NativeInputSession {
+pub(crate) struct NativeInputSession {
   _capture: ActiveCapture<'static>,
   _hooks: NativeHooks,
 }
 
 impl NativeInputSession {
   /// Installs native hooks and starts one input session.
-  pub(super) fn start(command_sender: Sender<Command>) -> WindowsResult<Self> {
+  pub(crate) fn start(command_sender: Sender<Command>) -> WindowsResult<Self> {
     let hooks = NativeHooks::install()?;
     let capture = G_INPUT_CAPTURE
       .activate(command_sender)
