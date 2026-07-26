@@ -1,6 +1,6 @@
 use super::native_ui::NativePickerUi;
-use crate::api::{WindowLookupError, WindowMetadata, WindowsApi};
-use crate::common::{Command, Point};
+use crate::api::WindowsApi;
+use crate::common::{Command, Point, WindowLookupError, WindowMetadata};
 use crossbeam_channel::Sender;
 use std::time::{Duration, Instant};
 use windows::core::Result as WindowsResult;

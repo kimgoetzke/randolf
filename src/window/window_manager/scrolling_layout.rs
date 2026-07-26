@@ -1,7 +1,7 @@
 use super::scrolling_strips::ScrollingStrips;
 use super::width_preset::WidthPreset;
-use crate::api::{WindowPositioningResult, WindowsApi};
-use crate::common::{Direction, PersistentWorkspaceId, Point, Rect, Sizing, Window, WindowHandle};
+use crate::api::WindowsApi;
+use crate::common::{Direction, PersistentWorkspaceId, Point, Rect, Sizing, Window, WindowHandle, WindowPositioningResult};
 use crate::window::workspace::WorkspaceManager;
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;

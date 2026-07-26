@@ -12,7 +12,10 @@ mod sizing;
 mod tests;
 mod window;
 mod window_handle;
+mod window_lookup_error;
+mod window_metadata;
 mod window_placement;
+mod window_positioning_result;
 
 pub use crate::common::command::Command;
 pub use crate::common::direction::Direction;
@@ -26,4 +29,7 @@ pub use crate::common::rect::Rect;
 pub use crate::common::sizing::Sizing;
 pub use crate::common::window::Window;
 pub use crate::common::window_handle::WindowHandle;
+pub use crate::common::window_lookup_error::WindowLookupError;
+pub use crate::common::window_metadata::WindowMetadata;
 pub use crate::common::window_placement::WindowPlacement;
+pub use crate::common::window_positioning_result::WindowPositioningResult;

@@ -1,5 +1,5 @@
-use crate::api::{MockWindowsApi, WindowLookupError, WindowMetadata};
-use crate::common::{Command, Point};
+use crate::api::MockWindowsApi;
+use crate::common::{Command, Point, WindowLookupError, WindowMetadata};
 use crate::window::picker::window_picker::*;
 use crossbeam_channel::Sender;
 use std::cell::RefCell;

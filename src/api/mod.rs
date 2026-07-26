@@ -3,7 +3,7 @@ mod real_windows_api;
 mod windows_api;
 
 pub use real_windows_api::{RealWindowsApi, do_process_windows_messages, get_all_monitors};
-pub use windows_api::{WindowLookupError, WindowMetadata, WindowPositioningResult, WindowsApi};
+pub use windows_api::WindowsApi;
 
 #[cfg(test)]
 pub use mock_windows_api::test::MockWindowsApi;

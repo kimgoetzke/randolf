@@ -1,7 +1,6 @@
 use super::input_capture::NativeInputSession;
 use super::window_picker::{PickerSessionUi, PickerUi, SelectionDialogChoice, selection_dialog_content};
-use crate::api::WindowMetadata;
-use crate::common::{Command, Point};
+use crate::common::{Command, Point, WindowMetadata};
 use crossbeam_channel::Sender;
 use windows::Win32::Foundation::{E_FAIL, GlobalFree, HANDLE, HWND, LPARAM, S_FALSE, S_OK, WPARAM};
 use windows::Win32::System::DataExchange::{CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData};

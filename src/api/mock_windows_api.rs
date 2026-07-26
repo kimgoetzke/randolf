@@ -1,9 +1,10 @@
 #[allow(unused_variables)]
 #[cfg(test)]
 pub(crate) mod test {
-  use crate::api::{WindowLookupError, WindowMetadata, WindowPositioningResult, WindowsApi};
+  use crate::api::WindowsApi;
   use crate::common::{
-    Monitor, MonitorHandle, MonitorInfo, Monitors, Point, Rect, Sizing, Window, WindowHandle, WindowPlacement,
+    Monitor, MonitorHandle, MonitorInfo, Monitors, Point, Rect, Sizing, Window, WindowHandle, WindowLookupError,
+    WindowMetadata, WindowPlacement, WindowPositioningResult,
   };
   use std::cell::RefCell;
   use std::collections::{HashMap, HashSet};
