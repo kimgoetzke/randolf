@@ -1,9 +1,10 @@
-use super::*;
-use crate::api::MockWindowsApi;
-use crate::common::{Monitor, MonitorHandle, Point, Rect, Sizing, Window, WindowHandle};
-use crate::files::FileType;
+use super::workspace_manager::*;
+use crate::api::{MockWindowsApi, WindowsApi};
+use crate::common::{Monitor, MonitorHandle, PersistentWorkspaceId, Point, Rect, Sizing, Window, WindowHandle};
+use crate::files::{FileManager, FileType, WorkspacesFile};
 use crate::utils::create_temp_directory;
 use crate::workspace::{TransientWorkspaceId, Workspace};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::OnceLock;

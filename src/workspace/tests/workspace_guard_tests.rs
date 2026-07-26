@@ -1,8 +1,8 @@
-use super::WorkspaceGuard;
 use crate::api::MockWindowsApi;
 use crate::common::{MonitorHandle, Point, Rect};
 use crate::utils::create_temp_directory;
 use crate::workspace::WorkspaceManager;
+use crate::workspace::workspace_guard::WorkspaceGuard;
 
 const TEST_WORKSPACE_FILE: &str = "test.toml";
 

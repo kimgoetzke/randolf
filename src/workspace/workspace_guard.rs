@@ -356,7 +356,7 @@ impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
     Some(current_workspace_id)
   }
 
-  fn get_active_workspace_for_cursor_position(&mut self) -> Option<PersistentWorkspaceId> {
+  pub(super) fn get_active_workspace_for_cursor_position(&mut self) -> Option<PersistentWorkspaceId> {
     let cursor_position = self.manager.windows_api.get_cursor_position();
     let monitor_handle = self.manager.windows_api.get_monitor_handle_for_point(&cursor_position);
     let monitor_id = self
@@ -449,7 +449,3 @@ impl<'a, T: WindowsApi + Clone> WorkspaceGuard<'a, T> {
     );
   }
 }
-
-#[cfg(test)]
-#[path = "tests/workspace_guard_tests.rs"]
-mod tests;
