@@ -1,4 +1,4 @@
-use crate::api::real_windows_api_for_dragging::WindowsApiForDragging;
+use super::real_windows_api_for_dragging::WindowsApiForDragging;
 use crate::common::Command;
 use crate::configuration_provider::{
   ConfigurationProvider, DELAY_IN_MS_BEFORE_DRAGGING_IS_ALLOWED, ENABLE_FEATURES_USING_MOUSE,

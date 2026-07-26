@@ -1,4 +1,7 @@
-use crate::common::{Command, DragState, Point, Rect, ResizeMode, ResizeState, WindowHandle};
+use super::drag_state::DragState;
+use super::resize_mode::ResizeMode;
+use super::resize_state::ResizeState;
+use crate::common::{Command, Point, Rect, WindowHandle};
 use crossbeam_channel::Sender;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -42,7 +45,7 @@ const IGNORED_WINDOW_TITLES: [&str; 9] = [
 /// hook that allows the user to drag and resize windows by holding down the Windows key and clicking the left or right
 /// mouse button. Since this functionality is very specific and isolated from other interactions with the Windows API
 /// and the code is incredibly verbose, it is implemented in a separate struct to avoid cluttering the main API
-/// interface which is [`crate::RealWindowsApi`]. Also, I'm not sure if this feature should remain part of Randolf.
+/// interface which is [`crate::api::RealWindowsApi`]. Also, I'm not sure if this feature should remain part of Randolf.
 pub struct WindowsApiForDragging {
   keyboard_hook_handle: Option<HHOOK>,
 }

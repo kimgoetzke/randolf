@@ -47,7 +47,8 @@ impl DragState {
 
 #[cfg(test)]
 mod tests {
-  use crate::common::{DragState, Point, WindowHandle};
+  use super::DragState;
+  use crate::common::{Point, WindowHandle};
 
   #[test]
   fn drag_state_has_default_values() {

@@ -1,4 +1,5 @@
-use crate::common::{Point, Rect, ResizeMode, WindowHandle};
+use super::resize_mode::ResizeMode;
+use crate::common::{Point, Rect, WindowHandle};
 
 /// Represents the state of a mouse-based window resize operation. Not used for any keyboard operations.
 #[derive(Default)]
@@ -60,7 +61,8 @@ impl ResizeState {
 
 #[cfg(test)]
 mod tests {
-  use crate::common::{Point, Rect, ResizeMode, ResizeState, WindowHandle};
+  use super::{ResizeMode, ResizeState};
+  use crate::common::{Point, Rect, WindowHandle};
 
   #[test]
   fn resize_state_has_default_values() {

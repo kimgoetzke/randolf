@@ -121,6 +121,7 @@ fn main() {
   );
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_loop(
   configuration_manager: Arc<Mutex<ConfigurationProvider>>,
   command_receiver: Receiver<Command>,
