@@ -3,7 +3,7 @@
 mod api;
 mod application_launcher;
 mod common;
-mod configuration_provider;
+mod configuration;
 mod files;
 mod hotkey_manager;
 mod log_manager;
@@ -20,9 +20,7 @@ extern crate simplelog;
 
 use crate::api::{RealWindowsApi, WindowsApi};
 use crate::application_launcher::ApplicationLauncher;
-use crate::configuration_provider::{
-  ConfigurationProvider, FORCE_USING_ADMIN_PRIVILEGES, SCROLLING_RECONCILIATION_INTERVAL_IN_MS,
-};
+use crate::configuration::{ConfigurationProvider, FORCE_USING_ADMIN_PRIVILEGES, SCROLLING_RECONCILIATION_INTERVAL_IN_MS};
 use crate::files::FileType;
 use crate::hotkey_manager::HotkeyManager;
 use crate::log_manager::LogManager;

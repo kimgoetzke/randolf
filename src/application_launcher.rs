@@ -1,5 +1,5 @@
 use crate::api::WindowsApi;
-use crate::configuration_provider::{ALLOW_MOVING_CURSOR_AFTER_OPEN_CLOSE_OR_MINIMISE, ConfigurationProvider};
+use crate::configuration::{ALLOW_MOVING_CURSOR_AFTER_OPEN_CLOSE_OR_MINIMISE, ConfigurationProvider};
 use crate::files::{FileManager, FileType};
 use crate::utils::CONFIGURATION_PROVIDER_LOCK;
 use std::process::Command;
@@ -143,7 +143,7 @@ mod tests {
   use super::*;
   use crate::api::MockWindowsApi;
   use crate::common::{Point, Sizing, WindowHandle};
-  use crate::configuration_provider::ConfigurationProvider;
+  use crate::configuration::ConfigurationProvider;
   use log::Level::Warn;
 
   #[test]

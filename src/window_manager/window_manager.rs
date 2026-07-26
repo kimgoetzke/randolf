@@ -4,7 +4,7 @@ use super::scrolling_layout::ScrollingLayout;
 use super::spatial_layout::SpatialLayout;
 use crate::api::WindowsApi;
 use crate::common::*;
-use crate::configuration_provider::{
+use crate::configuration::{
   ADDITIONAL_WORKSPACE_COUNT, ALLOW_MOVING_CURSOR_AFTER_OPEN_CLOSE_OR_MINIMISE, ALLOW_SELECTING_SAME_CENTER_WINDOWS,
   ConfigurationProvider, Layout, SCROLLING_ANIMATION_DURATION_IN_MS, WINDOW_MARGIN,
 };

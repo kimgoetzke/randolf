@@ -1,6 +1,6 @@
 use crate::api::{WindowLookupError, WindowMetadata, WindowPositioningResult, WindowsApi};
 use crate::common::{Monitor, MonitorHandle, MonitorInfo, Monitors, Point, Rect, Window, WindowHandle, WindowPlacement};
-use crate::configuration_provider::ExclusionSettings;
+use crate::configuration::ExclusionSettings;
 use std::ffi::c_void;
 use std::mem::MaybeUninit;
 use std::{mem, ptr};

@@ -2,7 +2,7 @@ use crate::api::{MockWindowsApi, WindowsApi};
 use crate::common::{
   Direction, Monitor, MonitorHandle, PersistentWorkspaceId, Point, Rect, Sizing, WindowHandle, WindowPlacement,
 };
-use crate::configuration_provider::{ConfigurationProvider, Layout};
+use crate::configuration::{ConfigurationProvider, Layout};
 use crate::utils::create_temp_directory;
 use crate::window_manager::WindowManager;
 use crate::window_manager::tests::test_support::scrolling_manager;

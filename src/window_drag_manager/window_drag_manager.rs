@@ -1,8 +1,6 @@
 use super::real_windows_api_for_dragging::WindowsApiForDragging;
 use crate::common::Command;
-use crate::configuration_provider::{
-  ConfigurationProvider, DELAY_IN_MS_BEFORE_DRAGGING_IS_ALLOWED, ENABLE_FEATURES_USING_MOUSE,
-};
+use crate::configuration::{ConfigurationProvider, DELAY_IN_MS_BEFORE_DRAGGING_IS_ALLOWED, ENABLE_FEATURES_USING_MOUSE};
 use crate::utils::CONFIGURATION_PROVIDER_LOCK;
 use crossbeam_channel::Sender;
 use std::sync::{Arc, Mutex};
@@ -46,7 +44,7 @@ impl WindowDragManager {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::configuration_provider::{ConfigurationProvider, ENABLE_FEATURES_USING_MOUSE};
+  use crate::configuration::{ConfigurationProvider, ENABLE_FEATURES_USING_MOUSE};
   use crossbeam_channel::unbounded;
   use std::sync::{Arc, Mutex};
 

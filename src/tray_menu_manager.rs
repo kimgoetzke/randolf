@@ -1,6 +1,6 @@
 use crate::api::get_all_monitors;
 use crate::common::{Command, PersistentWorkspaceId};
-use crate::configuration_provider::{
+use crate::configuration::{
   ALLOW_SELECTING_SAME_CENTER_WINDOWS, ConfigurationProvider, FORCE_USING_ADMIN_PRIVILEGES, Layout, WINDOW_MARGIN,
 };
 use crate::utils::{CONFIGURATION_PROVIDER_LOCK, TRAY_ICON_LOCK, TRAY_ICON_OPEN};
@@ -326,7 +326,7 @@ fn build_default_layout_menu(current_layout: Layout) -> MenuBuilder<Event> {
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::configuration_provider::{ConfigurationProvider, Layout};
+  use crate::configuration::{ConfigurationProvider, Layout};
   use serial_test::serial;
   use std::sync::{Arc, Mutex};
 

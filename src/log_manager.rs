@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
 
-use crate::configuration_provider::ConfigurationProvider;
+use crate::configuration::ConfigurationProvider;
 use crate::files::{FileManager, FileType};
 use log::LevelFilter;
 use simplelog::{ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode, WriteLogger};
