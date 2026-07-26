@@ -12,8 +12,7 @@ mod utils;
 mod window_drag_manager;
 mod window_manager;
 mod window_picker;
-mod workspace_guard;
-mod workspace_manager;
+mod workspace;
 
 #[macro_use]
 extern crate log;

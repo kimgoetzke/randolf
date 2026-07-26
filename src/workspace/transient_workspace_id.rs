@@ -33,7 +33,8 @@ impl Display for TransientWorkspaceId {
 
 #[cfg(test)]
 mod tests {
-  use crate::common::{MonitorHandle, TransientWorkspaceId};
+  use super::TransientWorkspaceId;
+  use crate::common::{MonitorHandle, PersistentWorkspaceId};
 
   impl TransientWorkspaceId {
     pub fn new(monitor_id: [u16; 32], monitor_handle: MonitorHandle, workspace: usize) -> Self {
@@ -43,6 +44,26 @@ mod tests {
         workspace,
       }
     }
+  }
+
+  impl From<TransientWorkspaceId> for PersistentWorkspaceId {
+    fn from(value: TransientWorkspaceId) -> Self {
+      PersistentWorkspaceId::new(value.monitor_id, value.workspace, false)
+    }
+  }
+
+  #[test]
+  fn persistent_workspace_id_can_be_created_from_transient_workspace_id() {
+    let transient_id = TransientWorkspaceId {
+      monitor_id: [1; 32],
+      monitor_handle: 1.into(),
+      workspace: 42,
+    };
+
+    let persistent_id: PersistentWorkspaceId = transient_id.into();
+
+    assert_eq!(persistent_id.monitor_id, [1; 32]);
+    assert_eq!(persistent_id.workspace, 42);
   }
 
   #[test]

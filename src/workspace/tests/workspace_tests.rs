@@ -1,5 +1,6 @@
 use crate::api::{MockWindowsApi, WindowsApi};
-use crate::common::{Monitor, MonitorHandle, PersistentWorkspaceId, Rect, Sizing, Window, WindowHandle, Workspace};
+use crate::common::{Monitor, MonitorHandle, PersistentWorkspaceId, Rect, Sizing, Window, WindowHandle};
+use crate::workspace::Workspace;
 
 impl Workspace {
   /// Creates a new workspace for testing purposes with margin set to 0 and inactive by default.

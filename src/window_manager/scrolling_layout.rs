@@ -2,7 +2,7 @@ use super::scrolling_strips::ScrollingStrips;
 use super::width_preset::WidthPreset;
 use crate::api::{WindowPositioningResult, WindowsApi};
 use crate::common::{Direction, PersistentWorkspaceId, Point, Rect, Sizing, Window, WindowHandle};
-use crate::workspace_manager::WorkspaceManager;
+use crate::workspace::WorkspaceManager;
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use windows::Win32::UI::Shell::IVirtualDesktopManager;

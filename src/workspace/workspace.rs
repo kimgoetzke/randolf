@@ -1,5 +1,6 @@
+use super::workspace_action::WorkspaceAction;
 use crate::api::WindowsApi;
-use crate::common::{Monitor, MonitorHandle, PersistentWorkspaceId, Rect, Sizing, Window, WindowHandle, WorkspaceAction};
+use crate::common::{Monitor, MonitorHandle, PersistentWorkspaceId, Rect, Sizing, Window, WindowHandle};
 use std::fmt::Display;
 
 /// Represents a Randolf workspace, which is a collection of zero or more windows that are managed together on a

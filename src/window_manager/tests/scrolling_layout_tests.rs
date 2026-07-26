@@ -480,7 +480,7 @@ fn scrolling_workspace_switch_preserves_off_screen_strip_members() {
   );
   MockWindowsApi::place_window(second, 1.into());
   manager.reconcile_layouts();
-  let first_workspace = crate::common::PersistentWorkspaceId::from(*crate::workspace_manager::tests::primary_active_ws_id());
+  let first_workspace = crate::common::PersistentWorkspaceId::from(*crate::workspace::tests::primary_active_ws_id());
   let second_workspace = manager
     .workspace_manager
     .workspaces
@@ -523,7 +523,7 @@ fn restoring_scrolling_layout_moves_off_screen_members_onto_their_monitor() {
   );
   MockWindowsApi::place_window(second, 1.into());
   manager.reconcile_layouts();
-  let first_workspace = crate::common::PersistentWorkspaceId::from(*crate::workspace_manager::tests::primary_active_ws_id());
+  let first_workspace = crate::common::PersistentWorkspaceId::from(*crate::workspace::tests::primary_active_ws_id());
   let empty_workspace = manager
     .workspace_manager
     .workspaces
@@ -540,7 +540,7 @@ fn restoring_scrolling_layout_moves_off_screen_members_onto_their_monitor() {
   assert!(visible_windows.iter().all(|window| {
     window
       .rect
-      .intersects(&crate::workspace_manager::tests::primary_monitor().monitor_area)
+      .intersects(&crate::workspace::tests::primary_monitor().monitor_area)
   }));
 }
 
@@ -558,7 +558,7 @@ fn scrolling_move_to_workspace_updates_both_strips() {
   );
   MockWindowsApi::place_window(second, 1.into());
   manager.reconcile_layouts();
-  let first_workspace = crate::common::PersistentWorkspaceId::from(*crate::workspace_manager::tests::primary_active_ws_id());
+  let first_workspace = crate::common::PersistentWorkspaceId::from(*crate::workspace::tests::primary_active_ws_id());
   let second_workspace = manager
     .workspace_manager
     .workspaces
@@ -709,8 +709,7 @@ fn scrolling_preset_follows_window_to_different_sized_scrolling_monitor() {
   let (mut manager, _directory) = scrolling_manager();
   manager.reconcile_layouts();
   manager.resize_scrolling_window(Direction::Right);
-  let primary_workspace =
-    crate::common::PersistentWorkspaceId::from(*crate::workspace_manager::tests::primary_active_ws_id());
+  let primary_workspace = crate::common::PersistentWorkspaceId::from(*crate::workspace::tests::primary_active_ws_id());
   let secondary_workspace = manager
     .workspace_manager
     .active_workspace_ids()

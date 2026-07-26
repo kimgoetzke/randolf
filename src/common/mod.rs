@@ -10,12 +10,9 @@ mod rect;
 mod sizing;
 #[cfg(test)]
 mod tests;
-mod transient_workspace_id;
 mod window;
 mod window_handle;
 mod window_placement;
-mod workspace;
-mod workspace_action;
 
 pub use crate::common::command::Command;
 pub use crate::common::direction::Direction;
@@ -27,9 +24,6 @@ pub use crate::common::persistent_workspace_id::PersistentWorkspaceId;
 pub use crate::common::point::Point;
 pub use crate::common::rect::Rect;
 pub use crate::common::sizing::Sizing;
-pub use crate::common::transient_workspace_id::TransientWorkspaceId;
 pub use crate::common::window::Window;
 pub use crate::common::window_handle::WindowHandle;
 pub use crate::common::window_placement::WindowPlacement;
-pub use crate::common::workspace::Workspace;
-pub use crate::common::workspace_action::WorkspaceAction;
