@@ -348,6 +348,7 @@ fn default_excluded_window_classes() -> Vec<String> {
     "Shell_TrayWnd".to_string(),
     "Shell_SecondaryTrayWnd".to_string(),
     "DV2ControlHost".to_string(),
+    "#32770".to_string(), // File properties window
   ]
 }
 
