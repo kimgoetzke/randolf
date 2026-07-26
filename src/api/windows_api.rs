@@ -2,13 +2,21 @@ use crate::common::{MonitorHandle, MonitorInfo, Monitors, Point, Rect, Window, W
 use std::fmt::{Display, Formatter};
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
 
-/// Frozen identity of a visible top-level window.
+/// Information about a visible top-level window.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WindowMetadata {
   pub handle: WindowHandle,
   pub title: String,
   pub class_name: String,
   pub rect: Rect,
+}
+
+/// Result of atomically positioning a window batch.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum WindowPositioningResult {
+  Applied,
+  Rejected(Vec<WindowHandle>),
+  BatchFailed,
 }
 
 /// Failure to identify a visible top-level window.
@@ -57,9 +65,9 @@ pub trait WindowsApi {
   fn is_not_a_managed_window(&self, handle: &WindowHandle) -> bool;
   fn is_window_hidden(&self, handle: &WindowHandle) -> bool;
   fn set_window_position(&self, handle: WindowHandle, rect: Rect);
-  /// Moves windows atomically and orders them below the active/foreground window. Returns window handles of windows
-  /// that could not be positioned (i.e. failures).
-  fn set_window_positions(&self, positions: &[(WindowHandle, Rect)], active_handle: WindowHandle) -> Vec<WindowHandle>;
+  /// Moves windows atomically and orders them below the active window.
+  fn set_window_positions(&self, positions: &[(WindowHandle, Rect)], active_handle: WindowHandle)
+  -> WindowPositioningResult;
   /// Sets the window position on the same monitor as the given rectangle. WARNING: Does not adjust for DPI scaling.
   #[allow(dead_code)]
   fn set_window_position_with_dpi_adjustment(

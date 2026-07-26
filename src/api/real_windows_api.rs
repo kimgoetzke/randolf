@@ -1,4 +1,4 @@
-use crate::api::{WindowLookupError, WindowMetadata, WindowsApi};
+use crate::api::{WindowLookupError, WindowMetadata, WindowPositioningResult, WindowsApi};
 use crate::common::{Monitor, MonitorHandle, MonitorInfo, Monitors, Point, Rect, Window, WindowHandle, WindowPlacement};
 use crate::configuration_provider::ExclusionSettings;
 use std::ffi::c_void;
@@ -298,14 +298,14 @@ impl WindowsApi for RealWindowsApi {
     &self,
     positions: &[(WindowHandle, Rect)],
     active_window_handle: WindowHandle,
-  ) -> Vec<WindowHandle> {
+  ) -> WindowPositioningResult {
     if positions.is_empty() {
-      return Vec::new();
+      return WindowPositioningResult::Applied;
     }
     let count = i32::try_from(positions.len()).unwrap_or(i32::MAX);
     let Ok(mut batch) = (unsafe { BeginDeferWindowPos(count) }) else {
       warn!("Failed to begin positioning [{count}] windows");
-      return Vec::new();
+      return WindowPositioningResult::BatchFailed;
     };
     let ordered = positions
       .iter()
@@ -331,14 +331,15 @@ impl WindowsApi for RealWindowsApi {
         }
         Err(err) => {
           warn!("Failed to defer positioning for {handle}: {}", err.message());
-          return vec![*handle];
+          return WindowPositioningResult::Rejected(vec![*handle]);
         }
       }
     }
     if let Err(err) = unsafe { EndDeferWindowPos(batch) } {
       warn!("Failed to position windows: {}", err.message());
+      return WindowPositioningResult::BatchFailed;
     }
-    Vec::new()
+    WindowPositioningResult::Applied
   }
 
   // TODO: Try fixing the method below which aims to adjust the window position based on the DPI of the source and

@@ -1,4 +1,4 @@
-use crate::api::WindowsApi;
+use crate::api::{WindowPositioningResult, WindowsApi};
 use crate::common::{
   Direction, PersistentWorkspaceId, Point, Rect, ScrollingStrips, Sizing, WidthPreset, Window, WindowHandle,
 };
@@ -344,14 +344,24 @@ impl ScrollingLayout {
         .into_iter()
         .map(|(handle, sizing)| (handle, Rect::from(sizing)))
         .collect::<Vec<_>>();
-      if self.positions.get(&workspace) == Some(&positions) {
+      if self.positions.get(&workspace) == Some(&positions)
+        && positions
+          .iter()
+          .all(|(handle, expected)| api.get_window_rect(*handle) == Some(*expected))
+      {
         return;
       }
       if let Some(focused) = self.strips.get_active_handle(workspace) {
-        let failures = api.set_window_positions(&positions, focused);
-        if !failures.is_empty() {
-          self.reject_unpositionable(workspace, &failures);
-          continue;
+        match api.set_window_positions(&positions, focused) {
+          WindowPositioningResult::Applied => {}
+          WindowPositioningResult::Rejected(failures) => {
+            self.reject_unpositionable(workspace, &failures);
+            continue;
+          }
+          WindowPositioningResult::BatchFailed => {
+            self.positions.remove(&workspace);
+            return;
+          }
         }
       }
       self.positions.insert(workspace, positions);
@@ -561,22 +571,34 @@ impl ScrollingLayout {
           (*handle, interpolate_rect(start, *target, eased_progress))
         })
         .collect::<Vec<_>>();
-      let failures = api.set_window_positions(&positions, outgoing);
-      if !failures.is_empty() {
-        self.reject_unpositionable(workspace, &failures);
-        self.reflow(api, workspace_manager, workspace, margin);
-        return;
+      match api.set_window_positions(&positions, outgoing) {
+        WindowPositioningResult::Applied => {}
+        WindowPositioningResult::Rejected(failures) => {
+          self.reject_unpositionable(workspace, &failures);
+          self.reflow(api, workspace_manager, workspace, margin);
+          return;
+        }
+        WindowPositioningResult::BatchFailed => {
+          self.positions.remove(&workspace);
+          return;
+        }
       }
       if frame < ANIMATION_FRAMES {
         std::thread::sleep(frame_duration);
       }
     }
     if let Some(focused) = self.strips.get_active_handle(workspace) {
-      let failures = api.set_window_positions(&desired, focused);
-      if !failures.is_empty() {
-        self.reject_unpositionable(workspace, &failures);
-        self.reflow(api, workspace_manager, workspace, margin);
-        return;
+      match api.set_window_positions(&desired, focused) {
+        WindowPositioningResult::Applied => {}
+        WindowPositioningResult::Rejected(failures) => {
+          self.reject_unpositionable(workspace, &failures);
+          self.reflow(api, workspace_manager, workspace, margin);
+          return;
+        }
+        WindowPositioningResult::BatchFailed => {
+          self.positions.remove(&workspace);
+          return;
+        }
       }
     }
     self.positions.insert(workspace, desired);

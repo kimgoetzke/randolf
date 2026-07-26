@@ -222,6 +222,24 @@ fn unchanged_scrolling_reconciliation_does_not_reposition_windows() {
 }
 
 #[test]
+fn scrolling_reconciliation_restores_actual_geometry_that_differs_from_cached_target() {
+  let (mut manager, _directory) = scrolling_manager();
+  manager.reconcile_layouts();
+  manager
+    .windows_api
+    .set_window_position(1.into(), Rect::new(100, 100, 300, 300));
+  MockWindowsApi::clear_position_batches();
+
+  manager.reconcile_layouts();
+
+  assert!(!MockWindowsApi::position_batches().is_empty());
+  assert_eq!(
+    manager.windows_api.get_window_placement(1.into()).unwrap(),
+    WindowPlacement::new_from_sizing(Sizing::new(725, 20, 470, 990))
+  );
+}
+
+#[test]
 fn scrolling_reconciliation_does_not_reset_mouse_position() {
   let (mut manager, _directory) = scrolling_manager();
   manager.reconcile_layouts();
@@ -231,6 +249,29 @@ fn scrolling_reconciliation_does_not_reset_mouse_position() {
   manager.reconcile_layouts();
 
   assert_eq!(manager.windows_api.get_cursor_position(), mouse_position);
+}
+
+#[test]
+fn scrolling_layout_retries_batch_failure_without_rejecting_strip_members() {
+  let (mut manager, _directory) = scrolling_manager();
+  MockWindowsApi::fail_next_deferred_positioning_batch();
+  MockWindowsApi::fail_next_deferred_positioning_batch();
+
+  manager.reconcile_layouts();
+
+  let workspace = manager.scrolling.get_workspace_containing(1.into()).unwrap();
+  assert_eq!(manager.scrolling.get_members(workspace), vec![1.into()]);
+  assert_eq!(
+    manager.windows_api.get_window_placement(1.into()).unwrap(),
+    WindowPlacement::new_from_sizing(Sizing::new(50, 50, 50, 50))
+  );
+
+  manager.reconcile_layouts();
+
+  assert_eq!(
+    manager.windows_api.get_window_placement(1.into()).unwrap(),
+    WindowPlacement::new_from_sizing(Sizing::new(725, 20, 470, 990))
+  );
 }
 
 #[test]
