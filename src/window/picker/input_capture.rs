@@ -211,7 +211,7 @@ pub(super) static G_INPUT_CAPTURE: CaptureEndpoint = CaptureEndpoint::new();
 /// Exposes the native input-capture Module's drop-owned Interface.
 pub(super) struct NativeInputSession {
   _capture: ActiveCapture<'static>,
-  _hooks: NativeHooks,
+  _native_hooks: NativeHooks,
 }
 
 impl NativeInputSession {
@@ -223,7 +223,7 @@ impl NativeInputSession {
       .map_err(CaptureStartError::into_windows_error)?;
     Ok(Self {
       _capture: capture,
-      _hooks: hooks,
+      _native_hooks: hooks,
     })
   }
 }
