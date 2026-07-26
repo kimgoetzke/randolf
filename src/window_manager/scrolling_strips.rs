@@ -1,4 +1,5 @@
-use crate::common::{Direction, PersistentWorkspaceId, Rect, Sizing, WidthPreset, WindowHandle};
+use super::width_preset::WidthPreset;
+use crate::common::{Direction, PersistentWorkspaceId, Rect, Sizing, WindowHandle};
 use std::collections::HashMap;
 
 /// Stores ordered scrolling strip membership and focus for each workspace. Must only be used by

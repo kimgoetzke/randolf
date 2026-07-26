@@ -1,6 +1,7 @@
 use super::navigation;
+use super::placement::Placement;
 use crate::api::WindowsApi;
-use crate::common::{Direction, Monitor, MonitorInfo, Placement, Point, Rect, Sizing, WindowHandle, WindowPlacement};
+use crate::common::{Direction, Monitor, MonitorInfo, Point, Rect, Sizing, WindowHandle, WindowPlacement};
 use crate::utils::MINIMUM_WINDOW_DIMENSION;
 
 /// A layout that does not manage any windows. Handles geometry-based window movement, resizing, and follow-up focus.

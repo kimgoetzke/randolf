@@ -1,4 +1,5 @@
 use super::navigation;
+use super::placement::Placement;
 use super::scrolling_layout::ScrollingLayout;
 use super::spatial_layout::SpatialLayout;
 use crate::api::WindowsApi;
@@ -165,10 +166,12 @@ impl<T: WindowsApi + Clone> WindowManager<T> {
   /// Transfers the active scrolling window vertically to an adjacent monitor. This method:
   /// - Gets the foreground window and its scrolling layout workspace
   /// - Finds the adjacent monitor, its active workspace, and its layout
-  /// - Removes the window from its source strip while retaining its [`WidthPreset`]
+  /// - Removes the window from its source strip while retaining its
+  ///   [`WidthPreset`](super::width_preset::WidthPreset)
   /// - Updates the remaining source strip without changing focus
   /// - If target monitor has spatial layout: Near-maximises the window
-  /// - If target monitor has scrolling layout: Appends the window with its [`WidthPreset`] and updates the strip
+  /// - If target monitor has scrolling layout: Appends the window with its
+  ///   [`WidthPreset`](super::width_preset::WidthPreset) and updates the strip
   /// - Centres the cursor and keeps the moved window foreground on either target
   /// - No-ops when any required window, workspace, monitor, or layout is unavailable
   fn move_scrolling_window_to_monitor(&mut self, direction: Direction) {
