@@ -1,6 +1,7 @@
-use super::WindowMetadata;
+use super::input_capture::NativeInputSession;
+use super::window_picker::{PickerSessionUi, PickerUi, SelectionDialogChoice, selection_dialog_content};
+use crate::api::WindowMetadata;
 use crate::common::{Command, Point};
-use crate::window_picker::{NativeInputSession, PickerSessionUi, PickerUi, SelectionDialogChoice, selection_dialog_content};
 use crossbeam_channel::Sender;
 use windows::Win32::Foundation::{E_FAIL, GlobalFree, HANDLE, HWND, LPARAM, S_FALSE, S_OK, WPARAM};
 use windows::Win32::System::DataExchange::{CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData};
@@ -25,7 +26,7 @@ const CLOSE_BUTTON_ID: i32 = 1002;
 const COPY_TITLE_BUTTON_ID: i32 = 1003;
 const COPY_CLASS_BUTTON_ID: i32 = 1004;
 /// Adapts the picker UI seam to Win32 hooks, tooltips, and task dialogues.
-pub(crate) struct NativePickerUi;
+pub(super) struct NativePickerUi;
 
 impl PickerUi for NativePickerUi {
   fn start_session(&mut self, command_sender: Sender<Command>) -> WindowsResult<Box<dyn PickerSessionUi>> {
