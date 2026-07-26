@@ -9,10 +9,7 @@ mod hotkey_manager;
 mod log_manager;
 mod tray_menu_manager;
 mod utils;
-mod window_drag_manager;
-mod window_manager;
-mod window_picker;
-mod workspace;
+mod window;
 
 #[macro_use]
 extern crate log;
@@ -26,9 +23,9 @@ use crate::hotkey_manager::HotkeyManager;
 use crate::log_manager::LogManager;
 use crate::tray_menu_manager::TrayMenuManager;
 use crate::utils::CONFIGURATION_PROVIDER_LOCK;
-use crate::window_drag_manager::WindowDragManager;
-use crate::window_manager::WindowManager;
-use crate::window_picker::WindowPicker;
+use crate::window::drag_manager::WindowDragManager;
+use crate::window::picker::WindowPicker;
+use crate::window::window_manager::WindowManager;
 use common::Command;
 use crossbeam_channel::{Receiver, unbounded};
 use std::cell::RefCell;

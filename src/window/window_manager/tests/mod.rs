@@ -1,4 +1,4 @@
-use crate::window_manager::window_manager;
+use crate::window::window_manager::window_manager;
 
 mod navigation_tests;
 mod placement_tests;

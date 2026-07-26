@@ -1,4 +1,4 @@
-use crate::workspace::workspace_manager;
+use crate::window::workspace::workspace_manager;
 
 pub(crate) use workspace_manager_tests::{primary_active_ws_id, primary_monitor};
 

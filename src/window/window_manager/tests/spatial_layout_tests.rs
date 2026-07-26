@@ -1,7 +1,7 @@
 use crate::api::{MockWindowsApi, WindowsApi};
 use crate::common::{Direction, MonitorHandle, Point, Rect, Sizing, WindowHandle, WindowPlacement};
 use crate::utils::MINIMUM_WINDOW_DIMENSION;
-use crate::window_manager::WindowManager;
+use crate::window::window_manager::WindowManager;
 
 #[test]
 fn move_window_on_the_same_monitor() {

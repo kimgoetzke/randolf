@@ -9,7 +9,7 @@ use crate::configuration::{
   ConfigurationProvider, Layout, SCROLLING_ANIMATION_DURATION_IN_MS, WINDOW_MARGIN,
 };
 use crate::utils::{CONFIGURATION_PROVIDER_LOCK, MINIMUM_WINDOW_MARGIN};
-use crate::workspace::WorkspaceManager;
+use crate::window::workspace::WorkspaceManager;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use windows::Win32::UI::Shell::IVirtualDesktopManager;

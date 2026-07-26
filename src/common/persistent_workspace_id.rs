@@ -9,7 +9,7 @@ use std::fmt::Display;
 /// _within_ a single operation/[`Command`][crate::common::Command] execution. This can be done by resolving the
 /// [`PersistentWorkspaceId`] to a [`TransientWorkspaceId`][wst] at the start of the operation.
 ///
-/// [wst]: crate::workspace::TransientWorkspaceId
+/// [wst]: crate::window::workspace::TransientWorkspaceId
 #[derive(Debug, Copy, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct PersistentWorkspaceId {
   pub monitor_id: [u16; 32],

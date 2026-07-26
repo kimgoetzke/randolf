@@ -1,6 +1,6 @@
 use crate::api::{MockWindowsApi, WindowsApi};
 use crate::common::{MonitorHandle, MonitorInfo, Rect, Sizing, WindowHandle, WindowPlacement};
-use crate::window_manager::placement::{DWM_TOLERANCE_IN_PX, Placement};
+use crate::window::window_manager::placement::{DWM_TOLERANCE_IN_PX, Placement};
 
 fn is_of_expected_size(
   placement_manager: &Placement,

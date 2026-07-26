@@ -1,8 +1,8 @@
 use crate::api::{MockWindowsApi, WindowsApi};
 use crate::common::{Direction, MonitorHandle, Point, Rect, Sizing, Window, WindowHandle};
-use crate::window_manager::WindowManager;
-use crate::window_manager::navigation::find_closest_window as super_find_closest_window;
-use crate::window_manager::navigation::select_window_in_direction;
+use crate::window::window_manager::WindowManager;
+use crate::window::window_manager::navigation::find_closest_window as super_find_closest_window;
+use crate::window::window_manager::navigation::select_window_in_direction;
 
 #[cfg(test)]
 fn find_closest_window(

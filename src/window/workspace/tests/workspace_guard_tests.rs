@@ -1,8 +1,8 @@
 use crate::api::MockWindowsApi;
 use crate::common::{MonitorHandle, Point, Rect};
 use crate::utils::create_temp_directory;
-use crate::workspace::WorkspaceManager;
-use crate::workspace::workspace_guard::WorkspaceGuard;
+use crate::window::workspace::WorkspaceManager;
+use crate::window::workspace::workspace_guard::WorkspaceGuard;
 
 const TEST_WORKSPACE_FILE: &str = "test.toml";
 
@@ -17,7 +17,10 @@ fn get_active_workspace_for_cursor_position_returns_workspace_if_one_active_work
 
   let result = guard.get_active_workspace_for_cursor_position();
 
-  assert_eq!(result, Some((*crate::workspace::tests::primary_active_ws_id()).into()));
+  assert_eq!(
+    result,
+    Some((*crate::window::workspace::tests::primary_active_ws_id()).into())
+  );
 }
 
 #[test]

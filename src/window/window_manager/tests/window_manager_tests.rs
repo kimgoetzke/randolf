@@ -4,9 +4,9 @@ use crate::common::{
 };
 use crate::configuration::{ConfigurationProvider, Layout};
 use crate::utils::create_temp_directory;
-use crate::window_manager::WindowManager;
-use crate::window_manager::tests::test_support::scrolling_manager;
-use crate::workspace::{Workspace, WorkspaceManager};
+use crate::window::window_manager::WindowManager;
+use crate::window::window_manager::tests::test_support::scrolling_manager;
+use crate::window::workspace::{Workspace, WorkspaceManager};
 use std::sync::{Arc, Mutex};
 
 fn vertical_mixed_layout_manager(direction: Direction, target_layout: Layout) -> (WindowManager<MockWindowsApi>, Monitor) {
@@ -645,7 +645,7 @@ fn move_window_to_workspace_when_moving_from_scrolling_to_spatial_removes_strip_
     .unwrap()
     .set_monitor_layout("DISPLAY2", Layout::Spatial);
   manager.reconcile_layouts();
-  let primary_workspace = PersistentWorkspaceId::from(*crate::workspace::tests::primary_active_ws_id());
+  let primary_workspace = PersistentWorkspaceId::from(*crate::window::workspace::tests::primary_active_ws_id());
   let secondary_workspace = manager
     .workspace_manager
     .active_workspace_ids()
@@ -678,7 +678,7 @@ fn move_window_to_workspace_when_moving_from_spatial_to_scrolling_inserts_strip_
     true,
   );
   MockWindowsApi::place_window(secondary_handle, 2.into());
-  let primary_workspace = *crate::workspace::tests::primary_active_ws_id();
+  let primary_workspace = *crate::window::workspace::tests::primary_active_ws_id();
   let mut manager = WindowManager {
     configuration_provider,
     placement: Default::default(),

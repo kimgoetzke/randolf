@@ -2,7 +2,7 @@ use super::window_manager::WindowManager;
 use crate::api::MockWindowsApi;
 use crate::configuration::{ConfigurationProvider, Layout};
 use crate::utils::create_temp_directory;
-use crate::workspace::WorkspaceManager;
+use crate::window::workspace::WorkspaceManager;
 use std::sync::{Arc, Mutex};
 
 impl WindowManager<MockWindowsApi> {

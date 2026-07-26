@@ -3,7 +3,7 @@ use crate::api::{MockWindowsApi, WindowsApi};
 use crate::common::{Monitor, MonitorHandle, PersistentWorkspaceId, Point, Rect, Sizing, Window, WindowHandle};
 use crate::files::{FileManager, FileType, WorkspacesFile};
 use crate::utils::create_temp_directory;
-use crate::workspace::{TransientWorkspaceId, Workspace};
+use crate::window::workspace::{TransientWorkspaceId, Workspace};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
