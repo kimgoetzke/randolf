@@ -1,15 +1,15 @@
-use super::real_windows_api_for_dragging::WindowsApiForDragging;
+use super::native_mouse_interactions::NativeMouseInteractions;
 use crate::common::Command;
 use crate::configuration::{ConfigurationProvider, DELAY_IN_MS_BEFORE_DRAGGING_IS_ALLOWED, ENABLE_FEATURES_USING_MOUSE};
 use crate::utils::CONFIGURATION_PROVIDER_LOCK;
 use crossbeam_channel::Sender;
 use std::sync::{Arc, Mutex};
 
-pub struct WindowDragManager {
-  api: Option<WindowsApiForDragging>,
+pub struct MouseInteractionManager {
+  api: Option<NativeMouseInteractions>,
 }
 
-impl WindowDragManager {
+impl MouseInteractionManager {
   pub fn new(configuration_provider: Arc<Mutex<ConfigurationProvider>>, sender: Sender<Command>) -> Self {
     let guard = match configuration_provider.try_lock() {
       Ok(guard) => guard,
@@ -26,7 +26,7 @@ impl WindowDragManager {
     let delay_in_ms = guard.get_i32(DELAY_IN_MS_BEFORE_DRAGGING_IS_ALLOWED) as u32;
     match is_enabled {
       true => Self {
-        api: Some(WindowsApiForDragging::new(sender, delay_in_ms)),
+        api: Some(NativeMouseInteractions::new(sender, delay_in_ms)),
       },
       false => Self { api: None },
     }
@@ -49,31 +49,31 @@ mod tests {
   use std::sync::{Arc, Mutex};
 
   #[test]
-  fn window_drag_manager_initialises_with_enabled_feature() {
+  fn mouse_interaction_manager_initialises_with_enabled_feature() {
     let (sender, _receiver) = unbounded();
     let configuration_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
-    let mut manager = WindowDragManager::new(configuration_provider, sender);
+    let mut manager = MouseInteractionManager::new(configuration_provider, sender);
 
     assert!(manager.initialise().is_ok());
     assert!(manager.api.is_some());
   }
 
   #[test]
-  fn window_drag_manager_initialises_with_disabled_feature() {
+  fn mouse_interaction_manager_initialises_with_disabled_feature() {
     let (sender, _receiver) = unbounded();
     let configuration_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
     configuration_provider
       .lock()
       .expect("Failed to lock configuration provider")
       .set_bool(ENABLE_FEATURES_USING_MOUSE, false);
-    let mut manager = WindowDragManager::new(configuration_provider, sender);
+    let mut manager = MouseInteractionManager::new(configuration_provider, sender);
 
     assert!(manager.initialise().is_ok());
     assert!(manager.api.is_none());
   }
 
   #[test]
-  fn window_drag_manager_initialises_when_configuration_provider_lock_fails() {
+  fn mouse_interaction_manager_initialises_when_configuration_provider_lock_fails() {
     let (sender, _receiver) = unbounded();
     let configuration_provider = Arc::new(Mutex::new(ConfigurationProvider::default()));
     let configuration_provider_clone = Arc::clone(&configuration_provider);
@@ -85,7 +85,7 @@ mod tests {
       }
     });
 
-    let mut manager = WindowDragManager::new(configuration_provider_clone, sender);
+    let mut manager = MouseInteractionManager::new(configuration_provider_clone, sender);
 
     assert!(manager.initialise().is_ok());
     assert!(manager.api.is_none());

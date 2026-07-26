@@ -46,11 +46,11 @@ const IGNORED_WINDOW_TITLES: [&str; 9] = [
 /// mouse button. Since this functionality is very specific and isolated from other interactions with the Windows API
 /// and the code is incredibly verbose, it is implemented in a separate struct to avoid cluttering the main API
 /// interface which is [`crate::api::RealWindowsApi`]. Also, I'm not sure if this feature should remain part of Randolf.
-pub struct WindowsApiForDragging {
+pub struct NativeMouseInteractions {
   keyboard_hook_handle: Option<HHOOK>,
 }
 
-impl WindowsApiForDragging {
+impl NativeMouseInteractions {
   pub fn new(sender: Sender<Command>, key_press_delay_in_ms: u32) -> Self {
     SENDER
       .set(Arc::new(Mutex::new(sender)))
@@ -633,7 +633,7 @@ impl WindowsApiForDragging {
   }
 }
 
-impl Drop for WindowsApiForDragging {
+impl Drop for NativeMouseInteractions {
   fn drop(&mut self) {
     Self::uninstall_mouse_hook();
     if let Some(keyboard_hook) = self.keyboard_hook_handle {
@@ -670,7 +670,7 @@ mod tests {
       ResizeMode::BottomRight,
     );
 
-    WindowsApiForDragging::send_resize_completed(&mut state, &sender);
+    NativeMouseInteractions::send_resize_completed(&mut state, &sender);
 
     assert!(state.get_window_handle().is_none());
     match receiver.try_recv() {

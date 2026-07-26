@@ -23,7 +23,7 @@ use crate::hotkey_manager::HotkeyManager;
 use crate::log_manager::LogManager;
 use crate::tray_menu_manager::TrayMenuManager;
 use crate::utils::CONFIGURATION_PROVIDER_LOCK;
-use crate::window::drag_manager::WindowDragManager;
+use crate::window::mouse_interaction_manager::MouseInteractionManager;
 use crate::window::picker::WindowPicker;
 use crate::window::window_manager::WindowManager;
 use common::Command;
@@ -89,9 +89,9 @@ fn main() {
   let hkm = HotkeyManager::new_with_hotkeys(configuration_manager.clone(), workspace_ids);
   let interrupt_handle = hkm.initialise(command_sender.clone());
 
-  // Create window drag manager (for mouse-based features)
-  let mut window_drag_manager = WindowDragManager::new(configuration_manager.clone(), command_sender.clone());
-  if let Err(e) = window_drag_manager.initialise() {
+  // Create mouse interaction manager (for mouse-based features)
+  let mut mouse_interaction_manager = MouseInteractionManager::new(configuration_manager.clone(), command_sender.clone());
+  if let Err(e) = mouse_interaction_manager.initialise() {
     error!("Failed to initialise window drag manager: {}", e);
     panic!("Exiting now because application failed to initialise window drag manager");
   }
