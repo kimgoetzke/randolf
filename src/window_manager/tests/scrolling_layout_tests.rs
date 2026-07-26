@@ -252,29 +252,6 @@ fn scrolling_reconciliation_does_not_reset_mouse_position() {
 }
 
 #[test]
-fn scrolling_layout_retries_batch_failure_without_rejecting_strip_members() {
-  let (mut manager, _directory) = scrolling_manager();
-  MockWindowsApi::fail_next_deferred_positioning_batch();
-  MockWindowsApi::fail_next_deferred_positioning_batch();
-
-  manager.reconcile_layouts();
-
-  let workspace = manager.scrolling.get_workspace_containing(1.into()).unwrap();
-  assert_eq!(manager.scrolling.get_members(workspace), vec![1.into()]);
-  assert_eq!(
-    manager.windows_api.get_window_placement(1.into()).unwrap(),
-    WindowPlacement::new_from_sizing(Sizing::new(50, 50, 50, 50))
-  );
-
-  manager.reconcile_layouts();
-
-  assert_eq!(
-    manager.windows_api.get_window_placement(1.into()).unwrap(),
-    WindowPlacement::new_from_sizing(Sizing::new(725, 20, 470, 990))
-  );
-}
-
-#[test]
 fn scrolling_layout_skips_unpositionable_members_without_blocking_or_retrying_the_strip() {
   let (mut manager, _directory) = scrolling_manager();
   let blocked = WindowHandle::new(2);

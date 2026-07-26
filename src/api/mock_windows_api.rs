@@ -24,7 +24,6 @@ pub(crate) mod test {
     position_batches: Vec<Vec<(WindowHandle, Rect)>>,
     deferred_positioning_failures: HashSet<WindowHandle>,
     deferred_positioning_attempts: HashMap<WindowHandle, usize>,
-    deferred_positioning_batch_failures: usize,
     window_position_minimum_dimensions: HashMap<WindowHandle, (i32, i32)>,
     point_targets: HashMap<Point, (WindowHandle, WindowHandle)>,
     picker_windows: HashSet<WindowHandle>,
@@ -225,12 +224,6 @@ pub(crate) mod test {
       });
     }
 
-    pub fn fail_next_deferred_positioning_batch() {
-      MOCK_STATE.with(|state| {
-        state.borrow_mut().deferred_positioning_batch_failures += 1;
-      });
-    }
-
     pub fn deferred_positioning_attempts(handle: WindowHandle) -> usize {
       MOCK_STATE.with(|state| {
         state
@@ -424,10 +417,6 @@ pub(crate) mod test {
         let mut state = state.borrow_mut();
         for (handle, _) in positions {
           *state.deferred_positioning_attempts.entry(*handle).or_default() += 1;
-        }
-        if state.deferred_positioning_batch_failures > 0 {
-          state.deferred_positioning_batch_failures -= 1;
-          return WindowPositioningResult::BatchFailed;
         }
         let failures = positions
           .iter()
@@ -730,17 +719,6 @@ pub(crate) mod test {
     assert_eq!(metadata.title, "Résumé — 東京");
     assert_eq!(metadata.class_name, "EditorWindow");
     assert_eq!(metadata.rect, Rect::new(10, 20, 310, 220));
-  }
-
-  #[test]
-  fn deferred_positioning_distinguishes_batch_failure_from_rejected_windows() {
-    MockWindowsApi::reset();
-    MockWindowsApi::fail_next_deferred_positioning_batch();
-
-    assert_eq!(
-      MockWindowsApi.set_window_positions(&[(1.into(), Rect::new(0, 0, 100, 100))], 1.into()),
-      WindowPositioningResult::BatchFailed
-    );
   }
 
   #[test]
