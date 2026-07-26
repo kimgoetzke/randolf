@@ -26,16 +26,16 @@ win-hotkeys = "0.5.1"
 log = "0.4.33"
 trayicon = "0.4.1"
 simplelog = "0.12.2"
-time = "0.3.53" # Pin this transitive dependency to deal with CVE-2026-25727
+time = "0.3.54" # Pin this transitive dependency to deal with CVE-2026-25727
 crossbeam-channel = "0.5.16"
-serde = { version = "1.0.228", features = ["derive"] }
+serde = { version = "1.0.229", features = ["derive"] }
 toml = "1.1.2"
 directories = "6.0.0"
 
 [dev-dependencies]
 tempfile = "3.27.0"
 testing_logger = "0.1.1"
-serial_test = "3.5.0"
+serial_test = "4.0.1"
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
