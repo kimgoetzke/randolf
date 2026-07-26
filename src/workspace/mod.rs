@@ -10,8 +10,4 @@ pub(crate) use workspace::Workspace;
 pub(crate) use workspace_manager::WorkspaceManager;
 
 #[cfg(test)]
-pub(crate) mod tests {
-  pub(crate) use super::workspace_manager::tests::*;
-
-  mod workspace_tests;
-}
+pub(crate) mod tests;
