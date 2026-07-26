@@ -325,6 +325,8 @@ fn default_excluded_window_titles() -> Vec<String> {
     "Windows Shell Experience Host".to_string(),
     "ZPToolBarParentWnd".to_string(),
     "Settings".to_string(),
+    "ShareX - Screen recording".to_string(),
+    "ShareX - Region capture".to_string(),
   ]
 }
 
