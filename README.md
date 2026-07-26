@@ -72,6 +72,9 @@ Moving and resizing windows using the mouse while holding the `Win` key:
 Resizing (and opening and moving) windows using hotkeys only:
 ![Demo GIF 5](assets/demo_5.gif)
 
+Using the scrolling layout with hotkeys only:
+![Demo GIF 6](assets/demo_6.gif)
+
 ## How to configure
 
 > [!NOTE]
