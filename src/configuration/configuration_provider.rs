@@ -300,7 +300,7 @@ pub struct CustomHotkey {
 /// Settings for excluding certain windows from being managed by the application. This is useful for ignoring
 /// system windows or other applications that should not be affected by this application at all i.e. they should not
 /// be moved, selected, etc.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExclusionSettings {
   #[serde(default = "default_excluded_window_titles")]
   pub window_titles: Vec<String>,

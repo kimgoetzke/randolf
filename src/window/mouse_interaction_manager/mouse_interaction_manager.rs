@@ -24,9 +24,10 @@ impl MouseInteractionManager {
     };
     let is_enabled = guard.get_bool(ENABLE_FEATURES_USING_MOUSE);
     let delay_in_ms = guard.get_i32(DELAY_IN_MS_BEFORE_DRAGGING_IS_ALLOWED) as u32;
+    let exclusion_settings = guard.get_exclusion_settings();
     match is_enabled {
       true => Self {
-        api: Some(NativeMouseInteractions::new(sender, delay_in_ms)),
+        api: Some(NativeMouseInteractions::new(sender, delay_in_ms, exclusion_settings)),
       },
       false => Self { api: None },
     }

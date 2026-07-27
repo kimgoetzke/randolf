@@ -2,7 +2,9 @@ use super::drag_state::DragState;
 use super::resize_mode::ResizeMode;
 use super::resize_state::ResizeState;
 use crate::common::{Command, Point, Rect, WindowHandle};
+use crate::configuration::ExclusionSettings;
 use crossbeam_channel::Sender;
+use std::ascii::AsciiExt;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use windows::Win32::Foundation::*;
@@ -17,31 +19,16 @@ static DRAG_STATE: OnceLock<Arc<Mutex<DragState>>> = OnceLock::new();
 static RESIZE_STATE: OnceLock<Arc<Mutex<ResizeState>>> = OnceLock::new();
 static MOUSE_HOOK_HANDLE: AtomicPtr<std::ffi::c_void> = AtomicPtr::new(std::ptr::null_mut());
 static HOOK_TIMER_ID: AtomicUsize = AtomicUsize::new(0);
-static SENDER: OnceLock<Arc<Mutex<Sender<Command>>>> = OnceLock::new();
-static KEY_PRESS_DELAY_IN_MS: OnceLock<u32> = OnceLock::new();
+static G_CALLBACK_CONTEXT: OnceLock<CallbackContext> = OnceLock::new();
 
-const IGNORED_CLASS_NAMES: [&str; 6] = [
-  "Progman",
-  "WorkerW",
-  "Shell_TrayWnd",
-  "Shell_SecondaryTrayWnd",
-  "DV2ControlHost",
-  "SysListView32",
-];
+#[derive(Debug)]
+struct CallbackContext {
+  sender: Sender<Command>,
+  key_press_delay_in_ms: u32,
+  exclusion_settings: ExclusionSettings,
+}
 
-const IGNORED_WINDOW_TITLES: [&str; 9] = [
-  "Program Manager",
-  "Settings",
-  "Windows Input Experience",
-  "Windows Shell Experience Host",
-  "Realtek Audio Console",
-  "ZPToolBarParentWnd",
-  "Annotation MainToolbar",
-  "Annotation Entry Point",
-  "Annotation - Zoom",
-];
-
-/// This struct registers a keyboard hook that, if active for [`KEY_PRESS_DELAY_IN_MS`], will install a mouse
+/// This struct registers a keyboard hook that, if active for the configured delay, will install a mouse
 /// hook that allows the user to drag and resize windows by holding down the Windows key and clicking the left or right
 /// mouse button. Since this functionality is very specific and isolated from other interactions with the Windows API
 /// and the code is incredibly verbose, it is implemented in a separate struct to avoid cluttering the main API
@@ -51,13 +38,17 @@ pub struct NativeMouseInteractions {
 }
 
 impl NativeMouseInteractions {
-  pub fn new(sender: Sender<Command>, key_press_delay_in_ms: u32) -> Self {
-    SENDER
-      .set(Arc::new(Mutex::new(sender)))
-      .expect("Failed to set command sender");
-    KEY_PRESS_DELAY_IN_MS
-      .set(key_press_delay_in_ms)
-      .expect("Failed to set key press delay in");
+  pub fn new(sender: Sender<Command>, key_press_delay_in_ms: u32, exclusion_settings: &ExclusionSettings) -> Self {
+    let context = CallbackContext {
+      sender,
+      key_press_delay_in_ms,
+      exclusion_settings: exclusion_settings.clone(),
+    };
+    assert!(
+      G_CALLBACK_CONTEXT.set(context).is_ok(),
+      "Callback context was already initialised"
+    );
+
     Self {
       keyboard_hook_handle: None,
     }
@@ -132,11 +123,8 @@ impl NativeMouseInteractions {
     if IS_RESIZING.load(Ordering::Relaxed) {
       Self::finish_resizing();
     }
-    SENDER
-      .get()
-      .expect("Command sender not initialised")
-      .lock()
-      .expect("Failed to acquire command sender lock")
+    callback_context()
+      .sender
       .send(Command::DragWindows(false))
       .expect("Failed to send drag window command");
     Self::uninstall_mouse_hook();
@@ -152,11 +140,8 @@ impl NativeMouseInteractions {
       if IS_RESIZING.load(Ordering::Relaxed) {
         Self::finish_resizing();
       }
-      SENDER
-        .get()
-        .expect("Command sender not initialised")
-        .lock()
-        .expect("Failed to acquire command sender lock")
+      callback_context()
+        .sender
         .send(Command::DragWindows(false))
         .expect("Failed to send drag window command");
       Self::uninstall_mouse_hook();
@@ -166,8 +151,8 @@ impl NativeMouseInteractions {
   fn start_mouse_hook_install_timer() {
     unsafe {
       Self::cancel_mouse_hook_install_timer();
-      let key_press_delay_in_ms = KEY_PRESS_DELAY_IN_MS.get().expect("Key press delay not initialised");
-      let timer_id = SetTimer(None, 1000, *key_press_delay_in_ms, Some(Self::timer_callback));
+      let key_press_delay_in_ms = callback_context().key_press_delay_in_ms;
+      let timer_id = SetTimer(None, 1000, key_press_delay_in_ms, Some(Self::timer_callback));
       if timer_id != 0 {
         HOOK_TIMER_ID.store(timer_id, Ordering::Relaxed);
         trace!("Started hook installation timer with ID {}", timer_id);
@@ -182,15 +167,14 @@ impl NativeMouseInteractions {
       Self::cancel_mouse_hook_install_timer();
       if IS_WIN_KEY_PRESSED.load(Ordering::Relaxed) && !Self::is_state_inconsistent() {
         Self::install_mouse_hook();
-        SENDER
-          .get()
-          .expect("Command sender not initialised")
-          .lock()
-          .expect("Failed to acquire command sender lock")
+        callback_context()
+          .sender
           .send(Command::DragWindows(true))
           .expect("Failed to send drag window command");
-        let key_press_delay_in_ms = KEY_PRESS_DELAY_IN_MS.get().expect("Key press delay not initialised");
-        trace!("Installed mouse hook after {}ms delay", key_press_delay_in_ms);
+        trace!(
+          "Installed mouse hook after {}ms delay",
+          callback_context().key_press_delay_in_ms
+        );
       } else {
         trace!("Win key no longer pressed or state was inconsistent when timer expired");
       }
@@ -530,12 +514,7 @@ impl NativeMouseInteractions {
 
   fn finish_resizing() {
     if let Ok(mut resize_state) = get_resize_state().lock() {
-      let sender = SENDER
-        .get()
-        .expect("Command sender not initialised")
-        .lock()
-        .expect("Failed to acquire command sender lock");
-      Self::send_resize_completed(&mut resize_state, &sender);
+      Self::send_resize_completed(&mut resize_state, &callback_context().sender);
       IS_RESIZING.store(false, Ordering::Relaxed);
     }
   }
@@ -599,13 +578,14 @@ impl NativeMouseInteractions {
 
   fn is_not_a_managed_window(handle: &HWND) -> bool {
     let mut result = false;
+    let exclusion_settings = &callback_context().exclusion_settings;
     let class_name = Self::get_window_class_name(handle);
-    if IGNORED_CLASS_NAMES.contains(&class_name.as_str()) {
+    if exclusion_settings.window_class_names.contains(&class_name) {
       result = true;
     }
 
     let title = Self::get_window_title(handle);
-    if IGNORED_WINDOW_TITLES.contains(&title.as_str()) {
+    if exclusion_settings.window_titles.contains(&title) {
       result = true;
     }
 
@@ -644,6 +624,12 @@ impl Drop for NativeMouseInteractions {
       }
     }
   }
+}
+
+fn callback_context() -> &'static CallbackContext {
+  G_CALLBACK_CONTEXT
+    .get()
+    .expect("Callback context is initialised by NativeMouseInteractions::new")
 }
 
 fn get_drag_state() -> &'static Arc<Mutex<DragState>> {
