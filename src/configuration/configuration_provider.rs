@@ -319,12 +319,16 @@ impl Default for ExclusionSettings {
 
 pub(super) fn default_excluded_window_titles() -> Vec<String> {
   vec![
+    "".to_string(),
     "Program Manager".to_string(),
     "Windows Input Experience".to_string(),
-    "".to_string(),
     "Windows Shell Experience Host".to_string(),
-    "ZPToolBarParentWnd".to_string(),
     "Settings".to_string(),
+    "Realtek Audio Console".to_string(),
+    "ZPToolBarParentWnd".to_string(),     // Zoom
+    "Annotation MainToolbar".to_string(), // Zoom
+    "Annotation Entry Point".to_string(), // Zoom
+    "Annotation - Zoom".to_string(),      // Zoom
     "ShareX - Screen recording".to_string(),
     "ShareX - Region capture".to_string(),
   ]
@@ -348,6 +352,7 @@ pub(super) fn default_excluded_window_classes() -> Vec<String> {
     "Shell_TrayWnd".to_string(),
     "Shell_SecondaryTrayWnd".to_string(),
     "DV2ControlHost".to_string(),
+    "SysListView32".to_string(),
     "#32770".to_string(), // File properties window
   ]
 }
