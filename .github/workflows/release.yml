@@ -5,19 +5,19 @@ on:
 jobs:
   build-and-release:
     runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_EXECUTABLE: ./target/release/randolf.exe
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          override: true
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Bump version
         id: bump-version
@@ -40,22 +40,26 @@ jobs:
         run: cargo build --release
 
       - name: Decode certificate
+        env:
+          SIGNING_CERT_BASE64: ${{ secrets.SIGNING_CERT_BASE64 }}
         run: |
-          $certBytes = [Convert]::FromBase64String("${{ secrets.SIGNING_CERT_BASE64 }}")
+          $certBytes = [Convert]::FromBase64String($env:SIGNING_CERT_BASE64)
           $certPath = ".\cert.pfx"
           [IO.File]::WriteAllBytes($certPath, $certBytes)
           echo "CERT_PATH=$certPath" >> $env:GITHUB_ENV
 
       - name: Sign binary
+        env:
+          SIGNING_CERT_PASSWORD: ${{ secrets.SIGNING_CERT_PASSWORD }}
         run: |
           $signtoolPath = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" | Select-Object -First 1 -ExpandProperty FullName
-          & $signtoolPath sign /f $env:CERT_PATH /p "${{ secrets.SIGNING_CERT_PASSWORD }}" /tr "http://timestamp.digicert.com" /td SHA256 /fd SHA256 ./target/release/randolf.exe
+          & $signtoolPath sign /f $env:CERT_PATH /p $env:SIGNING_CERT_PASSWORD /tr "http://timestamp.digicert.com" /td SHA256 /fd SHA256 $env:RELEASE_EXECUTABLE
           if ($LASTEXITCODE -ne 0) {
             Write-Host "Signing failed with exit code $LASTEXITCODE"
             exit 1
           }
           Write-Host "Checking signature..."
-          $signature = Get-AuthenticodeSignature ./target/release/randolf.exe
+          $signature = Get-AuthenticodeSignature $env:RELEASE_EXECUTABLE
           if ($signature.Status -eq "Valid") {
             Write-Host "Binary successfully signed."
           } elseif ($signature.Status -eq "UnknownError") {
@@ -67,22 +71,31 @@ jobs:
           }
 
       - name: Create GitHub release
-        id: create_release
-        uses: actions/create-release@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: v${{ steps.bump-version.outputs.new_version }}
-          release_name: Release v${{ steps.bump-version.outputs.new_version }}
-          draft: false
-          prerelease: false
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = "${{ steps.bump-version.outputs.new_version }}"
+          $assetPath = Join-Path $env:RUNNER_TEMP "randolf-v$version.exe"
+          $targetCommit = git rev-parse HEAD
+          Copy-Item $env:RELEASE_EXECUTABLE $assetPath
+          gh release create "v$version" $assetPath --target $targetCommit --title "Release v$version" --notes ""
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
 
-      - name: Upload release asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./target/release/randolf.exe
-          asset_name: randolf-v${{ steps.bump-version.outputs.new_version }}.exe
-          asset_content_type: application/octet-stream
+      - name: Update Scoop manifest
+        run: |
+          $version = "${{ steps.bump-version.outputs.new_version }}"
+          $executableName = Split-Path $env:RELEASE_EXECUTABLE -Leaf
+          $assetName = "randolf-v$version.exe"
+          $hash = (Get-FileHash $env:RELEASE_EXECUTABLE -Algorithm SHA256).Hash.ToLowerInvariant()
+          $manifest = Get-Content randolf.json -Raw | ConvertFrom-Json
+          $manifest.version = $version
+          $manifest.url = "https://github.com/${{ github.repository }}/releases/download/v$version/$assetName#/$executableName"
+          $manifest.hash = "sha256:$hash"
+          $manifest.bin = $executableName
+          $manifest.autoupdate.url = "https://github.com/${{ github.repository }}/releases/download/v`$version/randolf-v`$version.exe#/$executableName"
+          $manifest | ConvertTo-Json -Depth 10 | Set-Content randolf.json -Encoding utf8
+          git add randolf.json
+          git commit -m "Update Scoop manifest to $version"
+          git push

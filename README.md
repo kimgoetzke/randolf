@@ -75,6 +75,17 @@ Resizing (and opening and moving) windows using hotkeys only:
 Using the scrolling layout with hotkeys only:
 ![Demo GIF 6](assets/demo_6.gif)
 
+## How to install
+
+The latest executable can be downloaded directly from https://github.com/kimgoetzke/randolf/releases/latest.
+
+Alternatively, you can install it using the Scoop package manager:
+
+```powershell
+scoop bucket add randolf https://github.com/kimgoetzke/randolf
+scoop install randolf/randolf
+```
+
 ## How to configure
 
 > [!NOTE]
