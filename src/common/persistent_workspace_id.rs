@@ -9,7 +9,7 @@ use std::fmt::Display;
 /// _within_ a single operation/[`Command`][crate::common::Command] execution. This can be done by resolving the
 /// [`PersistentWorkspaceId`] to a [`TransientWorkspaceId`][wst] at the start of the operation.
 ///
-/// [wst]: crate::common::TransientWorkspaceId
+/// [wst]: crate::window::workspace::TransientWorkspaceId
 #[derive(Debug, Copy, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct PersistentWorkspaceId {
   pub monitor_id: [u16; 32],
@@ -96,7 +96,7 @@ impl<'de> Deserialize<'de> for PersistentWorkspaceId {
 
 #[cfg(test)]
 mod tests {
-  use crate::common::{PersistentWorkspaceId, TransientWorkspaceId};
+  use crate::common::PersistentWorkspaceId;
 
   impl PersistentWorkspaceId {
     /// Creates a new instance of `PersistentWorkspaceId` for testing purposes for a primary monitor with a fixed
@@ -117,36 +117,12 @@ mod tests {
     }
   }
 
-  impl From<TransientWorkspaceId> for PersistentWorkspaceId {
-    fn from(value: TransientWorkspaceId) -> Self {
-      PersistentWorkspaceId {
-        monitor_id: value.monitor_id,
-        workspace: value.workspace,
-        is_on_primary_monitor: false,
-      }
-    }
-  }
-
   #[test]
   fn permanent_workspace_id_displays_id_as_string() {
     let id = PersistentWorkspaceId::new_test(1);
 
     assert_eq!(id.workspace, 1);
     assert_eq!(id.id_to_string(), "P_DISPLAY");
-  }
-
-  #[test]
-  fn from_transient_workspace_id_creates_correct_permanent_workspace_id() {
-    let transient_id = TransientWorkspaceId {
-      monitor_id: [1; 32],
-      monitor_handle: 1.into(),
-      workspace: 42,
-    };
-
-    let permanent_id: PersistentWorkspaceId = transient_id.into();
-
-    assert_eq!(permanent_id.monitor_id, [1; 32]);
-    assert_eq!(permanent_id.workspace, 42);
   }
 
   #[test]

@@ -1,5 +1,5 @@
 use crate::common::{Command, Direction, PersistentWorkspaceId};
-use crate::configuration_provider::ConfigurationProvider;
+use crate::configuration::ConfigurationProvider;
 use crate::utils::CONFIGURATION_PROVIDER_LOCK;
 use crossbeam_channel::Sender;
 use std::str::FromStr;
@@ -261,7 +261,7 @@ impl HotkeyManager {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::configuration_provider::CustomHotkey;
+  use crate::configuration::CustomHotkey;
   use log::Level::{Debug, Warn};
 
   #[test]

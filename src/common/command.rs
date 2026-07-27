@@ -1,4 +1,4 @@
-use crate::common::{Direction, PersistentWorkspaceId, WindowHandle};
+use crate::common::{Direction, PersistentWorkspaceId, Point, WindowHandle};
 use std::fmt::Display;
 
 /// Represents commands that can be executed in the main loop of this application. Basically, these are the actions
@@ -16,6 +16,9 @@ pub enum Command {
   SwitchWorkspace(PersistentWorkspaceId),
   MoveWindowToWorkspace(PersistentWorkspaceId),
   DragWindows(bool),
+  ToggleWindowPicker,
+  WindowPickerSelected(Point),
+  CancelWindowPicker,
   OpenApplication(String, bool),
   OpenRandolfExecutableFolder,
   OpenRandolfConfigFolder,
@@ -38,6 +41,9 @@ impl Display for Command {
       Command::SwitchWorkspace(id) => write!(f, "Switch to workspace [{id}]"),
       Command::MoveWindowToWorkspace(id) => write!(f, "Move window to workspace [{id}]"),
       Command::DragWindows(is_allowed) => write!(f, "Allow window dragging [{}]", is_allowed),
+      Command::ToggleWindowPicker => write!(f, "Toggle Window Picker"),
+      Command::WindowPickerSelected(point) => write!(f, "Window Picker selected at [{point}]"),
+      Command::CancelWindowPicker => write!(f, "Cancel Window Picker"),
       Command::OpenApplication(path, as_admin) => write!(f, "Open [{path}] as admin [{as_admin}]"),
       Command::OpenRandolfExecutableFolder => write!(f, "Open Randolf's executable folder in Explorer"),
       Command::OpenRandolfConfigFolder => write!(f, "Open Randolf's config folder in Explorer"),

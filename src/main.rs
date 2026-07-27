@@ -3,16 +3,13 @@
 mod api;
 mod application_launcher;
 mod common;
-mod configuration_provider;
+mod configuration;
 mod files;
 mod hotkey_manager;
 mod log_manager;
 mod tray_menu_manager;
 mod utils;
-mod window_drag_manager;
-mod window_manager;
-mod workspace_guard;
-mod workspace_manager;
+mod window;
 
 #[macro_use]
 extern crate log;
@@ -20,16 +17,15 @@ extern crate simplelog;
 
 use crate::api::{RealWindowsApi, WindowsApi};
 use crate::application_launcher::ApplicationLauncher;
-use crate::configuration_provider::{
-  ConfigurationProvider, FORCE_USING_ADMIN_PRIVILEGES, SCROLLING_RECONCILIATION_INTERVAL_IN_MS,
-};
+use crate::configuration::{ConfigurationProvider, FORCE_USING_ADMIN_PRIVILEGES, SCROLLING_RECONCILIATION_INTERVAL_IN_MS};
 use crate::files::FileType;
 use crate::hotkey_manager::HotkeyManager;
 use crate::log_manager::LogManager;
 use crate::tray_menu_manager::TrayMenuManager;
 use crate::utils::CONFIGURATION_PROVIDER_LOCK;
-use crate::window_drag_manager::WindowDragManager;
-use crate::window_manager::WindowManager;
+use crate::window::mouse_interaction_manager::MouseInteractionManager;
+use crate::window::picker::WindowPicker;
+use crate::window::window_manager::WindowManager;
 use common::Command;
 use crossbeam_channel::{Receiver, unbounded};
 use std::cell::RefCell;
@@ -52,7 +48,7 @@ fn main() {
     command_sender.clone(),
   )));
 
-  // Create Windows API, application launcher, and log current configuration
+  // Create Windows API, application launcher, and window picker
   let windows_api = RealWindowsApi::new(
     configuration_manager
       .lock()
@@ -63,6 +59,7 @@ fn main() {
     configuration_manager.clone(),
     windows_api.clone(),
   )));
+  let window_picker = Rc::new(RefCell::new(WindowPicker::new(windows_api.clone(), command_sender.clone())));
 
   // Log loaded configuration for reference
   configuration_manager
@@ -92,9 +89,9 @@ fn main() {
   let hkm = HotkeyManager::new_with_hotkeys(configuration_manager.clone(), workspace_ids);
   let interrupt_handle = hkm.initialise(command_sender.clone());
 
-  // Create window drag manager (for mouse-based features)
-  let mut window_drag_manager = WindowDragManager::new(configuration_manager.clone(), command_sender.clone());
-  if let Err(e) = window_drag_manager.initialise() {
+  // Create mouse interaction manager (for mouse-based features)
+  let mut mouse_interaction_manager = MouseInteractionManager::new(configuration_manager.clone(), command_sender.clone());
+  if let Err(e) = mouse_interaction_manager.initialise() {
     error!("Failed to initialise window drag manager: {}", e);
     panic!("Exiting now because application failed to initialise window drag manager");
   }
@@ -110,6 +107,7 @@ fn main() {
     configuration_manager,
     command_receiver,
     tray_menu_manager,
+    window_picker,
     launcher,
     wm,
     interrupt_handle,
@@ -117,10 +115,12 @@ fn main() {
   );
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_loop(
   configuration_manager: Arc<Mutex<ConfigurationProvider>>,
   command_receiver: Receiver<Command>,
   tray_menu_manager: Rc<RefCell<TrayMenuManager>>,
+  window_picker: Rc<RefCell<WindowPicker<RealWindowsApi>>>,
   launcher: Rc<RefCell<ApplicationLauncher<RealWindowsApi>>>,
   wm: Rc<RefCell<WindowManager<RealWindowsApi>>>,
   interrupt_handle: InterruptHandle,
@@ -149,6 +149,11 @@ fn run_loop(
         }
         Command::MoveWindowToWorkspace(id) => wm.borrow_mut().move_window_to_workspace(id),
         Command::DragWindows(is_enabled) => tray_menu_manager.borrow_mut().set_window_drag_icon(is_enabled),
+        Command::ToggleWindowPicker => window_picker.borrow_mut().handle_toggle(),
+        Command::WindowPickerSelected(point) => window_picker.borrow_mut().handle_selection(point),
+        Command::CancelWindowPicker => {
+          window_picker.borrow_mut().cancel();
+        }
         Command::OpenApplication(path, as_admin) => launcher.borrow_mut().launch(path, None, as_admin),
         Command::OpenRandolfExecutableFolder => {
           let args = launcher.borrow_mut().get_executable_folder();
@@ -163,6 +168,7 @@ fn run_loop(
           launcher.borrow_mut().launch("explorer.exe".to_string(), Some(&args), false);
         }
         Command::RestartRandolf(as_admin) => {
+          window_picker.borrow_mut().cancel();
           wm.borrow_mut().restore_all_managed_windows();
           interrupt_handle.interrupt();
           let as_admin = configuration_manager
@@ -175,6 +181,7 @@ fn run_loop(
           std::process::exit(0);
         }
         Command::Exit => {
+          window_picker.borrow_mut().cancel();
           wm.borrow_mut().restore_all_managed_windows();
           interrupt_handle.interrupt();
           info!("Application exited cleanly");
@@ -182,6 +189,7 @@ fn run_loop(
         }
       }
     }
+    window_picker.borrow_mut().refresh_hover_preview();
     run_if_due(
       &mut last_scrolling_layout_reconciliation,
       scrolling_reconciliation_interval,

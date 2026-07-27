@@ -1,8 +1,14 @@
-use crate::common::{MonitorHandle, MonitorInfo, Monitors, Point, Rect, Window, WindowHandle, WindowPlacement};
+use crate::common::{
+  MonitorHandle, MonitorInfo, Monitors, Point, Rect, Window, WindowHandle, WindowLookupError, WindowMetadata,
+  WindowPlacement, WindowPositioningResult,
+};
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
 
 pub trait WindowsApi {
   fn is_running_as_admin(&self) -> bool;
+  /// Returns the raw foreground window reported by Windows, including unmanaged UI.
+  fn get_raw_foreground_window(&self) -> Option<WindowHandle>;
+  /// Returns the foreground window only when it is considered "managed."
   fn get_foreground_window(&self) -> Option<WindowHandle>;
   fn set_foreground_window(&self, handle: WindowHandle);
   fn get_all_windows(&self) -> Vec<Window>;
@@ -10,17 +16,21 @@ pub trait WindowsApi {
   fn get_all_visible_windows_within_area(&self, rect: Rect) -> Vec<Window>;
   fn get_window_title(&self, handle: &WindowHandle) -> String;
   fn get_window_class_name(&self, handle: &WindowHandle) -> String;
+  /// Retrieve raw top-level window metadata at a screen point.
+  fn get_window_at_point(&self, point: Point) -> Result<WindowMetadata, WindowLookupError>;
   /// Returns the on-screen bounding rectangle for the given window.
   fn get_window_rect(&self, handle: WindowHandle) -> Option<Rect>;
   /// Returns the DWM extended frame bounds (includes drop shadows) when available.
   fn get_extended_frame_bounds(&self, handle: WindowHandle) -> Option<Rect>;
+  /// Reports whether a mouse button is currently held.
+  fn is_pointer_interaction_active(&self) -> bool;
   fn is_window_minimised(&self, handle: WindowHandle) -> bool;
   fn is_not_a_managed_window(&self, handle: &WindowHandle) -> bool;
   fn is_window_hidden(&self, handle: &WindowHandle) -> bool;
   fn set_window_position(&self, handle: WindowHandle, rect: Rect);
-  /// Moves windows atomically and orders them below the active/foreground window. Returns window handles of windows
-  /// that could not be positioned (i.e. failures).
-  fn set_window_positions(&self, positions: &[(WindowHandle, Rect)], active_handle: WindowHandle) -> Vec<WindowHandle>;
+  /// Moves windows atomically and orders them below the active window.
+  fn set_window_positions(&self, positions: &[(WindowHandle, Rect)], active_handle: WindowHandle)
+  -> WindowPositioningResult;
   /// Sets the window position on the same monitor as the given rectangle. WARNING: Does not adjust for DPI scaling.
   #[allow(dead_code)]
   fn set_window_position_with_dpi_adjustment(

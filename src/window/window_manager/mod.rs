@@ -1,0 +1,12 @@
+mod navigation;
+mod placement;
+mod scrolling_layout;
+mod scrolling_strips;
+mod spatial_layout;
+#[cfg(test)]
+mod tests;
+mod width_preset;
+#[allow(clippy::module_inception)]
+mod window_manager;
+
+pub use window_manager::WindowManager;
