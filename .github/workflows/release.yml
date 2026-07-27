@@ -37,7 +37,7 @@ jobs:
           echo "new_version=$new_version" >> $env:GITHUB_OUTPUT
 
       - name: Build release
-        run: cargo build --release --locked
+        run: cargo build --release
 
       - name: Decode certificate
         env:
