@@ -1,0 +1,15 @@
+{
+  "version": "0.31.0",
+  "description": "A small window management utility for Windows 11",
+  "homepage": "https://github.com/kimgoetzke/randolf",
+  "license": "MIT",
+  "url": "https://github.com/kimgoetzke/randolf/releases/download/v0.31.0/randolf-v0.31.0.exe#/randolf.exe",
+  "hash": "sha256:39deacb176a07803736a74208db483c6e89c682dbce0c635108bb5ba4992e79c",
+  "bin": "randolf.exe",
+  "checkver": {
+    "github": "https://github.com/kimgoetzke/randolf"
+  },
+  "autoupdate": {
+    "url": "https://github.com/kimgoetzke/randolf/releases/download/v$version/randolf-v$version.exe#/randolf.exe"
+  }
+}
