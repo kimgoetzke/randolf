@@ -4,7 +4,6 @@ use super::resize_state::ResizeState;
 use crate::common::{Command, Point, Rect, WindowHandle};
 use crate::configuration::ExclusionSettings;
 use crossbeam_channel::Sender;
-use std::ascii::AsciiExt;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use windows::Win32::Foundation::*;
