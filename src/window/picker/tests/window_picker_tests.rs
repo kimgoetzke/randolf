@@ -137,7 +137,7 @@ fn hover_preview_uses_current_window_metadata() {
     state.borrow().hover_previews,
     vec![(
       point,
-      "Window title: Document\nWindow class name: EditorWindow\nClick to select · Esc/right-click cancels".to_string()
+      "Window title: Document\nWindow class name: EditorWindow\nClick to select · Esc or right click to cancel".to_string()
     )]
   );
 }
@@ -296,10 +296,10 @@ fn selection_dialog_content_preserves_unicode_and_labels_empty_values() {
 fn hover_preview_labels_empty_values_and_explains_controls() {
   assert_eq!(
     hover_text(&metadata("", "EditorWindow")),
-    "Window title: (empty)\nWindow class name: EditorWindow\nClick to select · Esc/right-click cancels"
+    "Window title: (empty)\nWindow class name: EditorWindow\nClick to select · Esc or right click to cancel"
   );
   assert_eq!(
     hover_error_text(WindowLookupError::AccessDenied),
-    "Window Picker\nRandolf does not have permission to inspect that window\nClick a window · Esc/right-click cancels"
+    "Window Picker\nRandolf does not have permission to inspect that window\nClick a window · Esc or right click to cancel"
   );
 }

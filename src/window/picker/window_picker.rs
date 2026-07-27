@@ -189,7 +189,7 @@ pub(super) fn selection_dialog_content(metadata: &WindowMetadata) -> String {
 /// Formats selected window metadata for the tracking tooltip.
 pub(super) fn hover_text(metadata: &WindowMetadata) -> String {
   format!(
-    "Window title: {}\nWindow class name: {}\nClick to select · Esc/right-click cancels",
+    "Window title: {}\nWindow class name: {}\nClick to select · Esc or right click to cancel",
     display_value(&metadata.title),
     display_value(&metadata.class_name)
   )
@@ -197,7 +197,7 @@ pub(super) fn hover_text(metadata: &WindowMetadata) -> String {
 
 /// Formats a lookup failure for the tracking tooltip.
 pub(super) fn hover_error_text(error: WindowLookupError) -> String {
-  format!("Window Picker\n{error}\nClick a window · Esc/right-click cancels")
+  format!("Window Picker\n{error}\nClick a window · Esc or right click to cancel")
 }
 
 /// Replaces an empty metadata value with an explicit placeholder.
