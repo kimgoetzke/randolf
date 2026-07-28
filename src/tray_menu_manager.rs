@@ -268,26 +268,14 @@ fn build_menu(config_provider: &Arc<Mutex<ConfigurationProvider>>) -> MenuBuilde
       icon: Some(Icon::from_buffer(icon_bytes, Some(32), Some(32)).unwrap()),
     })
     .separator()
-    .item("Identify window...", Event::IdentifyWindow)
     .submenu(
       "Explore debug settings",
-      MenuBuilder::new().item("Print monitor layout to log file", Event::LogMonitorLayout),
+      MenuBuilder::new()
+        .item("Identify window...", Event::IdentifyWindow)
+        .item("Print monitor layout to log file", Event::LogMonitorLayout),
     )
     .separator()
-    .submenu(
-      "Set window margin to...",
-      MenuBuilder::new()
-        .checkable("0 px", 0 == current_margin, Event::SetMargin(0))
-        .checkable("10 px", 10 == current_margin, Event::SetMargin(10))
-        .checkable("15 px", 15 == current_margin, Event::SetMargin(15))
-        .checkable("20 px (default)", 20 == current_margin, Event::SetMargin(20))
-        .checkable("30 px", 30 == current_margin, Event::SetMargin(30))
-        .checkable("40 px", 40 == current_margin, Event::SetMargin(40))
-        .checkable("50 px", 50 == current_margin, Event::SetMargin(50))
-        .checkable("75 px", 75 == current_margin, Event::SetMargin(75))
-        .checkable("100 px", 100 == current_margin, Event::SetMargin(100))
-        .checkable("150 px", 150 == current_margin, Event::SetMargin(150)),
-    )
+    .submenu("Set window margin to...", build_window_margin_menu(current_margin))
     .submenu("Set default layout...", build_default_layout_menu(current_layout))
     .separator()
     .checkable(
@@ -307,6 +295,21 @@ fn build_menu(config_provider: &Arc<Mutex<ConfigurationProvider>>) -> MenuBuilde
     .item("Restart with admin privileges", Event::RestartRandolf(true))
     .item("Restart", Event::RestartRandolf(false))
     .item("Exit (restores any hidden windows)", Event::Exit)
+}
+
+fn build_window_margin_menu(current_margin: i32) -> MenuBuilder<Event> {
+  MenuBuilder::new()
+    .checkable("0 px", 0 == current_margin, Event::SetMargin(0))
+    .checkable("5 px", 5 == current_margin, Event::SetMargin(5))
+    .checkable("10 px", 10 == current_margin, Event::SetMargin(10))
+    .checkable("15 px", 15 == current_margin, Event::SetMargin(15))
+    .checkable("20 px (default)", 20 == current_margin, Event::SetMargin(20))
+    .checkable("30 px", 30 == current_margin, Event::SetMargin(30))
+    .checkable("40 px", 40 == current_margin, Event::SetMargin(40))
+    .checkable("50 px", 50 == current_margin, Event::SetMargin(50))
+    .checkable("75 px", 75 == current_margin, Event::SetMargin(75))
+    .checkable("100 px", 100 == current_margin, Event::SetMargin(100))
+    .checkable("150 px", 150 == current_margin, Event::SetMargin(150))
 }
 
 fn build_default_layout_menu(current_layout: Layout) -> MenuBuilder<Event> {
@@ -483,6 +486,24 @@ mod test {
     });
     assert!(!IS_DRAG_ICON_SHOWN.load(std::sync::atomic::Ordering::Relaxed));
     assert_eq!(WORKSPACE.load(std::sync::atomic::Ordering::Relaxed), 2);
+  }
+
+  #[test]
+  fn window_margin_menu_offers_five_pixels() {
+    let expected = MenuBuilder::new()
+      .checkable("0 px", false, Event::SetMargin(0))
+      .checkable("5 px", true, Event::SetMargin(5))
+      .checkable("10 px", false, Event::SetMargin(10))
+      .checkable("15 px", false, Event::SetMargin(15))
+      .checkable("20 px (default)", false, Event::SetMargin(20))
+      .checkable("30 px", false, Event::SetMargin(30))
+      .checkable("40 px", false, Event::SetMargin(40))
+      .checkable("50 px", false, Event::SetMargin(50))
+      .checkable("75 px", false, Event::SetMargin(75))
+      .checkable("100 px", false, Event::SetMargin(100))
+      .checkable("150 px", false, Event::SetMargin(150));
+
+    assert_eq!(build_window_margin_menu(5), expected);
   }
 
   #[test]
