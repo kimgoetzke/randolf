@@ -13,6 +13,7 @@ use trayicon::*;
 static WORKSPACE: AtomicU8 = AtomicU8::new(1);
 static IS_DRAG_ICON_SHOWN: AtomicBool = AtomicBool::new(false);
 
+/// Owns the notification-area icon, its menu and workspace-specific images.
 pub struct TrayMenuManager {
   configuration_provider: Arc<Mutex<ConfigurationProvider>>,
   menu: Option<Arc<Mutex<TrayIcon<Event>>>>,
@@ -20,6 +21,7 @@ pub struct TrayMenuManager {
   drag_icon: Icon,
 }
 
+/// Describes an action selected from the notification-area icon or menu.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 enum Event {
   RightClickTrayIcon,
@@ -40,6 +42,7 @@ enum Event {
 }
 
 impl TrayMenuManager {
+  /// Creates a manager without a notification-area icon or event listener.
   fn new(configuration_provider: Arc<Mutex<ConfigurationProvider>>) -> Self {
     Self {
       configuration_provider,
@@ -50,6 +53,11 @@ impl TrayMenuManager {
     }
   }
 
+  /// Creates the icon and menu, then starts handling their events in the background.
+  ///
+  /// # Panics
+  ///
+  /// Panics if Windows rejects the icon or an included image is invalid.
   pub fn new_initialised(
     configuration_provider: Arc<Mutex<ConfigurationProvider>>,
     command_sender: Sender<Command>,
@@ -65,6 +73,11 @@ impl TrayMenuManager {
     manager
   }
 
+  /// Loads the included 32×32 image for workspace `1` through `9`.
+  ///
+  /// # Panics
+  ///
+  /// Panics for any other index or if the included image is invalid.
   fn create_icon(index: u8) -> Icon {
     let icon_data = match index {
       1 => include_bytes!("../assets/randolf-1.ico"),
@@ -82,10 +95,11 @@ impl TrayMenuManager {
     Icon::from_buffer(icon_data, Some(32), Some(32)).expect("Failed to create icon from buffer")
   }
 
-  fn create_tray_icon(&mut self, tx: Sender<Event>) -> TrayIcon<Event> {
+  /// Builds the Windows notification-area icon and sends its actions through [`Sender<Event>`].
+  fn create_tray_icon(&mut self, tray_event_sender: Sender<Event>) -> TrayIcon<Event> {
     TrayIconBuilder::new()
       .sender(move |e| {
-        let _ = tx.send(*e);
+        let _ = tray_event_sender.send(*e);
       })
       .icon_from_buffer(include_bytes!("../assets/randolf.ico"))
       .tooltip("Randolf")
@@ -98,11 +112,12 @@ impl TrayMenuManager {
   }
 
   // TODO: Update margins of "known" windows when the margin is changed
-  fn initialise(&self, rx: Receiver<Event>, command_sender: Sender<Command>) {
+  /// Starts a background listener that applies menu changes or sends main-loop commands.
+  fn initialise(&self, tray_event_receiver: Receiver<Event>, command_sender: Sender<Command>) {
     let tray_icon = Arc::clone(self.menu.as_ref().unwrap());
     let config_provider = self.configuration_provider.clone();
     thread::spawn(move || {
-      rx.iter().for_each(|m| match m {
+      tray_event_receiver.iter().for_each(|m| match m {
         Event::RightClickTrayIcon => {
           tray_icon.lock().expect(TRAY_ICON_LOCK).show_menu().expect(TRAY_ICON_OPEN);
         }
@@ -201,6 +216,9 @@ impl TrayMenuManager {
     });
   }
 
+  /// Shows the active primary-monitor workspace number in the notification area. Other monitors and unsupported
+  /// workspace numbers are ignored. While the drag image is shown, the new workspace is remembered and displayed
+  /// when dragging ends.
   pub fn update_tray_icon(&self, workspace_id: PersistentWorkspaceId) {
     if !workspace_id.is_on_primary_monitor() {
       return;
@@ -231,6 +249,7 @@ impl TrayMenuManager {
     }
   }
 
+  /// Shows the drag image when enabled, otherwise restores the current workspace image.
   pub fn set_window_drag_icon(&self, is_enabled: bool) {
     let tray_icon = Arc::clone(self.menu.as_ref().unwrap());
     let icon = if is_enabled {
@@ -250,10 +269,12 @@ impl TrayMenuManager {
   }
 }
 
+/// Locks the shared settings or panics if an earlier settings update failed while locked.
 fn unlocked_config_provider(config_provider: &Arc<Mutex<ConfigurationProvider>>) -> MutexGuard<'_, ConfigurationProvider> {
   config_provider.lock().expect(CONFIGURATION_PROVIDER_LOCK)
 }
 
+/// Builds the complete menu using the current saved settings.
 fn build_menu(config_provider: &Arc<Mutex<ConfigurationProvider>>) -> MenuBuilder<Event> {
   let config = unlocked_config_provider(config_provider);
   let current_margin: i32 = config.get_i32(WINDOW_MARGIN);
@@ -297,6 +318,7 @@ fn build_menu(config_provider: &Arc<Mutex<ConfigurationProvider>>) -> MenuBuilde
     .item("Exit (restores any hidden windows)", Event::Exit)
 }
 
+/// Builds the list of window-gap sizes and marks the current size.
 fn build_window_margin_menu(current_margin: i32) -> MenuBuilder<Event> {
   MenuBuilder::new()
     .checkable("0 px", 0 == current_margin, Event::SetMargin(0))
@@ -312,6 +334,7 @@ fn build_window_margin_menu(current_margin: i32) -> MenuBuilder<Event> {
     .checkable("150 px", 150 == current_margin, Event::SetMargin(150))
 }
 
+/// Builds the layout choices and marks the current default.
 fn build_default_layout_menu(current_layout: Layout) -> MenuBuilder<Event> {
   MenuBuilder::new()
     .checkable(
