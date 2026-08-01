@@ -456,7 +456,7 @@ mod tests {
       assert_eq!(captured_logs.len(), 9);
       assert_eq!(
         captured_logs[8].body,
-        "Cannot bind workspace number [9] to a hotkey because it is greater than 9"
+        "Cannot bind workspace number [9] to a hotkey because it is greater than 8"
       );
       assert_eq!(captured_logs[8].level, Warn);
     });
