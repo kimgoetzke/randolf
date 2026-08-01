@@ -1,5 +1,5 @@
 use super::hotkey_outcome::HotkeyOutcome;
-use super::key_release_hook::KeyReleaseHook;
+use super::native_key_release_hook::NativeKeyReleaseHook;
 use super::press_latch::PressLatch;
 use crate::common::{Command, Direction, PersistentWorkspaceId};
 use crate::configuration::ConfigurationProvider;
@@ -24,7 +24,7 @@ pub struct HotkeyManager {
   hkm: win_hotkeys::HotkeyManager<HotkeyOutcome>,
   configuration_provider: Arc<Mutex<ConfigurationProvider>>,
   application_latches: HashMap<u32, PressLatch>,
-  key_release_hook: Option<KeyReleaseHook>,
+  key_release_hook: Option<NativeKeyReleaseHook>,
 }
 
 impl HotkeyManager {
@@ -100,7 +100,7 @@ impl HotkeyManager {
   pub fn initialise(mut self, command_sender: Sender<Command>) -> InterruptHandle {
     if !self.application_latches.is_empty() {
       self.key_release_hook = Some(
-        KeyReleaseHook::start(std::mem::take(&mut self.application_latches))
+        NativeKeyReleaseHook::start(std::mem::take(&mut self.application_latches))
           .unwrap_or_else(|error| panic!("Failed to initialise application hotkey release hook: {error}")),
       );
     }
@@ -249,7 +249,7 @@ impl HotkeyManager {
   /// Creates the binding to launch an application once per physical key press.
   ///
   /// The key's Windows virtual-key code associates the callback's latch with release events received by
-  /// [`KeyReleaseHook`].
+  /// [`NativeKeyReleaseHook`].
   fn register_application_hotkey(&mut self, name: &str, path: &str, key: VKey, open_as_admin: bool) {
     let latch = PressLatch::default();
     self
@@ -380,7 +380,7 @@ mod tests {
     assert!(matches!(callback(), HotkeyOutcome::Accepted(_)));
     assert!(matches!(callback(), HotkeyOutcome::Suppressed));
 
-    super::super::key_release_hook::rearm_released_key(&latches, VKey::F.to_vk_code().into());
+    super::super::native_key_release_hook::rearm_released_key(&latches, VKey::F.to_vk_code().into());
 
     assert!(matches!(callback(), HotkeyOutcome::Accepted(_)));
   }

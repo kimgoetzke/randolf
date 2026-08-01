@@ -18,12 +18,12 @@ static RELEASE_LATCHES: LazyLock<RwLock<HashMap<u32, PressLatch>>> = LazyLock::n
 ///
 /// Windows invokes the hook callback for system-wide keyboard events. Only physical key releases registered in
 /// [`RELEASE_LATCHES`] affect application shortcuts.
-pub(super) struct KeyReleaseHook {
+pub(super) struct NativeKeyReleaseHook {
   thread_id: u32,
   thread: Option<JoinHandle<()>>,
 }
 
-impl KeyReleaseHook {
+impl NativeKeyReleaseHook {
   /// Installs the release hook on a dedicated thread and waits until it is ready.
   ///
   /// Returns an error if Windows rejects the hook or the thread stops during start-up.
@@ -51,7 +51,7 @@ impl KeyReleaseHook {
   }
 }
 
-impl Drop for KeyReleaseHook {
+impl Drop for NativeKeyReleaseHook {
   /// Posts [`WM_QUIT`] to the hook's message queue and waits for its thread to finish.
   fn drop(&mut self) {
     if let Err(error) = unsafe { PostThreadMessageW(self.thread_id, WM_QUIT, WPARAM(0), LPARAM(0)) } {
