@@ -3,21 +3,19 @@ on:
   push:
     branches: [ main ]
 jobs:
-  build-and-release:
+  bump-version:
     runs-on: windows-latest
     permissions:
       contents: write
-    env:
-      RELEASE_EXECUTABLE: ./target/release/randolf.exe
+    outputs:
+      new_version: ${{ steps.bump-version.outputs.new_version }}
+      commit_sha: ${{ steps.bump-version.outputs.commit_sha }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+          ref: main
+          token: ${{ github.token }}
 
       - name: Bump version
         id: bump-version
@@ -28,25 +26,72 @@ jobs:
           $new_version = "$($version_parts[0]).$new_minor.$($version_parts[2])"
           Write-Host "Bumping version to $new_version"
           (Get-Content Cargo.toml) -replace "^version = `"$current_version`"", "version = `"$new_version`"" | Set-Content Cargo.toml
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
-          git add Cargo.toml
+          $lockPattern = '(?m)(^\[\[package\]\]\r?\nname = "randolf"\r?\nversion = ")[^"]+("\r?$)'
+          $lockRegex = [regex]::new($lockPattern)
+          $lockContents = Get-Content Cargo.lock -Raw
+          if ($lockRegex.Matches($lockContents).Count -ne 1) {
+            throw "Expected exactly one Randolf package entry in Cargo.lock"
+          }
+          $lockContents = $lockRegex.Replace($lockContents, { param($match) "$($match.Groups[1].Value)$new_version$($match.Groups[2].Value)" }, 1)
+          Set-Content Cargo.lock -Value $lockContents -NoNewline
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add Cargo.toml Cargo.lock
           git commit -m "Bump version to $new_version"
-          git push
+          git push origin HEAD:main
           Write-Host "Pushed new version to main branch"
           echo "new_version=$new_version" >> $env:GITHUB_OUTPUT
+          echo "commit_sha=$(git rev-parse HEAD)" >> $env:GITHUB_OUTPUT
+
+  build:
+    needs: bump-version
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    env:
+      RELEASE_EXECUTABLE: ./target/release/randolf.exe
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.bump-version.outputs.commit_sha }}
+          persist-credentials: false
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Build release
-        run: cargo build --release
+        run: cargo build --release --locked
+
+      - name: Store unsigned executable
+        uses: actions/upload-artifact@v7
+        with:
+          name: unsigned-randolf
+          path: ${{ env.RELEASE_EXECUTABLE }}
+          if-no-files-found: error
+          retention-days: 1
+
+  sign:
+    needs: build
+    runs-on: windows-latest
+    permissions: {}
+    env:
+      RELEASE_EXECUTABLE: ./unsigned/randolf.exe
+      CERT_PATH: ${{ runner.temp }}\cert.pfx
+
+    steps:
+      - name: Retrieve unsigned executable
+        uses: actions/download-artifact@v8
+        with:
+          name: unsigned-randolf
+          path: ./unsigned
 
       - name: Decode certificate
         env:
           SIGNING_CERT_BASE64: ${{ secrets.SIGNING_CERT_BASE64 }}
         run: |
           $certBytes = [Convert]::FromBase64String($env:SIGNING_CERT_BASE64)
-          $certPath = ".\cert.pfx"
-          [IO.File]::WriteAllBytes($certPath, $certBytes)
-          echo "CERT_PATH=$certPath" >> $env:GITHUB_ENV
+          [IO.File]::WriteAllBytes($env:CERT_PATH, $certBytes)
 
       - name: Sign binary
         env:
@@ -70,13 +115,45 @@ jobs:
             exit 1
           }
 
+      - name: Remove certificate
+        if: always()
+        run: Remove-Item -LiteralPath $env:CERT_PATH -Force -ErrorAction SilentlyContinue
+
+      - name: Store signed executable
+        uses: actions/upload-artifact@v7
+        with:
+          name: signed-randolf
+          path: ${{ env.RELEASE_EXECUTABLE }}
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: [bump-version, sign]
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_EXECUTABLE: ./signed/randolf.exe
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          token: ${{ github.token }}
+
+      - name: Retrieve signed executable
+        uses: actions/download-artifact@v8
+        with:
+          name: signed-randolf
+          path: ./signed
+
       - name: Create GitHub release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          $version = "${{ steps.bump-version.outputs.new_version }}"
+          $version = "${{ needs.bump-version.outputs.new_version }}"
           $assetPath = Join-Path $env:RUNNER_TEMP "randolf-v$version.exe"
-          $targetCommit = git rev-parse HEAD
+          $targetCommit = "${{ needs.bump-version.outputs.commit_sha }}"
           Copy-Item $env:RELEASE_EXECUTABLE $assetPath
           gh release create "v$version" $assetPath --target $targetCommit --title "Release v$version" --notes ""
           if ($LASTEXITCODE -ne 0) {
@@ -85,7 +162,7 @@ jobs:
 
       - name: Update Scoop manifest
         run: |
-          $version = "${{ steps.bump-version.outputs.new_version }}"
+          $version = "${{ needs.bump-version.outputs.new_version }}"
           $executableName = Split-Path $env:RELEASE_EXECUTABLE -Leaf
           $assetName = "randolf-v$version.exe"
           $hash = (Get-FileHash $env:RELEASE_EXECUTABLE -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -96,6 +173,8 @@ jobs:
           $manifest.bin = $executableName
           $manifest.autoupdate.url = "https://github.com/${{ github.repository }}/releases/download/v`$version/randolf-v`$version.exe#/$executableName"
           $manifest | ConvertTo-Json -Depth 10 | Set-Content randolf.json -Encoding utf8
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
           git add randolf.json
           git commit -m "Update Scoop manifest to $version"
-          git push
+          git push origin HEAD:main
