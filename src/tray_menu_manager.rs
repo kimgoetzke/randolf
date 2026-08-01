@@ -290,7 +290,7 @@ fn build_menu(config_provider: &Arc<Mutex<ConfigurationProvider>>) -> MenuBuilde
     })
     .separator()
     .submenu(
-      "Explore debug settings",
+      "Explore debug options",
       MenuBuilder::new()
         .item("Identify window", Event::IdentifyWindow)
         .item("Print monitor layout to log file", Event::LogMonitorLayout),
