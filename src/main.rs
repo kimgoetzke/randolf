@@ -19,7 +19,7 @@ use crate::api::{RealWindowsApi, WindowsApi};
 use crate::application_launcher::ApplicationLauncher;
 use crate::configuration::{ConfigurationProvider, FORCE_USING_ADMIN_PRIVILEGES, SCROLLING_RECONCILIATION_INTERVAL_IN_MS};
 use crate::files::FileType;
-use crate::hotkeys::hotkey_manager::HotkeyManager;
+use crate::hotkeys::HotkeyManager;
 use crate::log_manager::LogManager;
 use crate::tray_menu_manager::TrayMenuManager;
 use crate::utils::CONFIGURATION_PROVIDER_LOCK;
