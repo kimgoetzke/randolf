@@ -306,8 +306,8 @@ pub(crate) mod test {
         state
           .borrow()
           .windows
-          .iter()
-          .filter_map(|(_, ws)| {
+          .values()
+          .filter_map(|ws| {
             if ws.window.rect.intersects(&rect) && !ws.is_hidden && ws.is_manageable {
               Some(ws.window.clone())
             } else {
