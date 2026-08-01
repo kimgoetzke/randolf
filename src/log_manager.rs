@@ -10,13 +10,21 @@ use std::sync::{Arc, Mutex};
 #[cfg(not(debug_assertions))]
 const LOG_FILE_NAME: &str = "randolf.log";
 
+/// A struct that owns no state but when [`LogManager::new_initialised`] is called configures logging for the whole
+/// program.
 pub struct LogManager;
 
 impl LogManager {
+  /// Creates a manager without changing the global logger.
   fn new() -> Self {
     Self {}
   }
 
+  /// Configures logging and returns its stateless manager.
+  ///
+  /// # Panics
+  ///
+  /// Panics if logging was already configured.
   pub fn new_initialised() -> Self {
     let log_manager = Self::new();
     log_manager.initialise();
@@ -24,6 +32,8 @@ impl LogManager {
     log_manager
   }
 
+  /// Sends debug logs to the terminal and, in release builds, detailed logs to a file. Failure to create the file
+  /// is printed but does not stop terminal logging.
   #[allow(unused_mut)]
   fn initialise(&self) {
     let config = ConfigBuilder::new()

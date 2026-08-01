@@ -8,13 +8,17 @@ use std::sync::{Arc, Mutex};
 // TODO: Instead of a fixed delay, consider listening for the relevant application to be ready before moving the cursor
 const FIXED_DELAY: u64 = 750;
 
+/// Starts Windows applications as configured by the user.
 pub struct ApplicationLauncher<T: WindowsApi> {
   _configuration_provider: Arc<Mutex<ConfigurationProvider>>,
+  /// Determines whether the launcher should attempt to move the mouse cursor to a newly opened window. Comes from the
+  /// settings and only loaded once on startup.
   allow_moving_cursor_after_open: bool,
   windows_api: T,
 }
 
 impl<T: WindowsApi> ApplicationLauncher<T> {
+  /// Creates a launcher using the current pointer-movement setting.
   pub fn new_initialised(configuration_provider: Arc<Mutex<ConfigurationProvider>>, windows_api: T) -> Self {
     let allow_moving_cursor_after_open = match configuration_provider.try_lock() {
       Ok(guard) => guard.get_bool(ALLOW_MOVING_CURSOR_AFTER_OPEN_CLOSE_OR_MINIMISE),
@@ -32,6 +36,9 @@ impl<T: WindowsApi> ApplicationLauncher<T> {
     }
   }
 
+  /// Starts an `.exe`, optionally with one argument and administrator rights. Invalid paths and start failures are
+  /// logged and ignored. After a successful start, pointer movement waits briefly for the new window to appear
+  /// (not very elegant and has some edge cases as-is but good enough right now).
   pub fn launch(&self, path_to_executable: String, args: Option<&str>, as_admin: bool) {
     if path_to_executable.is_empty() {
       warn!("Path to executable is empty");
@@ -47,6 +54,12 @@ impl<T: WindowsApi> ApplicationLauncher<T> {
     }
   }
 
+  /// Returns the full path of the running Randolf executable. Returns an empty string if Windows cannot provide the
+  /// path.
+  ///
+  /// # Panics
+  ///
+  /// Panics if the path cannot be represented as text.
   pub fn get_executable_path(&self) -> String {
     if let Ok(executable_path) = std::env::current_exe() {
       executable_path
@@ -60,6 +73,12 @@ impl<T: WindowsApi> ApplicationLauncher<T> {
     }
   }
 
+  /// Returns the folder containing the running Randolf executable or an empty string if Windows cannot provide the
+  /// path.
+  ///
+  /// # Panics
+  ///
+  /// Panics if the path has no parent folder or cannot be represented as text.
   pub fn get_executable_folder(&self) -> String {
     if let Ok(executable_path) = std::env::current_exe() {
       let executable_directory = executable_path
@@ -79,6 +98,11 @@ impl<T: WindowsApi> ApplicationLauncher<T> {
     }
   }
 
+  /// Returns Randolf's settings or data folder, selected by `file_type`.
+  ///
+  /// # Panics
+  ///
+  /// Panics if the folder cannot be found or represented as text.
   pub fn get_project_folder(&self, file_type: FileType) -> String {
     FileManager::<String>::get_path_to_directory(file_type)
       .expect("Failed to get path to directory")
@@ -87,6 +111,10 @@ impl<T: WindowsApi> ApplicationLauncher<T> {
       .to_string()
   }
 
+  /// Starts a process and reports whether Windows accepted the request.
+  ///
+  /// Administrator launches use PowerShell's `Start-Process`. Ordinary launches start the executable directly. A
+  /// successful result does not mean the process stayed open.
   fn execute_command(&self, path_to_executable: &str, args: Option<&str>, as_admin: bool) -> bool {
     if as_admin {
       let mut powershell_args = vec!["-Command", "Start-Process", path_to_executable];
@@ -124,6 +152,8 @@ impl<T: WindowsApi> ApplicationLauncher<T> {
     }
   }
 
+  /// Moves the pointer to the centre of the foreground window's normal position. Does nothing when the foreground
+  /// window or its position is unavailable.
   fn set_cursor_position(&self) {
     let Some(foreground_window) = self.windows_api.get_foreground_window() else {
       debug!("Failed to get foreground window, no window to set cursor position");

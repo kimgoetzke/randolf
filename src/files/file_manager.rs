@@ -9,7 +9,8 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 /// A struct to manage file operations for a single file, located at `file_path` and deserialised to type `T`. Allows
-/// you to load, create, reload, and save this file.
+/// you to load, create, reload, and save this file. The file location follows Windows conventions for either settings
+/// or local application data.
 pub struct FileManager<T: Default + Serialize + DeserializeOwned> {
   file_path: PathBuf,
   file_prefix: String,
@@ -17,6 +18,11 @@ pub struct FileManager<T: Default + Serialize + DeserializeOwned> {
 }
 
 impl<T: Default + Serialize + DeserializeOwned> FileManager<T> {
+  /// Creates a manager for `file_name` in the selected Randolf folder. Creates the folder if needed.
+  ///
+  /// # Panics
+  ///
+  /// Panics if its path cannot be found or created.
   pub fn new(file_name: &str, file_type: FileType) -> Self {
     FileManager {
       file_path: Self::get_path_to_file(file_name, file_type)
@@ -32,6 +38,8 @@ impl<T: Default + Serialize + DeserializeOwned> FileManager<T> {
     self.file_prefix = prefix.to_string();
   }
 
+  /// Returns Randolf's settings or local-data folder without creating it. Returns an error when the operating system's
+  /// standard folders cannot be found.
   pub fn get_path_to_directory(file_type: FileType) -> Result<PathBuf, Box<dyn Error>> {
     if let Some(project_directories) = ProjectDirs::from(
       PROJECT_DIR_QUALIFIER,
@@ -66,6 +74,7 @@ impl<T: Default + Serialize + DeserializeOwned> FileManager<T> {
     }
   }
 
+  /// Selects the standard Windows folder used for the requested kind of file.
   fn determine_file_directory(file_type: FileType, project_directories: &ProjectDirs) -> &Path {
     match file_type {
       FileType::Config => project_directories.config_dir(),
@@ -73,11 +82,17 @@ impl<T: Default + Serialize + DeserializeOwned> FileManager<T> {
     }
   }
 
+  /// Loads and parses the file, or creates it from `T`'s default value when absent. Returns the parsed value and the
+  /// existing file text. The text is `None` when a new file was created. Invalid TOML and file access failures return
+  /// an error.
   pub fn load_or_create(&self) -> Result<(T, Option<String>), Box<dyn Error>> {
     self.load_or_create_with_repair(|_| None)
   }
 
-  /// Loads the file after applying and persisting an optional text repair.
+  /// Loads the file after optionally repairing its text before parsing.
+  ///
+  /// The `repair` argument runs only for an existing file. A returned replacement is saved first and included in the
+  /// result. Missing files are created in the same way as [`FileManager::load_or_create`].
   pub fn load_or_create_with_repair(
     &self,
     repair: impl FnOnce(&str) -> Option<String>,
@@ -118,6 +133,7 @@ impl<T: Default + Serialize + DeserializeOwned> FileManager<T> {
     }
   }
 
+  /// Stringifies the provided thingy and writes as TOML to disk, as one would expect, I hope.
   pub fn save(&self, t: &T) -> Result<(), Box<dyn Error>> {
     info!("Saving [{}]", self.file_path.display());
     let toml_string = toml::to_string_pretty(t)?;

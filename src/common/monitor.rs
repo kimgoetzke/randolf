@@ -47,7 +47,7 @@ impl Monitor {
     if !device_name.is_empty() {
       device_name
     } else {
-      format!("Unidentified Monitor {}", &self.handle)
+      format!("Unidentified Monitor {}", self.handle)
     }
   }
 }

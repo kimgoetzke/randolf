@@ -10,7 +10,7 @@ pub struct Monitors {
 
 impl Monitors {
   pub fn from(mut monitors: Vec<Monitor>) -> Self {
-    monitors.sort_by(|a, b| a.handle.cmp(&b.handle));
+    monitors.sort_by_key(|a| a.handle);
     Self { monitors }
   }
 
