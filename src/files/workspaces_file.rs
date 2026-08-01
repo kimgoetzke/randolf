@@ -1,16 +1,20 @@
+//! Maintains the file used to restore hidden workspace windows after an unclean exit.
+
 use crate::common::{PersistentWorkspaceId, Window, WindowHandle};
 use crate::files::FileManager;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 
+/// Records which hidden windows belong to each workspace for crash recovery.
 #[derive(Debug, Deserialize, Serialize, Default)]
 pub struct WorkspacesFile {
+  /// Groups saved Windows [`WindowHandle`]s by their stable workspace ID.
   pub workspaces: HashMap<PersistentWorkspaceId, HashSet<WindowHandle>>,
 }
 
 impl WorkspacesFile {
-  /// Creates a new `WorkspacesFile` instance with an empty workspaces map.
+  /// Creates a new [`WorkspacesFile`] instance with an empty workspaces map.
   pub fn new() -> Self {
     Self {
       workspaces: HashMap::new(),
@@ -85,12 +89,16 @@ impl WorkspacesFile {
   }
 
   // TODO: Check whether serialisation can be done a little cleaner (no duplicate entries, etc.)
+  /// Writes the current recovery record, panicking if it cannot be saved.
   fn save(&mut self, file_manager: &FileManager<WorkspacesFile>) {
     file_manager.save(self).expect("Failed to save workspace file");
   }
 }
 
 impl Display for WorkspacesFile {
+  /// Formats a compact workspace-to-window summary for logs.
+  ///
+  /// Entry order is not stable because the records are stored in unordered collections.
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     for (i, (workspace_id, windows)) in self.workspaces.iter().enumerate() {
       write!(f, "{}: [", workspace_id)?;
